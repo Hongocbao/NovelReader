@@ -1,0 +1,47 @@
+name: novel_reader
+description: "NovelReader - ứng dụng đọc truyện chữ và Light Novel."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.13.3
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  # Quản lý trạng thái
+  provider: ^6.1.5+1
+  # Cơ sở dữ liệu cục bộ
+  sqflite: ^2.4.5
+  path: ^1.9.1
+  # Chạy SQLite trên web & desktop (demo)
+  sqflite_common_ffi_web: ^1.2.0
+  sqflite_common_ffi: ^2.4.5
+  # Lưu cài đặt người dùng
+  shared_preferences: ^2.5.6
+  # Ảnh mạng + cache
+  cached_network_image: ^4.0.6
+  flutter_cache_manager: ^3.4.1
+  # Định dạng ngày/số
+  intl: ^0.20.3
+  # Giữ màn hình sáng khi đọc
+  wakelock_plus: ^1.8.2
+  # Theo dõi trạng thái mạng
+  connectivity_plus: ^7.3.2
+  # Hỗ trợ Web Speech API trên trình duyệt
+  web: ^1.1.1
+  flutter_tts: ^4.2.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/data/sample_novels.json
