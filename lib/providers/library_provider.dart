@@ -291,19 +291,25 @@ class LibraryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Gửi bình luận mới cho chương.
+  /// Gửi bình luận mới cho chương (hỗ trợ gắn chapterIndex cho Spoiler Shield).
   Future<void> addComment({
     required int novelId,
     required int chapterId,
     required String content,
     int stars = 5,
+    int userId = 0,
+    String userName = 'Độc giả',
+    int chapterIndex = 1,
   }) async {
     await _db.addComment(
       ChapterComment(
         novelId: novelId,
         chapterId: chapterId,
+        userId: userId,
+        userName: userName,
         content: content.trim(),
         stars: stars,
+        chapterIndex: chapterIndex,
         createdAt: DateTime.now(),
       ),
     );
@@ -322,14 +328,25 @@ class LibraryProvider extends ChangeNotifier {
   // ---------------------------------------------------------------------------
 
   /// Ghi nhận 1 chương vừa được mở đọc vào bảng `reading_sessions` (mỗi chương tính 1 lần/phiên).
-  Future<void> recordChapterReadSession(int chapterId, String content) async {
+  Future<void> recordChapterReadSession(
+    int chapterId,
+    String content, {
+    int userId = 0,
+    int novelId = 0,
+  }) async {
     if (_recordedChapterSessions.contains(chapterId)) return;
     _recordedChapterSessions.add(chapterId);
     final words = content.trim().isEmpty
         ? 0
         : content.trim().split(RegExp(r'\s+')).length;
     final minutes = (words / 220).ceil().clamp(1, 60);
-    await _db.recordReadingSession(words: words, minutes: minutes);
+    await _db.recordReadingSession(
+      words: words,
+      minutes: minutes,
+      userId: userId,
+      novelId: novelId,
+      chapterId: chapterId,
+    );
     _sessions = await _db.getReadingSessions();
     notifyListeners();
   }

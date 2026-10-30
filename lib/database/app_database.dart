@@ -12,6 +12,7 @@ import '../models/novel.dart';
 import '../models/reading_history.dart';
 import '../utils/constants.dart';
 import '../utils/format.dart';
+import 'v2_database_store.dart';
 
 /// Lớp truy cập SQLite của ứng dụng: tạo bảng, CRUD và nạp dữ liệu mẫu.
 ///
@@ -74,12 +75,14 @@ class AppDatabase {
         onCreate: _onCreate,
         onUpgrade: (db, oldVersion, newVersion) async {
           await _ensureExtraTables(db);
+          await V2DatabaseStore.migrateToV2(db);
           // Bổ sung truyện mới từ sample_novels.json mà không làm mất lịch sử/tủ sách cũ.
           await _syncSampleNovels(db);
         },
       ),
     );
     await _ensureExtraTables(db);
+    await V2DatabaseStore.ensureV2SchemaAndSeed(db);
     await _seedIfNeeded(db);
     return db;
   }
@@ -284,10 +287,14 @@ class AppDatabase {
     NovelSort sort = NovelSort.updated,
     int limit = AppInfo.pageSize,
     int offset = 0,
+    bool includeUnapproved = false,
   }) async {
     final db = await database;
-    final where = <String>[];
+    final where = <String>['deleted_at IS NULL'];
     final args = <Object?>[];
+    if (!includeUnapproved) {
+      where.add("moderation_status = 'approved'");
+    }
     final kw = Format.normalize(keyword);
     if (kw.isNotEmpty) {
       where.add('search_text LIKE ?');
@@ -355,6 +362,8 @@ class AppDatabase {
     required List<String> genres,
     required List<({String title, String content})> chapters,
     String? coverUrl,
+    String moderationStatus = ModerationStatus.approved,
+    int ownerId = 1,
   }) async {
     final db = await database;
     final maxId = Sqflite.firstIntValue(
@@ -377,6 +386,8 @@ class AppDatabase {
       rating: 5.0,
       views: 1,
       updatedAt: now,
+      moderationStatus: moderationStatus,
+      ownerId: ownerId,
     );
 
     await db.transaction((txn) async {
@@ -703,15 +714,20 @@ class AppDatabase {
     return '${local.year}-$m-$day';
   }
 
-  /// Cộng dồn số từ và số phút đọc cho ngày hôm nay (hoặc [date]).
+  /// Cộng dồn số từ và số phút đọc cho ngày hôm nay (hoặc [date]),
+  /// đồng thời ghi nhận log theo khung giờ và tiến độ nhiệm vụ.
   Future<void> recordReadingSession({
     required int words,
     required int minutes,
     DateTime? date,
+    int userId = 0,
+    int novelId = 0,
+    int chapterId = 0,
   }) async {
     if (words <= 0 && minutes <= 0) return;
     final db = await database;
-    final key = _dateKeyOf(date ?? DateTime.now());
+    final now = date ?? DateTime.now();
+    final key = _dateKeyOf(now);
     final existing = await db.query(
       'reading_sessions',
       where: 'date_key = ?',
@@ -734,6 +750,32 @@ class AppDatabase {
         },
         where: 'date_key = ?',
         whereArgs: [key],
+      );
+    }
+
+    await db.insert('reading_session_logs', {
+      'user_id': userId,
+      'novel_id': novelId,
+      'chapter_id': chapterId,
+      'started_at':
+          now.subtract(Duration(minutes: minutes.clamp(1, 120))).millisecondsSinceEpoch,
+      'ended_at': now.millisecondsSinceEpoch,
+      'words_read': words,
+      'hour_of_day': now.hour,
+    });
+
+    if (userId > 0) {
+      await V2DatabaseStore.incrementQuestProgress(
+        db,
+        userId: userId,
+        goalType: 'read_minutes',
+        delta: minutes.clamp(1, 120),
+      );
+      await V2DatabaseStore.incrementQuestProgress(
+        db,
+        userId: userId,
+        goalType: 'read_chapters',
+        delta: 1,
       );
     }
   }

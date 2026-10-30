@@ -3,12 +3,10 @@ import 'package:provider/provider.dart';
 
 import '../providers/reader_provider.dart';
 import '../utils/constants.dart';
-import 'downloads_screen.dart';
-import 'history_screen.dart';
 import 'home_screen.dart';
 import 'library_screen.dart';
 import 'search_screen.dart';
-import 'settings_screen.dart';
+import 'user/profile_screen.dart';
 
 /// Khung chính của ứng dụng: thanh điều hướng 4 tab
 /// (Trang chủ, Tìm kiếm, Tủ sách, Cá nhân) + thanh thông báo offline.
@@ -101,19 +99,12 @@ class _MainShellState extends State<MainShell> {
   }
 }
 
-/// Tab "Cá nhân": hiển thị màn Cài đặt kèm lối tắt sang Lịch sử đọc & Tải xuống.
+/// Tab "Cá nhân": hiển thị màn Hồ sơ cá nhân, Nhiệm vụ, Cửa hàng Linh Thạch & lối tắt sang Cài đặt.
 class _ProfileTab extends StatelessWidget {
   const _ProfileTab();
 
   @override
   Widget build(BuildContext context) {
-    return SettingsScreen(
-      onOpenHistory: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const HistoryScreen()),
-      ),
-      onOpenDownloads: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const DownloadsScreen()),
-      ),
-    );
+    return const UserProfileScreen();
   }
 }

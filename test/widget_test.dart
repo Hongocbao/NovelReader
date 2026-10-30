@@ -3,12 +3,27 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:novel_reader/database/app_database.dart';
+import 'package:novel_reader/database/v2_database_store.dart';
+import 'package:novel_reader/models/app_user.dart';
+import 'package:novel_reader/models/bookmark.dart';
+import 'package:novel_reader/models/novel.dart';
+import 'package:novel_reader/providers/admin_dashboard_provider.dart';
+import 'package:novel_reader/providers/admin_novel_provider.dart';
+import 'package:novel_reader/providers/admin_user_provider.dart';
+import 'package:novel_reader/providers/auth_provider.dart';
 import 'package:novel_reader/providers/library_provider.dart';
+import 'package:novel_reader/providers/moderation_provider.dart';
 import 'package:novel_reader/providers/novel_provider.dart';
+import 'package:novel_reader/providers/quest_provider.dart';
 import 'package:novel_reader/providers/reader_provider.dart';
 import 'package:novel_reader/providers/settings_provider.dart';
+import 'package:novel_reader/repositories/auth_repository.dart';
+import 'package:novel_reader/repositories/novel_repository.dart';
+import 'package:novel_reader/screens/admin/admin_shell.dart';
+import 'package:novel_reader/screens/admin/moderation_queue_screen.dart';
 import 'package:novel_reader/screens/reader_screen.dart';
 import 'package:novel_reader/utils/constants.dart';
+import 'package:novel_reader/utils/role_guard.dart';
 import 'package:novel_reader/utils/theme.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -316,5 +331,219 @@ void main() {
     await tester.runAsync(() async {
       await Future<void>.delayed(const Duration(milliseconds: 50));
     });
+  });
+
+  test(
+      'v2 AuthProvider, RoleGuard & AdminUserProvider: đăng nhập sai, khóa tài khoản kèm lý do, chặn tự khóa Admin',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final db = await createTestDb();
+    addTearDown(db.close);
+
+    final authRepo = LocalAuthRepository(db);
+    final auth = AuthProvider(authRepo, prefs);
+    final adminUsers = AdminUserProvider(db, authRepo);
+    await adminUsers.loadUsers();
+
+    // 1. Đăng nhập sai mật khẩu -> trả về false và có thông báo lỗi
+    final wrongOk = await auth.login('user@novelreader.local', 'WrongPass');
+    expect(wrongOk, isFalse);
+    expect(auth.error, contains('không chính xác'));
+
+    // 2. Đăng nhập bằng Admin mặc định
+    final adminOk = await auth.login('admin@novelreader.local', 'Admin@123');
+    expect(adminOk, isTrue);
+    expect(auth.isAdmin, isTrue);
+    final adminUser = auth.currentUser;
+
+    // 3. Admin không thể tự khóa chính mình
+    expect(
+      () => adminUsers.banUser(
+        admin: adminUser,
+        target: adminUser,
+        reason: 'Tự khóa',
+      ),
+      throwsStateError,
+    );
+
+    // 4. Admin khóa tài khoản user@novelreader.local kèm lý do -> user không đăng nhập được và thấy lý do
+    final normalUser = adminUsers.users.firstWhere(
+      (u) => u.email == 'user@novelreader.local',
+    );
+    await adminUsers.banUser(
+      admin: adminUser,
+      target: normalUser,
+      reason: 'Spam quảng cáo trái phép',
+      durationDays: 7,
+    );
+
+    final bannedLogin = await auth.login('user@novelreader.local', 'User@1234');
+    expect(bannedLogin, isFalse);
+    expect(auth.error, contains('Spam quảng cáo trái phép'));
+
+    // 5. Kiểm tra ma trận RoleGuard
+    expect(
+      RoleGuard.can(AppUser.guest(), AppPermission.interactAndGamify),
+      isFalse,
+    );
+    expect(RoleGuard.can(normalUser, AppPermission.manageSystem), isFalse);
+    expect(RoleGuard.can(adminUser, AppPermission.manageSystem), isTrue);
+  });
+
+  test(
+      'v2 QuestProvider, Spoiler Shield, Glossary & Recap chống lộ nội dung chương sau',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final db = await createTestDb();
+    addTearDown(db.close);
+
+    final authRepo = LocalAuthRepository(db);
+    final auth = AuthProvider(authRepo, prefs);
+    await auth.login('user@novelreader.local', 'User@1234');
+    final initialStones = auth.currentUser.linhThach;
+
+    final questProv = QuestProvider(db);
+    await questProv.loadForUser(auth.currentUser.id);
+    expect(questProv.quests, isNotEmpty);
+
+    // Tăng tiến độ nhiệm vụ đọc chương và nhận thưởng Linh Thạch
+    final readChapterQuest = questProv.quests.firstWhere(
+      (q) => q.goalType == 'read_chapters',
+    );
+    await questProv.recordProgress(
+      user: auth.currentUser,
+      goalType: 'read_chapters',
+      delta: readChapterQuest.goalValue,
+    );
+    final reward = await questProv.claimQuestReward(
+      auth: auth,
+      quest: readChapterQuest,
+    );
+    expect(reward, readChapterQuest.reward);
+    expect(auth.currentUser.linhThach, initialStones + reward);
+
+    // Kiểm tra Spoiler Shield, Glossary và Recap không bao giờ vượt quá chương hiện tại
+    final spoilerComment = ChapterComment(
+      novelId: 1,
+      chapterId: 10001,
+      content: 'Tiết lộ kết cục chương 5',
+      chapterIndex: 5,
+      createdAt: DateTime.now(),
+    );
+    expect(spoilerComment.isSpoilerFor(1), isTrue);
+    expect(spoilerComment.isSpoilerFor(5), isFalse);
+
+    final rawDb = await db.database;
+    final termsCh1 = await V2DatabaseStore.getGlossaryForNovel(
+      rawDb,
+      1,
+      maxChapterIndex: 1,
+    );
+    expect(termsCh1.every((t) => t.firstChapterIndex <= 1), isTrue);
+
+    final summariesCh1 = await V2DatabaseStore.getSummariesUpTo(rawDb, 1, 1);
+    expect(summariesCh1.every((s) => s.chapterIndex <= 1), isTrue);
+  });
+
+  testWidgets(
+      'v2 Widget test: Route Guard chặn User vào AdminShell + Luồng duyệt truyện và ghi Audit Log + Dashboard khớp dữ liệu thật',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    late SharedPreferences prefs;
+    late AppDatabase db;
+    late AuthProvider auth;
+    late AdminNovelProvider adminNovels;
+    late AdminDashboardProvider dash;
+    late ModerationProvider mod;
+
+    await tester.runAsync(() async {
+      prefs = await SharedPreferences.getInstance();
+      db = await createTestDb();
+      final authRepo = LocalAuthRepository(db);
+      final novelRepo = LocalNovelRepository(db);
+      auth = AuthProvider(authRepo, prefs);
+      adminNovels = AdminNovelProvider(db, novelRepo);
+      dash = AdminDashboardProvider(db);
+      mod = ModerationProvider(db);
+
+      // Đăng nhập bằng tài khoản user thường -> kiểm tra AdminShell chặn truy cập (403)
+      await auth.login('user@novelreader.local', 'User@1234');
+    });
+    addTearDown(() async {
+      await db.close();
+    });
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider.value(value: auth),
+          ChangeNotifierProvider.value(value: adminNovels),
+          ChangeNotifierProvider.value(value: dash),
+          ChangeNotifierProvider.value(value: mod),
+        ],
+        child: const MaterialApp(home: AdminShell()),
+      ),
+    );
+    await tester.pump();
+    expect(find.textContaining('Từ chối truy cập (403)'), findsOneWidget);
+
+    // Author tạo truyện chờ duyệt -> Admin duyệt trên AdminModerationQueueScreen -> Audit Log ghi lại
+    await tester.runAsync(() async {
+      await db.insertCustomNovel(
+        title: 'Tác Phẩm Chờ Duyệt Test',
+        author: 'Bút Mặc Tiên Sinh',
+        description: 'Truyện gửi duyệt',
+        status: NovelStatus.ongoing,
+        type: NovelType.novel,
+        genres: const ['Tiên hiệp'],
+        chapters: const [(title: 'Chương 1', content: 'Nội dung chương 1')],
+        moderationStatus: ModerationStatus.pending,
+        ownerId: 2,
+      );
+      await auth.login('admin@novelreader.local', 'Admin@123');
+      await adminNovels.loadNovels();
+      await dash.loadDashboard();
+    });
+
+    expect(dash.pendingNovelsCount, 1);
+    expect(dash.totalUsers, greaterThanOrEqualTo(3));
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider.value(value: auth),
+          ChangeNotifierProvider.value(value: adminNovels),
+          ChangeNotifierProvider.value(value: dash),
+          ChangeNotifierProvider.value(value: mod),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(body: AdminModerationQueueScreen()),
+        ),
+      ),
+    );
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pump();
+    expect(find.text('Tác Phẩm Chờ Duyệt Test'), findsOneWidget);
+
+    // Bấm nút "Duyệt xuất bản"
+    await tester.runAsync(() async {
+      final pending = adminNovels.pendingNovels.single;
+      await adminNovels.approveNovels(
+        admin: auth.currentUser,
+        novelIds: [pending.id],
+      );
+      await mod.loadAll();
+    });
+    await tester.pump();
+
+    expect(adminNovels.pendingNovels, isEmpty);
+    expect(
+      mod.auditLogs.any((l) => l.action == 'APPROVE_NOVEL'),
+      isTrue,
+    );
   });
 }

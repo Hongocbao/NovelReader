@@ -6,7 +6,7 @@ class AppInfo {
 
   static const String appName = 'NovelReader';
   static const String dbName = 'novel_reader.db';
-  static const int dbVersion = 5;
+  static const int dbVersion = 6;
   static const String sampleDataAsset = 'assets/data/sample_novels.json';
 
   /// Số truyện mỗi trang khi phân trang (infinite scroll).
@@ -51,6 +51,8 @@ class PrefKeys {
   static const String pageMode = 'reader_page_mode';
   static const String forceOffline = 'force_offline';
   static const String searchHistory = 'search_history';
+  static const String currentUserId = 'current_user_id';
+  static const String hasSeenSplashGate = 'has_seen_splash_gate';
 }
 
 /// Giá trị trạng thái / loại truyện / danh mục tủ sách lưu trong DB.

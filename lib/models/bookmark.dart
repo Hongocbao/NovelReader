@@ -111,32 +111,52 @@ class QuoteItem {
 }
 
 /// Bình luận cho một chương hoặc đánh giá cho một bộ truyện.
+/// Hỗ trợ Spoiler Shield ([chapterIndex]), ẩn bình luận ([isHidden]), thích ([likes]) và trả lời ([parentId]).
 class ChapterComment {
   final int? id;
   final int novelId;
   final int chapterId;
+  final int userId;
   final String userName;
   final String content;
   final int stars;
+  final int chapterIndex;
+  final bool isHidden;
+  final int likes;
+  final int? parentId;
   final DateTime createdAt;
 
   const ChapterComment({
     this.id,
     required this.novelId,
     required this.chapterId,
+    this.userId = 0,
     this.userName = 'Độc giả',
     required this.content,
     this.stars = 5,
+    this.chapterIndex = 1,
+    this.isHidden = false,
+    this.likes = 0,
+    this.parentId,
     required this.createdAt,
   });
+
+  /// Kiểm tra bình luận có nguy cơ tiết lộ nội dung (spoil) với độc giả mới đọc tới [readerMaxChapterIndex] không.
+  bool isSpoilerFor(int readerMaxChapterIndex) =>
+      chapterIndex > readerMaxChapterIndex;
 
   Map<String, Object?> toMap() => {
         if (id != null) 'id': id,
         'novel_id': novelId,
         'chapter_id': chapterId,
+        'user_id': userId,
         'user_name': userName,
         'content': content,
         'stars': stars,
+        'chapter_index': chapterIndex,
+        'is_hidden': isHidden ? 1 : 0,
+        'likes': likes,
+        'parent_id': parentId,
         'created_at': createdAt.millisecondsSinceEpoch,
       };
 
@@ -144,9 +164,14 @@ class ChapterComment {
         id: map['id'] as int?,
         novelId: map['novel_id'] as int,
         chapterId: map['chapter_id'] as int,
+        userId: (map['user_id'] as int?) ?? 0,
         userName: (map['user_name'] as String?) ?? 'Độc giả',
         content: (map['content'] as String?) ?? '',
         stars: (map['stars'] as int?) ?? 5,
+        chapterIndex: (map['chapter_index'] as int?) ?? 1,
+        isHidden: (map['is_hidden'] as int?) == 1,
+        likes: (map['likes'] as int?) ?? 0,
+        parentId: map['parent_id'] as int?,
         createdAt: DateTime.fromMillisecondsSinceEpoch(
           (map['created_at'] as int?) ?? 0,
         ),

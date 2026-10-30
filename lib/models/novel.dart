@@ -15,7 +15,16 @@ enum NovelSort {
   title,
 }
 
-/// Thông tin một bộ truyện (truyện chữ hoặc Light Novel).
+/// Trạng thái kiểm duyệt của truyện/chương.
+class ModerationStatus {
+  ModerationStatus._();
+  static const String draft = 'draft';
+  static const String pending = 'pending';
+  static const String approved = 'approved';
+  static const String rejected = 'rejected';
+}
+
+/// Thông tin một bộ truyện (truyện chữ, Light Novel hoặc Truyện tranh).
 class Novel {
   final int id;
   final String title;
@@ -26,13 +35,21 @@ class Novel {
   /// ongoing | completed
   final String status;
 
-  /// novel | light_novel
+  /// novel | light_novel | comic
   final String type;
   final List<String> genres;
   final int totalChapters;
   final double rating;
   final int views;
   final DateTime updatedAt;
+
+  /// Các trường mở rộng phiên bản v2 (Admin & Author)
+  final String moderationStatus;
+  final String? rejectionReason;
+  final int ownerId;
+  final bool isFeatured;
+  final int featuredOrder;
+  final DateTime? deletedAt;
 
   const Novel({
     required this.id,
@@ -47,11 +64,19 @@ class Novel {
     required this.rating,
     required this.views,
     required this.updatedAt,
+    this.moderationStatus = ModerationStatus.approved,
+    this.rejectionReason,
+    this.ownerId = 1,
+    this.isFeatured = false,
+    this.featuredOrder = 0,
+    this.deletedAt,
   });
 
   bool get isCompleted => status == NovelStatus.completed;
   bool get isLightNovel => type == NovelType.lightNovel;
   bool get isComic => type == NovelType.comic;
+  bool get isApproved => moderationStatus == ModerationStatus.approved;
+  bool get isDeleted => deletedAt != null;
 
   /// Chuyển sang Map để lưu SQLite (genres nối bằng dấu phẩy).
   Map<String, Object?> toMap() => {
@@ -67,11 +92,18 @@ class Novel {
         'rating': rating,
         'views': views,
         'updated_at': updatedAt.millisecondsSinceEpoch,
+        'moderation_status': moderationStatus,
+        'rejection_reason': rejectionReason,
+        'owner_id': ownerId,
+        'is_featured': isFeatured ? 1 : 0,
+        'featured_order': featuredOrder,
+        'deleted_at': deletedAt?.millisecondsSinceEpoch,
       };
 
   /// Tạo từ một dòng SQLite.
   factory Novel.fromMap(Map<String, Object?> map) {
     final rawGenres = (map['genres'] as String?) ?? '';
+    final deletedMs = map['deleted_at'] as int?;
     return Novel(
       id: map['id'] as int,
       title: (map['title'] as String?) ?? '',
@@ -89,7 +121,17 @@ class Novel {
       rating: ((map['rating'] as num?) ?? 0).toDouble(),
       views: (map['views'] as int?) ?? 0,
       updatedAt: DateTime.fromMillisecondsSinceEpoch(
-          (map['updated_at'] as int?) ?? 0),
+        (map['updated_at'] as int?) ?? 0,
+      ),
+      moderationStatus:
+          (map['moderation_status'] as String?) ?? ModerationStatus.approved,
+      rejectionReason: map['rejection_reason'] as String?,
+      ownerId: (map['owner_id'] as int?) ?? 1,
+      isFeatured: (map['is_featured'] as int?) == 1,
+      featuredOrder: (map['featured_order'] as int?) ?? 0,
+      deletedAt: deletedMs != null
+          ? DateTime.fromMillisecondsSinceEpoch(deletedMs)
+          : null,
     );
   }
 
@@ -106,6 +148,13 @@ class Novel {
     double? rating,
     int? views,
     DateTime? updatedAt,
+    String? moderationStatus,
+    String? rejectionReason,
+    int? ownerId,
+    bool? isFeatured,
+    int? featuredOrder,
+    DateTime? deletedAt,
+    bool clearDeletedAt = false,
   }) {
     return Novel(
       id: id ?? this.id,
@@ -120,6 +169,12 @@ class Novel {
       rating: rating ?? this.rating,
       views: views ?? this.views,
       updatedAt: updatedAt ?? this.updatedAt,
+      moderationStatus: moderationStatus ?? this.moderationStatus,
+      rejectionReason: rejectionReason ?? this.rejectionReason,
+      ownerId: ownerId ?? this.ownerId,
+      isFeatured: isFeatured ?? this.isFeatured,
+      featuredOrder: featuredOrder ?? this.featuredOrder,
+      deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
     );
   }
 

@@ -1,0 +1,81 @@
+rules_version = '2';
+// Firestore Security Rules cho NovelReader v2 (Giai đoạn B - Cloud)
+// Thực thi đúng Ma trận phân quyền ở Mục 2 của Bản đặc tả.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isActiveUser() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active';
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        (request.auth.token.role == 'admin' ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+    }
+
+    function isAuthor() {
+      return isActiveUser() &&
+        (request.auth.token.is_author == true ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.is_author == true);
+    }
+
+    // Truyện & chương: Khách đọc được truyện đã duyệt; Author tạo truyện pending; Admin toàn quyền
+    match /novels/{novelId} {
+      allow read: if resource.data.moderation_status == 'approved' || isAdmin() ||
+        (isAuthor() && resource.data.owner_id == request.auth.uid);
+      allow create: if isAdmin() ||
+        (isAuthor() && request.resource.data.moderation_status in ['draft', 'pending']);
+      allow update: if isAdmin() ||
+        (isAuthor() && resource.data.owner_id == request.auth.uid &&
+         request.resource.data.moderation_status in ['draft', 'pending']);
+      allow delete: if isAdmin();
+
+      match /chapters/{chapterId} {
+        allow read: if true;
+        allow write: if isAdmin() || isAuthor();
+      }
+    }
+
+    // Hồ sơ người dùng & dữ liệu đồng bộ
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow create: if isSignedIn() && request.auth.uid == userId &&
+        request.resource.data.role == 'user';
+      allow update: if isAdmin() ||
+        (isActiveUser() && request.auth.uid == userId &&
+         request.resource.data.role == resource.data.role &&
+         request.resource.data.status == resource.data.status);
+    }
+
+    // Bình luận & Báo cáo: chỉ User đang hoạt động mới được gửi; Admin kiểm duyệt
+    match /comments/{commentId} {
+      allow read: if resource.data.is_hidden == false || isAdmin();
+      allow create: if isActiveUser();
+      allow update, delete: if isAdmin() ||
+        (isActiveUser() && resource.data.user_id == request.auth.uid);
+    }
+
+    match /reports/{reportId} {
+      allow create: if isActiveUser();
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Nhật ký thao tác Admin (Audit Log): chỉ Admin được ghi và đọc, cấm sửa/xóa
+    match /audit_logs/{logId} {
+      allow read, create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    // Cấu hình hệ thống & Thông báo
+    match /app_config/{key} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}

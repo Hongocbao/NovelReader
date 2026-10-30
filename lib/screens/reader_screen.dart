@@ -25,6 +25,7 @@ import '../widgets/reader/paragraph_view.dart';
 import '../widgets/reader/xray_and_quote_sheets.dart';
 import '../widgets/reader_settings_sheet.dart';
 import '../widgets/reader_toolbar.dart';
+import 'user/advanced_reader_sheets.dart';
 
 /// Màn hình đọc truyện (`ReaderScreen`):
 /// - Hỗ trợ cả 2 chế độ: **Cuộn dọc** (`SingleChildScrollView`) và **Lật trang ngang** (`PageView`).
@@ -762,6 +763,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
     final footer = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        _buildFavoriteParagraphHighlight(paragraphs, settings),
+        const SizedBox(height: 14),
         _buildChapterNavButtons(rp),
         const SizedBox(height: 28),
         ReaderCommentSection(
@@ -809,7 +812,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 10),
+          _buildV2ReaderToolsBar(chapter, rp.content ?? ''),
+          const SizedBox(height: 10),
+          RecapBannerCard(
+            novelId: widget.novel.id,
+            currentChapterIndex: chapter.chapterIndex,
+          ),
+          const SizedBox(height: 12),
           for (final p in paragraphs)
             Builder(
               builder: (_) {
@@ -912,6 +922,103 @@ class _ReaderScreenState extends State<ReaderScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildV2ReaderToolsBar(Chapter chapter, String fullText) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 6,
+      children: [
+        ActionChip(
+          avatar: const Icon(Icons.menu_book_outlined, size: 16),
+          label: const Text('Từ điển thuật ngữ'),
+          onPressed: () => showModalBottomSheet<void>(
+            context: context,
+            builder: (_) => GlossarySheet(
+              novelId: widget.novel.id,
+              currentChapterIndex: chapter.chapterIndex,
+            ),
+          ),
+        ),
+        ActionChip(
+          avatar: const Icon(Icons.bolt, size: 16),
+          label: const Text('Đọc nhanh RSVP'),
+          onPressed: () => showDialog<void>(
+            context: context,
+            builder: (_) => RsvpSpeedReaderDialog(text: fullText),
+          ),
+        ),
+        ActionChip(
+          avatar: const Icon(Icons.headphones_outlined, size: 16),
+          label: const Text('Ambient & Hộp thư thời gian'),
+          onPressed: () => showModalBottomSheet<void>(
+            context: context,
+            isScrollControlled: true,
+            builder: (_) => AmbientAndCapsuleSheet(
+              novelId: widget.novel.id,
+              chapterId: chapter.id,
+              genres: widget.novel.genres,
+              onSetSleepTimerMinutes: (mins) {
+                if (mins != null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        '⏲️ Đã đặt hẹn giờ ngủ TTS sau $mins phút.',
+                      ),
+                    ),
+                  );
+                }
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFavoriteParagraphHighlight(
+    List<String> paragraphs,
+    ReaderSettings settings,
+  ) {
+    final textParagraphs = paragraphs
+        .where((p) => !readerInlineImgPattern.hasMatch(p) && p.length > 25)
+        .toList();
+    if (textParagraphs.isEmpty) return const SizedBox.shrink();
+    final fav = textParagraphs.first;
+    final textColor = settings.background.textColor;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: textColor.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: textColor.withValues(alpha: 0.15)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '🔥 Đoạn văn được cộng đồng thả cảm xúc nhiều nhất chương (❤️ 18  😱 7  😭 4)',
+            style: TextStyle(
+              color: textColor,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '“$fav”',
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: textColor.withValues(alpha: 0.85),
+              fontStyle: FontStyle.italic,
+              fontSize: 13,
+            ),
+          ),
+        ],
       ),
     );
   }
