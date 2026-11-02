@@ -1,7 +1,7 @@
 /// Báo cáo vi phạm đối với bình luận, truyện, chương hoặc người dùng.
 class ReportItem {
   final int? id;
-  final int reporterId;
+  final String reporterId;
   final String reporterName;
 
   /// `comment` | `novel` | `chapter` | `user`
@@ -12,7 +12,7 @@ class ReportItem {
 
   /// `open` | `resolved` | `rejected`
   final String status;
-  final int? handledBy;
+  final String? handledBy;
   final String? resolutionNote;
   final DateTime createdAt;
 
@@ -46,14 +46,14 @@ class ReportItem {
 
   factory ReportItem.fromMap(Map<String, Object?> map) => ReportItem(
         id: map['id'] as int?,
-        reporterId: (map['reporter_id'] as int?) ?? 0,
+        reporterId: map['reporter_id']?.toString() ?? '',
         reporterName: (map['reporter_name'] as String?) ?? 'Độc giả',
         targetType: (map['target_type'] as String?) ?? 'comment',
         targetId: (map['target_id'] as int?) ?? 0,
         targetSnapshot: (map['target_snapshot'] as String?) ?? '',
         reason: (map['reason'] as String?) ?? '',
         status: (map['status'] as String?) ?? 'open',
-        handledBy: map['handled_by'] as int?,
+        handledBy: map['handled_by']?.toString(),
         resolutionNote: map['resolution_note'] as String?,
         createdAt: DateTime.fromMillisecondsSinceEpoch(
           (map['created_at'] as int?) ?? 0,

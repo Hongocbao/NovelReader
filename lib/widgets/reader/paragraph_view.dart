@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
@@ -38,54 +39,80 @@ class ReaderParagraphView extends StatelessWidget {
     final match = readerInlineImgPattern.firstMatch(paragraph);
     if (match != null) {
       final url = match.group(1)!.trim();
+      final isLocal = url.startsWith('file://') || !url.startsWith('http');
+      Widget imageWidget;
+      if (isLocal) {
+        final filePath = url.startsWith('file:///')
+            ? url.substring(8)
+            : (url.startsWith('file://') ? url.substring(7) : url);
+        imageWidget = Image.file(
+          File(filePath),
+          fit: BoxFit.contain,
+          errorBuilder: (_, _, _) => Container(
+            height: 160,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.black12,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              Icons.broken_image_outlined,
+              color: settings.background.textColor,
+            ),
+          ),
+        );
+      } else {
+        imageWidget = CachedNetworkImage(
+          imageUrl: url,
+          fit: BoxFit.cover,
+          placeholder: (_, _) => Container(
+            height: 200,
+            alignment: Alignment.center,
+            color: Colors.black12,
+            child: const CircularProgressIndicator(strokeWidth: 2),
+          ),
+          errorWidget: (_, _, _) => Container(
+            height: 160,
+            alignment: Alignment.center,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.black12,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.image_not_supported_outlined,
+                  color: settings.background.textColor,
+                  semanticLabel: 'Không tải được ảnh minh họa',
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Minh họa Light Novel (cần mạng để tải ảnh)',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: settings.background.textColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+
       return Semantics(
         image: true,
         button: true,
-        label: 'Ảnh minh họa Light Novel trong ${chapter.title}, chạm để phóng to',
+        label: 'Ảnh minh họa Manga/Light Novel trong ${chapter.title}, chạm để phóng to',
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.symmetric(vertical: 8),
           child: GestureDetector(
             onTap: () => onTapImage(url),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(10),
-              child: CachedNetworkImage(
-                imageUrl: url,
-                fit: BoxFit.cover,
-                placeholder: (_, _) => Container(
-                  height: 200,
-                  alignment: Alignment.center,
-                  color: Colors.black12,
-                  child: const CircularProgressIndicator(strokeWidth: 2),
-                ),
-                errorWidget: (_, _, _) => Container(
-                  height: 160,
-                  alignment: Alignment.center,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.black12,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.image_not_supported_outlined,
-                        color: settings.background.textColor,
-                        semanticLabel: 'Không tải được ảnh minh họa',
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Minh họa Light Novel (cần mạng để tải ảnh)',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: settings.background.textColor,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              child: imageWidget,
             ),
           ),
         ),

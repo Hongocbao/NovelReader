@@ -1,12 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/app_user.dart';
 import '../repositories/auth_repository.dart';
 import '../utils/constants.dart';
 import '../utils/role_guard.dart';
 
-/// Quản lý trạng thái xác thực, phiên đăng nhập, chế độ Khách và phân quyền.
+/// Quản lý trạng thái xác thực, phiên đăng nhập, chế độ Khách và phân quyền bằng Supabase Auth.
 class AuthProvider extends ChangeNotifier {
   final AuthRepository _repo;
   final SharedPreferences _prefs;
@@ -36,24 +37,26 @@ class AuthProvider extends ChangeNotifier {
   /// Có hiển thị giao diện AdminShell hay không.
   bool get shouldShowAdminShell => isAdmin && !_adminPreviewAsReader;
 
-  /// Khôi phục phiên đăng nhập đã lưu từ SharedPreferences.
+  /// Khôi phục phiên đăng nhập từ Supabase Auth session.
   Future<void> restoreSession() async {
     _isLoading = true;
     _error = null;
     notifyListeners();
     try {
-      final savedId = _prefs.getInt(PrefKeys.currentUserId) ?? 0;
       _hasEnteredApp = _prefs.getBool(PrefKeys.hasSeenSplashGate) ?? false;
-      if (savedId > 0) {
-        final user = await _repo.getUserById(savedId);
-        if (user != null && !user.isBanned) {
-          _currentUser = user;
-          _hasEnteredApp = true;
-        } else {
-          await _prefs.remove(PrefKeys.currentUserId);
-          _currentUser = AppUser.guest();
+      try {
+        final session = Supabase.instance.client.auth.currentSession;
+        if (session != null) {
+          final user = await _repo.getUserById(session.user.id);
+          if (user != null && !user.isBanned) {
+            _currentUser = user;
+            _hasEnteredApp = true;
+          } else {
+            await _repo.logout();
+            _currentUser = AppUser.guest();
+          }
         }
-      }
+      } catch (_) {}
     } catch (e) {
       _error = e.toString();
     } finally {
@@ -62,7 +65,7 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Tiếp tục với tư cách Khách (dữ liệu lưu cục bộ trên thiết bị).
+  /// Tiếp tục với tư cách Khách.
   Future<void> continueAsGuest() async {
     _currentUser = AppUser.guest();
     _adminPreviewAsReader = false;
@@ -73,7 +76,7 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Đăng nhập bằng email & mật khẩu.
+  /// Đăng nhập bằng Supabase Auth (signInWithPassword).
   Future<bool> login(String email, String password) async {
     _isLoading = true;
     _error = null;
@@ -83,11 +86,11 @@ class AuthProvider extends ChangeNotifier {
       _currentUser = user;
       _adminPreviewAsReader = false;
       _hasEnteredApp = true;
-      await _prefs.setInt(PrefKeys.currentUserId, user.id);
+      await _prefs.setString(PrefKeys.currentUserId, user.id);
       await _prefs.setBool(PrefKeys.hasSeenSplashGate, true);
       return true;
     } catch (e) {
-      _error = e.toString().replaceFirst('Bad state: ', '');
+      _error = _friendlyError(e);
       return false;
     } finally {
       _isLoading = false;
@@ -95,13 +98,11 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Đăng ký tài khoản mới và giữ nguyên toàn bộ tủ sách, lịch sử, bookmark cục bộ.
+  /// Đăng ký tài khoản mới bằng Supabase Auth (signUp).
   Future<bool> register({
     required String email,
     required String displayName,
     required String password,
-    String secretQuestion = 'Thể loại truyện yêu thích của bạn là gì?',
-    String secretAnswer = 'tien hiep',
   }) async {
     _isLoading = true;
     _error = null;
@@ -111,17 +112,15 @@ class AuthProvider extends ChangeNotifier {
         email: email,
         displayName: displayName,
         password: password,
-        secretQuestion: secretQuestion,
-        secretAnswer: secretAnswer,
       );
       _currentUser = user;
       _adminPreviewAsReader = false;
       _hasEnteredApp = true;
-      await _prefs.setInt(PrefKeys.currentUserId, user.id);
+      await _prefs.setString(PrefKeys.currentUserId, user.id);
       await _prefs.setBool(PrefKeys.hasSeenSplashGate, true);
       return true;
     } catch (e) {
-      _error = e.toString().replaceFirst('Bad state: ', '');
+      _error = _friendlyError(e);
       return false;
     } finally {
       _isLoading = false;
@@ -129,8 +128,11 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Đăng xuất và quay về màn hình cổng đăng nhập (SplashGate).
+  /// Đăng xuất khỏi Supabase Auth và quay về màn hình SplashGate.
   Future<void> logout() async {
+    try {
+      await _repo.logout();
+    } catch (_) {}
     _currentUser = AppUser.guest();
     _adminPreviewAsReader = false;
     _hasEnteredApp = false;
@@ -147,24 +149,16 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Đổi mật khẩu (đặc biệt dùng khi Admin đăng nhập lần đầu).
+  /// Đổi mật khẩu tài khoản hiện tại qua Supabase Auth.
   Future<void> changePassword(String newPassword) async {
     RoleGuard.requirePermission(_currentUser, AppPermission.interactAndGamify);
-    _currentUser = await _repo.changePassword(_currentUser.id, newPassword);
+    await _repo.changePassword(newPassword);
     notifyListeners();
   }
 
-  /// Đặt lại mật khẩu qua câu hỏi bí mật.
-  Future<void> resetPassword({
-    required String email,
-    required String secretAnswer,
-    required String newPassword,
-  }) async {
-    await _repo.resetPasswordWithSecret(
-      email: email,
-      secretAnswer: secretAnswer,
-      newPassword: newPassword,
-    );
+  /// Gửi email đặt lại mật khẩu qua Supabase Auth.
+  Future<void> resetPassword({required String email}) async {
+    await _repo.resetPassword(email);
   }
 
   /// Cập nhật tên hiển thị, avatar, khung avatar hoặc huy hiệu ghim.
@@ -178,6 +172,7 @@ class AuthProvider extends ChangeNotifier {
     final nextPinned = pinnedAchievements != null
         ? pinnedAchievements.take(3).toList()
         : _currentUser.pinnedAchievements;
+
     final updated = _currentUser.copyWith(
       displayName: displayName?.trim().isNotEmpty == true
           ? displayName!.trim()
@@ -229,7 +224,7 @@ class AuthProvider extends ChangeNotifier {
     return true;
   }
 
-  /// Làm mới dữ liệu tài khoản hiện tại từ DB.
+  /// Làm mới dữ liệu tài khoản hiện tại từ bảng profiles.
   Future<void> refreshCurrentUser() async {
     if (_currentUser.isGuest) return;
     final fresh = await _repo.getUserById(_currentUser.id);
@@ -237,5 +232,29 @@ class AuthProvider extends ChangeNotifier {
       _currentUser = fresh;
       notifyListeners();
     }
+  }
+
+  String _friendlyError(Object e) {
+    final str = e.toString();
+    if (str.contains('email_address_invalid') || str.contains('is invalid')) {
+      return 'Địa chỉ email không hợp lệ (Lưu ý: Gmail yêu cầu tên người dùng từ 6 ký tự trở lên).';
+    }
+    if (str.contains('over_email_send_rate_limit') || str.contains('rate limit')) {
+      return 'Đã vượt giới hạn gửi email trong 1 giờ. Vui lòng tắt "Confirm email" trong cài đặt Supabase hoặc thử lại sau.';
+    }
+    if (str.contains('User already registered') || str.contains('user_already_exists')) {
+      return 'Email này đã được sử dụng. Vui lòng đăng nhập hoặc dùng email khác.';
+    }
+    if (str.contains('Invalid login credentials') || str.contains('invalid_credentials')) {
+      return 'Email hoặc mật khẩu không chính xác.';
+    }
+    if (str.contains('row-level security policy') || str.contains('42501')) {
+      return 'Lỗi phân quyền hồ sơ. Vui lòng thử lại hoặc đăng nhập trực tiếp.';
+    }
+    return str
+        .replaceFirst('Bad state: ', '')
+        .replaceFirst('AuthException: ', '')
+        .replaceFirst(RegExp(r'^AuthApiException\(message:\s*'), '')
+        .replaceFirst(RegExp(r',\s*statusCode:\s*\d+.*$'), '');
   }
 }

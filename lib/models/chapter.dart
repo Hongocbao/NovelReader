@@ -51,7 +51,7 @@ class Chapter {
       chapterIndex: map['chapter_index'] as int,
       title: (map['title'] as String?) ?? '',
       content: map['content'] as String?,
-      isDownloaded: (map['is_downloaded'] as int?) == 1,
+      isDownloaded: map['is_downloaded'] == 1 || map['is_downloaded'] == true,
       publishAt:
           pubMs != null ? DateTime.fromMillisecondsSinceEpoch(pubMs) : null,
     );

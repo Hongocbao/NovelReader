@@ -17,7 +17,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _nameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
-  final _secretAnswerCtrl = TextEditingController(text: 'Tiên hiệp');
   bool _obscure = true;
 
   @override
@@ -25,7 +24,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _nameCtrl.dispose();
     _emailCtrl.dispose();
     _passCtrl.dispose();
-    _secretAnswerCtrl.dispose();
     super.dispose();
   }
 
@@ -36,7 +34,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
       email: _emailCtrl.text.trim(),
       displayName: _nameCtrl.text.trim(),
       password: _passCtrl.text,
-      secretAnswer: _secretAnswerCtrl.text.trim(),
     );
     if (!mounted) return;
     if (ok) {
@@ -115,12 +112,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     keyboardType: TextInputType.emailAddress,
                     decoration: const InputDecoration(
                       labelText: 'Email',
+                      hintText: 'vidu: docgia123@gmail.com',
+                      helperText: 'Tên Gmail tối thiểu 6 ký tự theo chuẩn Google',
                       prefixIcon: Icon(Icons.email_outlined),
                       border: OutlineInputBorder(),
                     ),
-                    validator: (v) => (v == null || !v.contains('@'))
-                        ? 'Vui lòng nhập email hợp lệ'
-                        : null,
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) {
+                        return 'Vui lòng nhập địa chỉ email';
+                      }
+                      final trimmed = v.trim();
+                      if (!trimmed.contains('@') || !trimmed.contains('.')) {
+                        return 'Vui lòng nhập định dạng email hợp lệ';
+                      }
+                      final parts = trimmed.split('@');
+                      if (parts.length == 2 && parts[1].toLowerCase() == 'gmail.com') {
+                        if (parts[0].length < 6 || parts[0].length > 30) {
+                          return 'Tên tài khoản Gmail phải từ 6 đến 30 ký tự (ví dụ: baobao123@gmail.com)';
+                        }
+                      }
+                      return null;
+                    },
                   ),
                   const SizedBox(height: 14),
                   TextFormField(
@@ -139,19 +151,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                     validator: (v) => (v == null || v.length < 8)
                         ? 'Mật khẩu phải từ 8 ký tự trở lên'
-                        : null,
-                  ),
-                  const SizedBox(height: 14),
-                  TextFormField(
-                    controller: _secretAnswerCtrl,
-                    decoration: const InputDecoration(
-                      labelText:
-                          'Câu hỏi bảo mật: Thể loại truyện yêu thích của bạn?',
-                      prefixIcon: Icon(Icons.help_outline),
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (v) => (v == null || v.trim().isEmpty)
-                        ? 'Nhập câu trả lời để khôi phục mật khẩu khi quên'
                         : null,
                   ),
                   if (auth.error != null) ...[

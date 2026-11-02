@@ -13,12 +13,11 @@ class UserStatus {
   static const String banned = 'banned';
 }
 
-/// Mô hình người dùng trong NovelReader v2 (Độc giả, Tác giả, Quản trị viên).
+/// Mô hình hồ sơ người dùng trong NovelReader v2 (đồng bộ với bảng `profiles` trên Supabase).
 class AppUser {
-  final int id;
+  /// UUID từ Supabase Auth (auth.users.id)
+  final String id;
   final String email;
-  final String passwordHash;
-  final String salt;
   final String displayName;
   final String avatar;
   final String avatarFrame;
@@ -45,21 +44,12 @@ class AppUser {
   /// Danh sách khung avatar/nền đọc/font đã mở khóa bằng Linh Thạch.
   final List<String> unlockedItems;
 
-  /// Câu hỏi bí mật và băm câu trả lời để khôi phục mật khẩu cục bộ (Giai đoạn A).
-  final String secretQuestion;
-  final String secretAnswerHash;
-
-  /// Bắt buộc đổi mật khẩu ở lần đăng nhập đầu (dành cho tài khoản seed admin).
-  final bool mustChangePassword;
-
   final DateTime lastActiveAt;
   final DateTime createdAt;
 
   const AppUser({
     required this.id,
     required this.email,
-    this.passwordHash = '',
-    this.salt = '',
     required this.displayName,
     this.avatar = '📚',
     this.avatarFrame = 'default',
@@ -73,9 +63,6 @@ class AppUser {
     this.hasStreakShield = false,
     this.pinnedAchievements = const [],
     this.unlockedItems = const ['default'],
-    this.secretQuestion = 'Thể loại truyện yêu thích của bạn là gì?',
-    this.secretAnswerHash = '',
-    this.mustChangePassword = false,
     required this.lastActiveAt,
     required this.createdAt,
   });
@@ -84,7 +71,7 @@ class AppUser {
   factory AppUser.guest() {
     final now = DateTime.now();
     return AppUser(
-      id: 0,
+      id: '',
       email: 'guest@local',
       displayName: 'Độc giả Khách',
       avatar: '👤',
@@ -94,7 +81,7 @@ class AppUser {
     );
   }
 
-  bool get isGuest => role == UserRole.guest || id == 0;
+  bool get isGuest => role == UserRole.guest || id.isEmpty || id == '0';
   bool get isAdmin => role == UserRole.admin;
 
   /// Kiểm tra tài khoản hiện có đang bị khóa (vĩnh viễn hoặc còn trong hạn khóa) hay không.
@@ -105,10 +92,8 @@ class AppUser {
   }
 
   Map<String, Object?> toMap() => {
-        if (id > 0) 'id': id,
+        if (id.isNotEmpty) 'id': id,
         'email': email.toLowerCase().trim(),
-        'password_hash': passwordHash,
-        'salt': salt,
         'display_name': displayName,
         'avatar': avatar,
         'avatar_frame': avatarFrame,
@@ -122,9 +107,6 @@ class AppUser {
         'has_streak_shield': hasStreakShield ? 1 : 0,
         'pinned_achievements': pinnedAchievements.join(','),
         'unlocked_items': unlockedItems.join(','),
-        'secret_question': secretQuestion,
-        'secret_answer_hash': secretAnswerHash,
-        'must_change_password': mustChangePassword ? 1 : 0,
         'last_active_at': lastActiveAt.millisecondsSinceEpoch,
         'created_at': createdAt.millisecondsSinceEpoch,
       };
@@ -134,23 +116,21 @@ class AppUser {
     final unlockedRaw = (map['unlocked_items'] as String?) ?? 'default';
     final banUntilMs = map['ban_until'] as int?;
     return AppUser(
-      id: (map['id'] as int?) ?? 0,
+      id: (map['id'] ?? '').toString(),
       email: (map['email'] as String?) ?? '',
-      passwordHash: (map['password_hash'] as String?) ?? '',
-      salt: (map['salt'] as String?) ?? '',
       displayName: (map['display_name'] as String?) ?? 'Độc giả',
       avatar: (map['avatar'] as String?) ?? '📚',
       avatarFrame: (map['avatar_frame'] as String?) ?? 'default',
       role: (map['role'] as String?) ?? UserRole.user,
-      isAuthor: (map['is_author'] as int?) == 1,
+      isAuthor: map['is_author'] == 1 || map['is_author'] == true,
       status: (map['status'] as String?) ?? UserStatus.active,
       banReason: map['ban_reason'] as String?,
       banUntil: banUntilMs != null
           ? DateTime.fromMillisecondsSinceEpoch(banUntilMs)
           : null,
-      linhThach: (map['linh_thach'] as int?) ?? 0,
+      linhThach: (map['linh_thach'] as int?) ?? 100,
       streak: (map['streak'] as int?) ?? 0,
-      hasStreakShield: (map['has_streak_shield'] as int?) == 1,
+      hasStreakShield: map['has_streak_shield'] == 1 || map['has_streak_shield'] == true,
       pinnedAchievements: pinnedRaw
           .split(',')
           .map((e) => e.trim())
@@ -161,10 +141,6 @@ class AppUser {
           .map((e) => e.trim())
           .where((e) => e.isNotEmpty)
           .toList(),
-      secretQuestion: (map['secret_question'] as String?) ??
-          'Thể loại truyện yêu thích của bạn là gì?',
-      secretAnswerHash: (map['secret_answer_hash'] as String?) ?? '',
-      mustChangePassword: (map['must_change_password'] as int?) == 1,
       lastActiveAt: DateTime.fromMillisecondsSinceEpoch(
         (map['last_active_at'] as int?) ?? 0,
       ),
@@ -175,10 +151,8 @@ class AppUser {
   }
 
   AppUser copyWith({
-    int? id,
+    String? id,
     String? email,
-    String? passwordHash,
-    String? salt,
     String? displayName,
     String? avatar,
     String? avatarFrame,
@@ -192,17 +166,12 @@ class AppUser {
     bool? hasStreakShield,
     List<String>? pinnedAchievements,
     List<String>? unlockedItems,
-    String? secretQuestion,
-    String? secretAnswerHash,
-    bool? mustChangePassword,
     DateTime? lastActiveAt,
     DateTime? createdAt,
   }) {
     return AppUser(
       id: id ?? this.id,
       email: email ?? this.email,
-      passwordHash: passwordHash ?? this.passwordHash,
-      salt: salt ?? this.salt,
       displayName: displayName ?? this.displayName,
       avatar: avatar ?? this.avatar,
       avatarFrame: avatarFrame ?? this.avatarFrame,
@@ -216,9 +185,6 @@ class AppUser {
       hasStreakShield: hasStreakShield ?? this.hasStreakShield,
       pinnedAchievements: pinnedAchievements ?? this.pinnedAchievements,
       unlockedItems: unlockedItems ?? this.unlockedItems,
-      secretQuestion: secretQuestion ?? this.secretQuestion,
-      secretAnswerHash: secretAnswerHash ?? this.secretAnswerHash,
-      mustChangePassword: mustChangePassword ?? this.mustChangePassword,
       lastActiveAt: lastActiveAt ?? this.lastActiveAt,
       createdAt: createdAt ?? this.createdAt,
     );

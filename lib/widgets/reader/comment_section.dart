@@ -123,7 +123,7 @@ class _ReaderCommentSectionState extends State<ReaderCommentSection> {
             chapterId: widget.chapter.id,
             content: cleanText,
             stars: stars,
-            userId: user?.id ?? 0,
+            userId: user?.id ?? '',
             userName: user?.displayName ?? 'Độc giả',
             chapterIndex: commentChapterIdx,
           );

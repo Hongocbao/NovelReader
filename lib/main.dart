@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'database/app_database.dart';
 import 'providers/admin_dashboard_provider.dart';
@@ -21,16 +22,37 @@ import 'providers/reader_provider.dart';
 import 'providers/settings_provider.dart';
 import 'repositories/auth_repository.dart';
 import 'repositories/novel_repository.dart';
+import 'repositories/supabase_auth_repository.dart';
+import 'repositories/supabase_novel_repository.dart';
 import 'screens/auth/splash_gate.dart';
+import 'screens/config_error_screen.dart';
 import 'utils/constants.dart';
 import 'utils/theme.dart';
 
-/// Điểm khởi chạy ứng dụng: cấu hình SQLite theo nền tảng,
-/// nạp SharedPreferences, khôi phục phiên đăng nhập và khởi tạo MultiProvider.
+/// Điểm khởi chạy ứng dụng NovelReader: kết nối Cloud Supabase làm Database chính.
 Future<void> main() async {
-   WidgetsFlutterBinding.ensureInitialized();
+  WidgetsFlutterBinding.ensureInitialized();
 
-  // Hỗ trợ chạy demo trên Web hoặc Desktop ngoài Android/iOS.
+  // Kiểm tra cấu hình môi trường SUPABASE_URL & SUPABASE_ANON_KEY (Yêu cầu 2)
+  if (SupabaseConfig.isMissing) {
+    runApp(const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: ConfigErrorScreen(),
+    ));
+    return;
+  }
+
+  // 1. Khởi tạo Supabase Cloud
+  try {
+    await Supabase.initialize(
+      url: SupabaseConfig.url,
+      anonKey: SupabaseConfig.anonKey, // ignore: deprecated_member_use
+    );
+  } catch (e) {
+    debugPrint('Supabase init error: $e');
+  }
+
+  // Hỗ trợ SQLite fallback khi offline
   if (kIsWeb) {
     databaseFactory = databaseFactoryFfiWebNoWebWorker;
   } else if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
@@ -66,8 +88,9 @@ class NovelReaderApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final authRepo = LocalAuthRepository(database);
-    final novelRepo = LocalNovelRepository(database);
+    // Sử dụng Repositories kết nối Supabase Cloud
+    final AuthRepository authRepo = SupabaseAuthRepository();
+    final NovelRepository novelRepo = SupabaseNovelRepository();
 
     return MultiProvider(
       providers: [

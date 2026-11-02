@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -898,6 +899,32 @@ class _ReaderScreenState extends State<ReaderScreen> {
   }
 
   void _openImageViewer(String url) {
+    final isLocal = url.startsWith('file://') || !url.startsWith('http');
+    Widget img;
+    if (isLocal) {
+      final path = url.startsWith('file:///')
+          ? url.substring(8)
+          : (url.startsWith('file://') ? url.substring(7) : url);
+      img = Image.file(
+        File(path),
+        errorBuilder: (_, _, _) => const Icon(
+          Icons.broken_image_outlined,
+          color: Colors.white70,
+          size: 64,
+        ),
+      );
+    } else {
+      img = CachedNetworkImage(
+        imageUrl: url,
+        errorWidget: (_, _, _) => const Icon(
+          Icons.broken_image_outlined,
+          color: Colors.white70,
+          size: 64,
+          semanticLabel: 'Ảnh minh họa bị lỗi',
+        ),
+      );
+    }
+
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (ctx) => Scaffold(
@@ -910,15 +937,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
             child: InteractiveViewer(
               minScale: 0.8,
               maxScale: 4.0,
-              child: CachedNetworkImage(
-                imageUrl: url,
-                errorWidget: (_, _, _) => const Icon(
-                  Icons.broken_image_outlined,
-                  color: Colors.white70,
-                  size: 64,
-                  semanticLabel: 'Ảnh minh họa bị lỗi',
-                ),
-              ),
+              child: img,
             ),
           ),
         ),

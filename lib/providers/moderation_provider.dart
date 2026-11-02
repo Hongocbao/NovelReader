@@ -135,7 +135,7 @@ class ModerationProvider extends ChangeNotifier {
       await V2DatabaseStore.createNotification(
         db,
         NotificationItem(
-          userId: 0,
+          userId: report.reporterId,
           title: '⚠️ Nhắc nhở tiêu chuẩn cộng đồng',
           body:
               'Nội dung "${report.targetSnapshot}" đã bị báo cáo (${report.reason}). Ghi chú Admin: $note',

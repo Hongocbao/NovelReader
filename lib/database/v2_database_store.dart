@@ -1,4 +1,5 @@
 import 'package:sqflite/sqflite.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/achievement.dart';
 import '../models/announcement.dart';
@@ -10,7 +11,18 @@ import '../models/notification_item.dart';
 import '../models/quest.dart';
 import '../models/reading_session.dart';
 import '../models/report.dart';
+import '../utils/constants.dart';
 import 'v2_seed_data.dart';
+
+bool get _isSupabaseReady {
+  try {
+    Supabase.instance.client;
+    return SupabaseConfig.anonKey != 'YOUR_SUPABASE_ANON_KEY' &&
+        SupabaseConfig.anonKey.trim().isNotEmpty;
+  } catch (_) {
+    return false;
+  }
+}
 
 /// Lớp quản lý các bảng dữ liệu mở rộng của NovelReader v2 (SQLite).
 ///
@@ -92,8 +104,6 @@ class V2DatabaseStore {
       CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         email TEXT NOT NULL UNIQUE,
-        password_hash TEXT NOT NULL,
-        salt TEXT NOT NULL,
         display_name TEXT NOT NULL,
         avatar TEXT NOT NULL DEFAULT '📚',
         avatar_frame TEXT NOT NULL DEFAULT 'default',
@@ -107,9 +117,6 @@ class V2DatabaseStore {
         has_streak_shield INTEGER NOT NULL DEFAULT 0,
         pinned_achievements TEXT DEFAULT '',
         unlocked_items TEXT DEFAULT 'default',
-        secret_question TEXT DEFAULT 'Thể loại truyện yêu thích của bạn là gì?',
-        secret_answer_hash TEXT DEFAULT '',
-        must_change_password INTEGER NOT NULL DEFAULT 0,
         last_active_at INTEGER NOT NULL,
         created_at INTEGER NOT NULL
       )
@@ -316,14 +323,30 @@ class V2DatabaseStore {
   // ---------------------------------------------------------------------------
 
   static Future<List<Achievement>> getAllAchievements(Database db) async {
+    if (_isSupabaseReady) {
+      try {
+        final res = await Supabase.instance.client.from('achievements').select();
+        return (res as List).map((r) => Achievement.fromMap(r as Map<String, dynamic>)).toList();
+      } catch (_) {}
+    }
     final rows = await db.query('achievements');
     return rows.map(Achievement.fromMap).toList();
   }
 
   static Future<List<UserAchievement>> getUserAchievements(
     Database db,
-    int userId,
+    String userId,
   ) async {
+    if (_isSupabaseReady) {
+      try {
+        final res = await Supabase.instance.client
+            .from('user_achievements')
+            .select()
+            .eq('user_id', userId)
+            .order('unlocked_at', ascending: false);
+        return (res as List).map((r) => UserAchievement.fromMap(r as Map<String, dynamic>)).toList();
+      } catch (_) {}
+    }
     final rows = await db.query(
       'user_achievements',
       where: 'user_id = ?',
@@ -335,9 +358,27 @@ class V2DatabaseStore {
 
   static Future<bool> unlockAchievement(
     Database db,
-    int userId,
+    String userId,
     String code,
   ) async {
+    if (_isSupabaseReady) {
+      try {
+        final client = Supabase.instance.client;
+        final existing = await client
+            .from('user_achievements')
+            .select()
+            .eq('user_id', userId)
+            .eq('code', code)
+            .maybeSingle();
+        if (existing != null) return false;
+        await client.from('user_achievements').insert({
+          'user_id': userId,
+          'code': code,
+          'unlocked_at': DateTime.now().millisecondsSinceEpoch,
+        });
+        return true;
+      } catch (_) {}
+    }
     final existing = await db.query(
       'user_achievements',
       where: 'user_id = ? AND code = ?',
@@ -353,6 +394,16 @@ class V2DatabaseStore {
   }
 
   static Future<List<Quest>> getActiveQuests(Database db) async {
+    if (_isSupabaseReady) {
+      try {
+        final res = await Supabase.instance.client
+            .from('quests')
+            .select()
+            .eq('is_active', 1)
+            .order('id', ascending: true);
+        return (res as List).map((r) => Quest.fromMap(r as Map<String, dynamic>)).toList();
+      } catch (_) {}
+    }
     final rows = await db.query(
       'quests',
       where: 'is_active = 1',
@@ -362,14 +413,33 @@ class V2DatabaseStore {
   }
 
   static Future<List<Quest>> getAllQuests(Database db) async {
+    if (_isSupabaseReady) {
+      try {
+        final res = await Supabase.instance.client
+            .from('quests')
+            .select()
+            .order('id', ascending: false);
+        return (res as List).map((r) => Quest.fromMap(r as Map<String, dynamic>)).toList();
+      } catch (_) {}
+    }
     final rows = await db.query('quests', orderBy: 'id DESC');
     return rows.map(Quest.fromMap).toList();
   }
 
   static Future<Map<int, UserQuest>> getUserQuests(
     Database db,
-    int userId,
+    String userId,
   ) async {
+    if (_isSupabaseReady) {
+      try {
+        final res = await Supabase.instance.client
+            .from('user_quests')
+            .select()
+            .eq('user_id', userId);
+        final list = (res as List).map((r) => UserQuest.fromMap(r as Map<String, dynamic>));
+        return {for (final uq in list) uq.questId: uq};
+      } catch (_) {}
+    }
     final rows = await db.query(
       'user_quests',
       where: 'user_id = ?',
@@ -381,11 +451,11 @@ class V2DatabaseStore {
 
   static Future<void> incrementQuestProgress(
     Database db, {
-    required int userId,
+    required String userId,
     required String goalType,
     required int delta,
   }) async {
-    if (userId <= 0 || delta <= 0) return;
+    if (userId.isEmpty || delta <= 0) return;
     final quests = await getActiveQuests(db);
     for (final q in quests.where((e) => e.goalType == goalType)) {
       final rows = await db.query(
@@ -481,12 +551,22 @@ class V2DatabaseStore {
 
   static Future<List<NotificationItem>> getNotifications(
     Database db,
-    int userId,
+    String userId,
   ) async {
+    if (_isSupabaseReady) {
+      try {
+        final res = await Supabase.instance.client
+            .from('notifications')
+            .select()
+            .or('user_id.eq.$userId,user_id.eq.')
+            .order('created_at', ascending: false);
+        return (res as List).map((r) => NotificationItem.fromMap(r as Map<String, dynamic>)).toList();
+      } catch (_) {}
+    }
     final rows = await db.query(
       'notifications',
-      where: 'user_id = ? OR user_id = 0',
-      whereArgs: [userId],
+      where: 'user_id = ? OR user_id = ?',
+      whereArgs: [userId, ''],
       orderBy: 'created_at DESC',
     );
     return rows.map(NotificationItem.fromMap).toList();
@@ -496,10 +576,26 @@ class V2DatabaseStore {
     Database db,
     NotificationItem item,
   ) async {
+    if (_isSupabaseReady) {
+      try {
+        await Supabase.instance.client.from('notifications').insert(item.toMap());
+        return;
+      } catch (_) {}
+    }
     await db.insert('notifications', item.toMap());
   }
 
   static Future<List<Announcement>> getAnnouncements(Database db) async {
+    if (_isSupabaseReady) {
+      try {
+        final res = await Supabase.instance.client
+            .from('announcements')
+            .select()
+            .order('pinned', ascending: false)
+            .order('created_at', ascending: false);
+        return (res as List).map((r) => Announcement.fromMap(r as Map<String, dynamic>)).toList();
+      } catch (_) {}
+    }
     final rows = await db.query(
       'announcements',
       orderBy: 'pinned DESC, created_at DESC',
@@ -508,11 +604,29 @@ class V2DatabaseStore {
   }
 
   static Future<List<ReportItem>> getReports(Database db) async {
+    if (_isSupabaseReady) {
+      try {
+        final res = await Supabase.instance.client
+            .from('reports')
+            .select()
+            .order('created_at', ascending: false);
+        return (res as List).map((r) => ReportItem.fromMap(r as Map<String, dynamic>)).toList();
+      } catch (_) {}
+    }
     final rows = await db.query('reports', orderBy: 'created_at DESC');
     return rows.map(ReportItem.fromMap).toList();
   }
 
   static Future<List<AuditLog>> getAuditLogs(Database db) async {
+    if (_isSupabaseReady) {
+      try {
+        final res = await Supabase.instance.client
+            .from('audit_logs')
+            .select()
+            .order('created_at', ascending: false);
+        return (res as List).map((r) => AuditLog.fromMap(r as Map<String, dynamic>)).toList();
+      } catch (_) {}
+    }
     final rows = await db.query('audit_logs', orderBy: 'created_at DESC');
     return rows.map(AuditLog.fromMap).toList();
   }
@@ -524,6 +638,20 @@ class V2DatabaseStore {
     required String target,
     required String detail,
   }) async {
+    if (_isSupabaseReady) {
+      try {
+        final log = AuditLog(
+          adminId: admin.id,
+          adminName: admin.displayName,
+          action: action,
+          target: target,
+          detail: detail,
+          createdAt: DateTime.now(),
+        );
+        await Supabase.instance.client.from('audit_logs').insert(log.toMap());
+        return;
+      } catch (_) {}
+    }
     final log = AuditLog(
       adminId: admin.id,
       adminName: admin.displayName,
@@ -536,6 +664,15 @@ class V2DatabaseStore {
   }
 
   static Future<Map<String, String>> getAppConfig(Database db) async {
+    if (_isSupabaseReady) {
+      try {
+        final res = await Supabase.instance.client.from('app_config').select();
+        return {
+          for (final r in (res as List))
+            (r['key'] as String? ?? ''): (r['value'] as String? ?? ''),
+        };
+      } catch (_) {}
+    }
     final rows = await db.query('app_config');
     return {
       for (final r in rows)
@@ -548,6 +685,12 @@ class V2DatabaseStore {
     String key,
     String value,
   ) async {
+    if (_isSupabaseReady) {
+      try {
+        await Supabase.instance.client.from('app_config').upsert({'key': key, 'value': value});
+        return;
+      } catch (_) {}
+    }
     await db.insert(
       'app_config',
       {'key': key, 'value': value},
@@ -556,6 +699,12 @@ class V2DatabaseStore {
   }
 
   static Future<List<String>> getBannedWords(Database db) async {
+    if (_isSupabaseReady) {
+      try {
+        final res = await Supabase.instance.client.from('banned_words').select().order('word', ascending: true);
+        return (res as List).map((r) => (r['word'] as String?) ?? '').toList();
+      } catch (_) {}
+    }
     final rows = await db.query('banned_words', orderBy: 'word ASC');
     return rows.map((r) => (r['word'] as String?) ?? '').toList();
   }

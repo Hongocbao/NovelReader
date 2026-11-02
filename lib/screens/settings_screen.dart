@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:provider/provider.dart';
 
+import '../providers/auth_provider.dart';
 import '../providers/library_provider.dart';
 import '../providers/novel_provider.dart';
 import '../providers/reader_provider.dart';
@@ -739,6 +740,60 @@ class _SettingsScreenState extends State<SettingsScreen> {
               subtitle: Text(AppStrings.aboutDesc),
             ),
           ),
+          const SizedBox(height: 16),
+          // Tài khoản & Đăng xuất
+          Consumer<AuthProvider>(
+            builder: (context, auth, _) {
+              final user = auth.currentUser;
+              if (user.isGuest) return const SizedBox.shrink();
+              final cs = Theme.of(context).colorScheme;
+              return Card(
+                elevation: 0,
+                color: cs.errorContainer.withValues(alpha: 0.25),
+                child: ListTile(
+                  leading: Icon(Icons.logout, color: cs.error),
+                  title: Text(
+                    'Đăng xuất (${user.displayName})',
+                    style: TextStyle(
+                      color: cs.error,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  subtitle: Text(user.email),
+                  onTap: () async {
+                    final ok = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Xác nhận đăng xuất'),
+                        content: Text('Bạn có chắc chắn muốn đăng xuất khỏi ${user.email}?'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const Text('Hủy'),
+                          ),
+                          FilledButton(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: Colors.redAccent,
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: () => Navigator.pop(ctx, true),
+                            child: const Text('Đăng xuất'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (ok == true && context.mounted) {
+                      await auth.logout();
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                      }
+                    }
+                  },
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 24),
         ],
       ),
     );

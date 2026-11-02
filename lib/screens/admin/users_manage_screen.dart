@@ -148,6 +148,7 @@ class _AdminUsersManageScreenState extends State<AdminUsersManageScreen> {
               items: const [
                 DropdownMenuItem(value: 'all', child: Text('Mọi vai trò')),
                 DropdownMenuItem(value: 'user', child: Text('Độc giả (user)')),
+                DropdownMenuItem(value: 'author', child: Text('Tác giả (author)')),
                 DropdownMenuItem(value: 'admin', child: Text('Quản trị (admin)')),
               ],
               onChanged: (v) => setState(() => _roleFilter = v ?? 'all'),
@@ -209,9 +210,12 @@ class _AdminUsersManageScreenState extends State<AdminUsersManageScreen> {
                 ),
                 DataCell(
                   DropdownButton<String>(
-                    value: u.role,
+                    value: const ['user', 'author', 'admin'].contains(u.role)
+                        ? u.role
+                        : 'user',
                     items: const [
                       DropdownMenuItem(value: 'user', child: Text('user')),
+                      DropdownMenuItem(value: 'author', child: Text('author')),
                       DropdownMenuItem(value: 'admin', child: Text('admin')),
                     ],
                     onChanged: u.id == admin.id
@@ -224,6 +228,11 @@ class _AdminUsersManageScreenState extends State<AdminUsersManageScreen> {
                                 target: u,
                                 newRole: newRole,
                               );
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Đã cập nhật vai trò thành công: $newRole')),
+                                );
+                              }
                             } catch (e) {
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(

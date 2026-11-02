@@ -38,7 +38,8 @@ class RoleGuard {
       case AppPermission.interactAndGamify:
         return user != null && !user.isGuest;
       case AppPermission.publishContent:
-        return user != null && (user.isAuthor || user.isAdmin);
+        // Hợp nhất tác giả & độc giả: Mọi độc giả đã đăng nhập đều có thể sáng tác truyện và gửi duyệt
+        return user != null && !user.isGuest;
       case AppPermission.moderateContent:
       case AppPermission.manageSystem:
         return user != null && user.isAdmin;
@@ -68,12 +69,12 @@ class RoleGuard {
     );
   }
 
-  /// Kiểm tra nhanh quyền Tác giả hoặc Admin.
+  /// Kiểm tra nhanh quyền Sáng tác / Tác giả: Mọi độc giả đã đăng nhập đều được phép viết truyện.
   static void requireAuthorOrAdmin(AppUser? user) {
     requirePermission(
       user,
       AppPermission.publishContent,
-      'Chỉ Tác giả hoặc Quản trị viên mới được phép đăng truyện/chương.',
+      'Vui lòng đăng nhập tài khoản để sáng tác truyện và gửi duyệt tác phẩm.',
     );
   }
 }

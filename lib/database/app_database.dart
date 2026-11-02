@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/bookmark.dart';
 import '../models/chapter.dart';
@@ -12,6 +13,7 @@ import '../models/novel.dart';
 import '../models/reading_history.dart';
 import '../utils/constants.dart';
 import '../utils/format.dart';
+import 'supabase_database.dart';
 import 'v2_database_store.dart';
 
 /// Lớp truy cập SQLite của ứng dụng: tạo bảng, CRUD và nạp dữ liệu mẫu.
@@ -252,9 +254,27 @@ class AppDatabase {
     });
   }
 
-  /// "Gọi máy chủ" lấy nội dung chương (giả lập bằng JSON mẫu).
+  /// Kiểm tra xem Supabase đã được khởi tạo với anonKey hợp lệ chưa.
+  bool get isSupabaseReady {
+    try {
+      Supabase.instance.client;
+      return SupabaseConfig.anonKey != 'YOUR_SUPABASE_ANON_KEY' &&
+          SupabaseConfig.anonKey.trim().isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// "Gọi máy chủ" lấy nội dung chương (trực tiếp từ Supabase hoặc file mẫu).
   /// Ném [StateError] nếu không tìm thấy chương.
   Future<String> fetchChapterContent(int novelId, int chapterIndex) async {
+    if (isSupabaseReady) {
+      try {
+        return await SupabaseDatabase.instance.fetchChapterContent(novelId, chapterIndex);
+      } catch (e) {
+        debugPrint('Supabase fetchChapterContent fallback: $e');
+      }
+    }
     if (_remoteContent == null) {
       final novels = await _loadSampleData();
       _remoteContent = {
@@ -289,6 +309,24 @@ class AppDatabase {
     int offset = 0,
     bool includeUnapproved = false,
   }) async {
+    if (isSupabaseReady) {
+      try {
+        return await SupabaseDatabase.instance.queryNovels(
+          keyword: keyword,
+          genres: genres,
+          status: status,
+          type: type,
+          sort: sort,
+          limit: limit,
+          offset: offset,
+          includeUnapproved: includeUnapproved,
+        );
+      } catch (e) {
+        debugPrint('Supabase queryNovels error: $e');
+        if (kIsWeb) return [];
+      }
+    }
+    if (kIsWeb) return [];
     final db = await database;
     final where = <String>['deleted_at IS NULL'];
     final args = <Object?>[];
@@ -331,6 +369,17 @@ class AppDatabase {
 
   /// Lấy 1 truyện theo id.
   Future<Novel?> getNovel(int id) async {
+    if (isSupabaseReady) {
+      try {
+        final n = await SupabaseDatabase.instance.getNovel(id);
+        if (n != null) return n;
+      } catch (e) {
+        debugPrint('Supabase getNovel error: $e');
+        if (kIsWeb) return null;
+      }
+      if (kIsWeb) return null;
+    }
+    if (kIsWeb) return null;
     final db = await database;
     final rows = await db.query('novels', where: 'id = ?', whereArgs: [id]);
     return rows.isEmpty ? null : Novel.fromMap(rows.first);
@@ -338,6 +387,16 @@ class AppDatabase {
 
   /// Đếm số truyện theo từng thể loại.
   Future<Map<String, int>> genreCounts() async {
+    if (isSupabaseReady) {
+      try {
+        return await SupabaseDatabase.instance.genreCounts();
+      } catch (e) {
+        debugPrint('Supabase genreCounts error: $e');
+        if (kIsWeb) return {};
+      }
+      if (kIsWeb) return {};
+    }
+    if (kIsWeb) return {};
     final db = await database;
     final rows = await db.query('novels', columns: ['genres']);
     final result = <String, int>{};
@@ -363,7 +422,7 @@ class AppDatabase {
     required List<({String title, String content})> chapters,
     String? coverUrl,
     String moderationStatus = ModerationStatus.approved,
-    int ownerId = 1,
+    String ownerId = '',
   }) async {
     final db = await database;
     final maxId = Sqflite.firstIntValue(
@@ -457,6 +516,16 @@ class AppDatabase {
 
   /// Danh sách chương của truyện (không kèm nội dung cho nhẹ).
   Future<List<Chapter>> getChapters(int novelId) async {
+    if (isSupabaseReady) {
+      try {
+        return await SupabaseDatabase.instance.getChapters(novelId);
+      } catch (e) {
+        debugPrint('Supabase getChapters error: $e');
+        if (kIsWeb) return [];
+      }
+      if (kIsWeb) return [];
+    }
+    if (kIsWeb) return [];
     final db = await database;
     final rows = await db.query(
       'chapters',
@@ -544,21 +613,49 @@ class AppDatabase {
   ''';
 
   /// Toàn bộ tủ sách (kèm thông tin truyện + tiến độ).
-  Future<List<LibraryItem>> getLibrary() async {
+  Future<List<LibraryItem>> getLibrary({String? userId}) async {
+    if (isSupabaseReady) {
+      try {
+        return await SupabaseDatabase.instance.getLibrary(userId: userId);
+      } catch (e) {
+        debugPrint('Supabase getLibrary error: $e');
+        if (kIsWeb) return [];
+      }
+      if (kIsWeb) return [];
+    }
+    if (kIsWeb) return [];
     final db = await database;
     final rows = await db.rawQuery('$_librarySelect ORDER BY l.added_at DESC');
     return rows.map(LibraryItem.fromMap).toList();
   }
 
   /// Thêm hoặc cập nhật danh mục của truyện trong tủ sách.
-  Future<void> upsertLibrary(LibraryItem item) async {
+  Future<void> upsertLibrary(LibraryItem item, {String? userId}) async {
+    if (isSupabaseReady) {
+      try {
+        await SupabaseDatabase.instance.upsertLibrary(item, userId: userId);
+      } catch (e) {
+        debugPrint('Supabase upsertLibrary error: $e');
+      }
+      if (kIsWeb) return;
+    }
+    if (kIsWeb) return;
     final db = await database;
     await db.insert('library', item.toMap(),
         conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   /// Xóa truyện khỏi tủ sách.
-  Future<void> removeFromLibrary(int novelId) async {
+  Future<void> removeFromLibrary(int novelId, {String? userId}) async {
+    if (isSupabaseReady) {
+      try {
+        await SupabaseDatabase.instance.removeFromLibrary(novelId, userId: userId);
+      } catch (e) {
+        debugPrint('Supabase removeFromLibrary error: $e');
+      }
+      if (kIsWeb) return;
+    }
+    if (kIsWeb) return;
     final db = await database;
     await db.delete('library', where: 'novel_id = ?', whereArgs: [novelId]);
   }
@@ -575,7 +672,17 @@ class AppDatabase {
   ''';
 
   /// Lịch sử đọc, mới nhất trước.
-  Future<List<ReadingHistory>> getHistory() async {
+  Future<List<ReadingHistory>> getHistory({String? userId}) async {
+    if (isSupabaseReady) {
+      try {
+        return await SupabaseDatabase.instance.getHistory(userId: userId);
+      } catch (e) {
+        debugPrint('Supabase getHistory error: $e');
+        if (kIsWeb) return [];
+      }
+      if (kIsWeb) return [];
+    }
+    if (kIsWeb) return [];
     final db = await database;
     final rows =
         await db.rawQuery('$_historySelect ORDER BY h.last_read_at DESC');
@@ -583,7 +690,18 @@ class AppDatabase {
   }
 
   /// Lịch sử đọc của 1 truyện.
-  Future<ReadingHistory?> getHistoryFor(int novelId) async {
+  Future<ReadingHistory?> getHistoryFor(int novelId, {String? userId}) async {
+    if (isSupabaseReady) {
+      try {
+        final h = await SupabaseDatabase.instance.getHistoryFor(novelId, userId: userId);
+        if (h != null) return h;
+      } catch (e) {
+        debugPrint('Supabase getHistoryFor error: $e');
+        if (kIsWeb) return null;
+      }
+      if (kIsWeb) return null;
+    }
+    if (kIsWeb) return null;
     final db = await database;
     final rows = await db
         .rawQuery('$_historySelect WHERE h.novel_id = ?', [novelId]);
@@ -592,6 +710,15 @@ class AppDatabase {
 
   /// Ghi (hoặc ghi đè) lịch sử đọc.
   Future<void> saveHistory(ReadingHistory history) async {
+    if (isSupabaseReady) {
+      try {
+        await SupabaseDatabase.instance.saveHistory(history);
+      } catch (e) {
+        debugPrint('Supabase saveHistory error: $e');
+      }
+      if (kIsWeb) return;
+    }
+    if (kIsWeb) return;
     final db = await database;
     await db.insert('reading_history', history.toMap(),
         conflictAlgorithm: ConflictAlgorithm.replace);
@@ -616,6 +743,16 @@ class AppDatabase {
 
   /// Danh sách bookmark của truyện (kèm số/tên chương).
   Future<List<Bookmark>> getBookmarks(int novelId) async {
+    if (isSupabaseReady) {
+      try {
+        return await SupabaseDatabase.instance.getBookmarks(novelId);
+      } catch (e) {
+        debugPrint('Supabase getBookmarks error: $e');
+        if (kIsWeb) return [];
+      }
+      if (kIsWeb) return [];
+    }
+    if (kIsWeb) return [];
     final db = await database;
     final rows = await db.rawQuery('''
       SELECT b.*, c.chapter_index, c.title AS chapter_title
@@ -628,12 +765,30 @@ class AppDatabase {
 
   /// Thêm bookmark, trả về id mới.
   Future<int> addBookmark(Bookmark bookmark) async {
+    if (isSupabaseReady) {
+      try {
+        return await SupabaseDatabase.instance.addBookmark(bookmark);
+      } catch (e) {
+        debugPrint('Supabase addBookmark error: $e');
+      }
+      if (kIsWeb) return 1;
+    }
+    if (kIsWeb) return 1;
     final db = await database;
     return db.insert('bookmarks', bookmark.toMap());
   }
 
   /// Xóa bookmark.
   Future<void> deleteBookmark(int id) async {
+    if (isSupabaseReady) {
+      try {
+        await SupabaseDatabase.instance.deleteBookmark(id);
+      } catch (e) {
+        debugPrint('Supabase deleteBookmark error: $e');
+      }
+      if (kIsWeb) return;
+    }
+    if (kIsWeb) return;
     final db = await database;
     await db.delete('bookmarks', where: 'id = ?', whereArgs: [id]);
   }
@@ -643,7 +798,17 @@ class AppDatabase {
   // ---------------------------------------------------------------------------
 
   /// Danh sách trích dẫn đã lưu (mới nhất trước).
-  Future<List<QuoteItem>> getQuotes() async {
+  Future<List<QuoteItem>> getQuotes({String? userId}) async {
+    if (isSupabaseReady) {
+      try {
+        return await SupabaseDatabase.instance.getQuotes(userId: userId);
+      } catch (e) {
+        debugPrint('Supabase getQuotes error: $e');
+        if (kIsWeb) return [];
+      }
+      if (kIsWeb) return [];
+    }
+    if (kIsWeb) return [];
     final db = await database;
     final rows = await db.query('quotes', orderBy: 'created_at DESC');
     return rows.map(QuoteItem.fromMap).toList();
@@ -651,18 +816,46 @@ class AppDatabase {
 
   /// Lưu trích dẫn mới.
   Future<int> addQuote(QuoteItem quote) async {
+    if (isSupabaseReady) {
+      try {
+        return await SupabaseDatabase.instance.addQuote(quote);
+      } catch (e) {
+        debugPrint('Supabase addQuote error: $e');
+      }
+      if (kIsWeb) return 1;
+    }
+    if (kIsWeb) return 1;
     final db = await database;
     return db.insert('quotes', quote.toMap());
   }
 
   /// Xóa một trích dẫn.
   Future<void> deleteQuote(int id) async {
+    if (isSupabaseReady) {
+      try {
+        await SupabaseDatabase.instance.deleteQuote(id);
+      } catch (e) {
+        debugPrint('Supabase deleteQuote error: $e');
+      }
+      if (kIsWeb) return;
+    }
+    if (kIsWeb) return;
     final db = await database;
     await db.delete('quotes', where: 'id = ?', whereArgs: [id]);
   }
 
   /// Lấy danh sách bình luận của một chương.
   Future<List<ChapterComment>> getComments(int chapterId) async {
+    if (isSupabaseReady) {
+      try {
+        return await SupabaseDatabase.instance.getComments(chapterId);
+      } catch (e) {
+        debugPrint('Supabase getComments error: $e');
+        if (kIsWeb) return [];
+      }
+      if (kIsWeb) return [];
+    }
+    if (kIsWeb) return [];
     final db = await database;
     final rows = await db.query(
       'comments',
@@ -675,18 +868,45 @@ class AppDatabase {
 
   /// Thêm bình luận cho chương và cập nhật điểm đánh giá trung bình của truyện.
   Future<void> addComment(ChapterComment comment) async {
+    if (isSupabaseReady) {
+      try {
+        await SupabaseDatabase.instance.addComment(comment);
+      } catch (e) {
+        debugPrint('Supabase addComment error: $e');
+      }
+      if (kIsWeb) return;
+    }
+    if (kIsWeb) return;
     final db = await database;
     await db.insert('comments', comment.toMap());
   }
 
   /// Xóa bình luận.
   Future<void> deleteComment(int id) async {
+    if (isSupabaseReady) {
+      try {
+        await SupabaseDatabase.instance.deleteComment(id);
+      } catch (e) {
+        debugPrint('Supabase deleteComment error: $e');
+      }
+      if (kIsWeb) return;
+    }
+    if (kIsWeb) return;
     final db = await database;
     await db.delete('comments', where: 'id = ?', whereArgs: [id]);
   }
 
   /// Cập nhật điểm đánh giá (1..5 sao) cho bộ truyện.
   Future<double> updateNovelRating(int novelId, double userStars) async {
+    if (isSupabaseReady) {
+      try {
+        return await SupabaseDatabase.instance.updateNovelRating(novelId, userStars);
+      } catch (e) {
+        debugPrint('Supabase updateNovelRating error: $e');
+      }
+      if (kIsWeb) return userStars;
+    }
+    if (kIsWeb) return userStars;
     final db = await database;
     final current = await getNovel(novelId);
     if (current == null) return userStars;
@@ -720,11 +940,26 @@ class AppDatabase {
     required int words,
     required int minutes,
     DateTime? date,
-    int userId = 0,
+    String userId = '',
     int novelId = 0,
     int chapterId = 0,
   }) async {
     if (words <= 0 && minutes <= 0) return;
+    if (isSupabaseReady) {
+      try {
+        await SupabaseDatabase.instance.recordReadingSession(
+          wordsRead: words,
+          minutesRead: minutes,
+          userId: userId.isNotEmpty ? userId : null,
+          novelId: novelId,
+          chapterId: chapterId,
+        );
+      } catch (e) {
+        debugPrint('Supabase recordReadingSession error: $e');
+      }
+      if (kIsWeb) return;
+    }
+    if (kIsWeb) return;
     final db = await database;
     final now = date ?? DateTime.now();
     final key = _dateKeyOf(now);
@@ -764,7 +999,7 @@ class AppDatabase {
       'hour_of_day': now.hour,
     });
 
-    if (userId > 0) {
+    if (userId.isNotEmpty) {
       await V2DatabaseStore.incrementQuestProgress(
         db,
         userId: userId,
@@ -781,7 +1016,17 @@ class AppDatabase {
   }
 
   /// Lấy toàn bộ lịch sử phiên đọc theo ngày (tăng dần theo ngày).
-  Future<List<ReadingSessionStat>> getReadingSessions() async {
+  Future<List<ReadingSessionStat>> getReadingSessions({String? userId}) async {
+    if (isSupabaseReady) {
+      try {
+        return await SupabaseDatabase.instance.getReadingSessions(userId: userId);
+      } catch (e) {
+        debugPrint('Supabase getReadingSessions error: $e');
+        if (kIsWeb) return [];
+      }
+      if (kIsWeb) return [];
+    }
+    if (kIsWeb) return [];
     final db = await database;
     final rows = await db.query('reading_sessions', orderBy: 'date_key ASC');
     return rows.map(ReadingSessionStat.fromMap).toList();

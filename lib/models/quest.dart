@@ -57,7 +57,7 @@ class Quest {
 
 /// Tiến độ thực hiện một nhiệm vụ của người dùng.
 class UserQuest {
-  final int userId;
+  final String userId;
   final int questId;
   final int progress;
   final bool claimed;
@@ -77,7 +77,7 @@ class UserQuest {
       };
 
   factory UserQuest.fromMap(Map<String, Object?> map) => UserQuest(
-        userId: (map['user_id'] as int?) ?? 0,
+        userId: map['user_id']?.toString() ?? '',
         questId: (map['quest_id'] as int?) ?? 0,
         progress: (map['progress'] as int?) ?? 0,
         claimed: (map['claimed'] as int?) == 1,

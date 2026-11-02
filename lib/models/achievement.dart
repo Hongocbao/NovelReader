@@ -33,7 +33,7 @@ class Achievement {
 
 /// Huy hiệu đã được người dùng mở khóa.
 class UserAchievement {
-  final int userId;
+  final String userId;
   final String code;
   final DateTime unlockedAt;
 
@@ -50,7 +50,7 @@ class UserAchievement {
       };
 
   factory UserAchievement.fromMap(Map<String, Object?> map) => UserAchievement(
-        userId: (map['user_id'] as int?) ?? 0,
+        userId: map['user_id']?.toString() ?? '',
         code: (map['code'] as String?) ?? '',
         unlockedAt: DateTime.fromMillisecondsSinceEpoch(
           (map['unlocked_at'] as int?) ?? 0,

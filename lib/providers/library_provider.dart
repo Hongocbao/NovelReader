@@ -77,16 +77,16 @@ class LibraryProvider extends ChangeNotifier {
   }
 
   /// Tải tủ sách + lịch sử + trích dẫn từ DB.
-  Future<void> load() async {
+  Future<void> load({String? userId}) async {
     _loading = true;
     _error = null;
     notifyListeners();
     try {
       final results = await Future.wait([
-        _db.getLibrary(),
-        _db.getHistory(),
-        _db.getQuotes(),
-        _db.getReadingSessions(),
+        _db.getLibrary(userId: userId),
+        _db.getHistory(userId: userId),
+        _db.getQuotes(userId: userId),
+        _db.getReadingSessions(userId: userId),
       ]);
       _items = results[0] as List<LibraryItem>;
       _history = results[1] as List<ReadingHistory>;
@@ -297,7 +297,7 @@ class LibraryProvider extends ChangeNotifier {
     required int chapterId,
     required String content,
     int stars = 5,
-    int userId = 0,
+    String userId = '',
     String userName = 'Độc giả',
     int chapterIndex = 1,
   }) async {
@@ -331,7 +331,7 @@ class LibraryProvider extends ChangeNotifier {
   Future<void> recordChapterReadSession(
     int chapterId,
     String content, {
-    int userId = 0,
+    String userId = '',
     int novelId = 0,
   }) async {
     if (_recordedChapterSessions.contains(chapterId)) return;

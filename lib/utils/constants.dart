@@ -55,6 +55,28 @@ class PrefKeys {
   static const String hasSeenSplashGate = 'has_seen_splash_gate';
 }
 
+/// Cấu hình kết nối Supabase Cloud từ biến môi trường.
+class SupabaseConfig {
+  SupabaseConfig._();
+
+  static const String projectRef = 'lkxqsngzsnbsazarqbgj';
+
+  /// Đọc SUPABASE_URL qua String.fromEnvironment
+  static const String url = String.fromEnvironment(
+    'SUPABASE_URL',
+    defaultValue: 'https://lkxqsngzsnbsazarqbgj.supabase.co',
+  );
+
+  /// Đọc SUPABASE_ANON_KEY qua String.fromEnvironment
+  static const String anonKey = String.fromEnvironment(
+    'SUPABASE_ANON_KEY',
+    defaultValue: 'sb_publishable_WLEErw5CiknkzNtlGpO4OQ_siS0xBLu',
+  );
+
+  /// Kiểm tra xem biến môi trường có bị thiếu hay không.
+  static bool get isMissing => url.trim().isEmpty || anonKey.trim().isEmpty;
+}
+
 /// Giá trị trạng thái / loại truyện / danh mục tủ sách lưu trong DB.
 class NovelStatus {
   NovelStatus._();

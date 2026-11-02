@@ -32,11 +32,6 @@ class SplashGate extends StatelessWidget {
       return const _WelcomeGateView();
     }
 
-    // Bắt buộc đổi mật khẩu lần đầu đối với tài khoản seed Admin
-    if (auth.isLoggedIn && auth.currentUser.mustChangePassword) {
-      return const _ForceChangePasswordView();
-    }
-
     // Nếu hệ thống đang bật chế độ bảo trì và người dùng không phải Admin -> hiển thị màn hình bảo trì
     if (mod.isMaintenanceMode && !auth.isAdmin) {
       return _MaintenanceView(message: mod.maintenanceMessage);
@@ -140,91 +135,6 @@ class _WelcomeGateView extends StatelessWidget {
                   ),
                 ),
               ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ForceChangePasswordView extends StatefulWidget {
-  const _ForceChangePasswordView();
-
-  @override
-  State<_ForceChangePasswordView> createState() =>
-      _ForceChangePasswordViewState();
-}
-
-class _ForceChangePasswordViewState extends State<_ForceChangePasswordView> {
-  final _passCtrl = TextEditingController();
-
-  @override
-  void dispose() {
-    _passCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final auth = context.watch<AuthProvider>();
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Bảo mật lần đăng nhập đầu'),
-        actions: [
-          TextButton(
-            onPressed: () => auth.logout(),
-            child: const Text('Đăng xuất'),
-          ),
-        ],
-      ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Icon(Icons.security, size: 56, color: Colors.amber),
-                const SizedBox(height: 12),
-                Text(
-                  'Xin chào ${auth.currentUser.displayName}!',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Theo quy định bảo mật, tài khoản Admin khởi tạo lần đầu cần đổi mật khẩu mới (hoặc xác nhận mật khẩu bảo mật ≥ 8 ký tự).',
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 20),
-                TextField(
-                  controller: _passCtrl,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Mật khẩu mới (≥ 8 ký tự)',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                FilledButton.icon(
-                  onPressed: () async {
-                    if (_passCtrl.text.length < 8) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Mật khẩu phải từ 8 ký tự trở lên.'),
-                        ),
-                      );
-                      return;
-                    }
-                    await auth.changePassword(_passCtrl.text);
-                  },
-                  icon: const Icon(Icons.check_circle_outline),
-                  label: const Text('Cập nhật mật khẩu & Vào Admin'),
-                ),
-              ],
             ),
           ),
         ),

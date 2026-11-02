@@ -29,7 +29,7 @@ class NotificationProvider extends ChangeNotifier {
   int get unreadCount => _notifications.where((n) => !n.isRead).length;
 
   /// Tải thông báo, bảng tin hệ thống và danh sách yêu cầu truyện.
-  Future<void> loadAll(int userId) async {
+  Future<void> loadAll(String userId) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -51,7 +51,7 @@ class NotificationProvider extends ChangeNotifier {
   }
 
   /// Đánh dấu đã đọc một thông báo.
-  Future<void> markAsRead(int notificationId, int userId) async {
+  Future<void> markAsRead(int notificationId, String userId) async {
     final db = await _appDb.database;
     await db.update(
       'notifications',
@@ -64,13 +64,13 @@ class NotificationProvider extends ChangeNotifier {
   }
 
   /// Đánh dấu đã đọc toàn bộ thông báo của người dùng.
-  Future<void> markAllAsRead(int userId) async {
+  Future<void> markAllAsRead(String userId) async {
     final db = await _appDb.database;
     await db.update(
       'notifications',
       {'is_read': 1},
-      where: 'user_id = ? OR user_id = 0',
-      whereArgs: [userId],
+      where: 'user_id = ? OR user_id = ?',
+      whereArgs: [userId, ''],
     );
     _notifications = await V2DatabaseStore.getNotifications(db, userId);
     notifyListeners();
@@ -99,7 +99,7 @@ class NotificationProvider extends ChangeNotifier {
   }
 
   /// Bình chọn (+1 vote) cho một yêu cầu truyện.
-  Future<void> voteNovelRequest(int requestId, int userId) async {
+  Future<void> voteNovelRequest(int requestId, String userId) async {
     final db = await _appDb.database;
     await db.rawUpdate(
       'UPDATE novel_requests SET votes = votes + 1 WHERE id = ?',
@@ -133,7 +133,7 @@ class NotificationProvider extends ChangeNotifier {
     await V2DatabaseStore.createNotification(
       db,
       NotificationItem(
-        userId: 0,
+        userId: '',
         title: '📢 $title',
         body: body.trim(),
         kind: 'system',

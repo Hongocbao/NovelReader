@@ -143,21 +143,21 @@ class AdminUserProvider extends ChangeNotifier {
     await loadUsers();
   }
 
-  /// Đặt lại mật khẩu tạm thời cho tài khoản người dùng.
+  /// Đặt lại mật khẩu cho tài khoản người dùng qua email.
   Future<void> resetTemporaryPassword({
     required AppUser admin,
     required AppUser target,
-    required String tempPassword,
+    String? tempPassword,
   }) async {
     RoleGuard.requireAdmin(admin);
-    await _authRepo.changePassword(target.id, tempPassword);
+    await _authRepo.resetPassword(target.email);
     final db = await _appDb.database;
     await V2DatabaseStore.writeAuditLog(
       db,
       admin: admin,
       action: 'RESET_PASSWORD',
       target: 'user#${target.id} (${target.email})',
-      detail: 'Đặt lại mật khẩu tạm thời cho người dùng',
+      detail: 'Gửi yêu cầu đặt lại mật khẩu qua email',
     );
     await loadUsers();
   }

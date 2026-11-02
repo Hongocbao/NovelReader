@@ -7,7 +7,7 @@ class Announcement {
   /// `all` | `authors`
   final String audience;
   final bool pinned;
-  final int createdBy;
+  final String createdBy;
   final DateTime createdAt;
 
   const Announcement({
@@ -36,7 +36,7 @@ class Announcement {
         body: (map['body'] as String?) ?? '',
         audience: (map['audience'] as String?) ?? 'all',
         pinned: (map['pinned'] as int?) == 1,
-        createdBy: (map['created_by'] as int?) ?? 1,
+        createdBy: map['created_by']?.toString() ?? '',
         createdAt: DateTime.fromMillisecondsSinceEpoch(
           (map['created_at'] as int?) ?? 0,
         ),

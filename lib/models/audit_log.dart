@@ -1,7 +1,7 @@
 /// Bản ghi nhật ký thao tác của Quản trị viên (Audit Log) - chỉ ghi thêm, không sửa/xóa.
 class AuditLog {
   final int? id;
-  final int adminId;
+  final String adminId;
   final String adminName;
   final String action;
   final String target;
@@ -30,7 +30,7 @@ class AuditLog {
 
   factory AuditLog.fromMap(Map<String, Object?> map) => AuditLog(
         id: map['id'] as int?,
-        adminId: (map['admin_id'] as int?) ?? 1,
+        adminId: map['admin_id']?.toString() ?? '',
         adminName: (map['admin_name'] as String?) ?? 'Admin',
         action: (map['action'] as String?) ?? '',
         target: (map['target'] as String?) ?? '',

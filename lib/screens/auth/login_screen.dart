@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import 'forgot_password_screen.dart';
 import 'register_screen.dart';
+import 'splash_gate.dart';
 
 /// Màn hình Đăng nhập (hỗ trợ Độc giả, Tác giả và Quản trị viên).
 /// Có nút điền nhanh tài khoản Demo (Admin / Author / User) để chấm đồ án thuận tiện.
@@ -33,7 +34,12 @@ class _LoginScreenState extends State<LoginScreen> {
     final ok = await auth.login(_emailCtrl.text.trim(), _passCtrl.text);
     if (!mounted) return;
     if (ok) {
-      if (Navigator.canPop(context)) {
+      if (auth.isAdmin) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const SplashGate()),
+          (route) => false,
+        );
+      } else if (Navigator.canPop(context)) {
         Navigator.pop(context, true);
       }
     } else if (auth.error != null) {
@@ -51,6 +57,8 @@ class _LoginScreenState extends State<LoginScreen> {
       _emailCtrl.text = email;
       _passCtrl.text = password;
     });
+    // Tự động đăng nhập ngay sau khi điền thông tin tài khoản demo
+    _submit();
   }
 
   @override
@@ -194,24 +202,24 @@ class _LoginScreenState extends State<LoginScreen> {
                         avatar: const Text('👑'),
                         label: const Text('Admin'),
                         onPressed: () => _fillDemo(
-                          'admin@novelreader.local',
-                          'Admin@123',
+                          'admin@novelreader.com',
+                          'AdminPassword123@',
                         ),
                       ),
                       ActionChip(
                         avatar: const Text('🪶'),
                         label: const Text('Tác giả (Author)'),
                         onPressed: () => _fillDemo(
-                          'author@novelreader.local',
-                          'Author@123',
+                          'author@novelreader.com',
+                          'AuthorPassword123@',
                         ),
                       ),
                       ActionChip(
                         avatar: const Text('🦊'),
                         label: const Text('Độc giả (User)'),
                         onPressed: () => _fillDemo(
-                          'user@novelreader.local',
-                          'User@1234',
+                          'user@novelreader.com',
+                          'UserPassword123@',
                         ),
                       ),
                     ],

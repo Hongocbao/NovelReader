@@ -10,6 +10,7 @@ import '../widgets/empty_view.dart';
 import '../widgets/error_view.dart';
 import '../widgets/loading_view.dart';
 import '../widgets/novel_card.dart';
+import '../widgets/smart_novel_importer_sheet.dart';
 import 'history_screen.dart';
 import 'novel_detail_screen.dart';
 
@@ -73,6 +74,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
+  Future<void> _showImportLocalDialog() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => SmartNovelImporterSheet(
+        onImportDone: () => context.read<LibraryProvider>().load(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final lp = context.watch<LibraryProvider>();
@@ -83,6 +94,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
         appBar: AppBar(
           title: const Text(AppStrings.navLibrary),
           actions: [
+            IconButton(
+              tooltip: 'Nạp truyện riêng tư từ file/máy',
+              icon: const Icon(Icons.note_add_outlined),
+              onPressed: _showImportLocalDialog,
+            ),
             IconButton(
               tooltip: AppStrings.history,
               icon: const Icon(Icons.history_rounded),

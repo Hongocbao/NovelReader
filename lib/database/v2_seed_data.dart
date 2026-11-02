@@ -5,7 +5,6 @@ import '../models/app_user.dart';
 import '../models/chapter_summary.dart';
 import '../models/glossary_term.dart';
 import '../models/quest.dart';
-import '../utils/password_hasher.dart';
 
 /// Dữ liệu khởi tạo (Seed) cho NovelReader v2:
 /// Tài khoản Admin/Author/User mẫu, 20 Huy hiệu, Nhiệm vụ, Thuật ngữ, Tóm tắt chương & Cấu hình.
@@ -208,14 +207,9 @@ class V2SeedData {
   static Future<void> _seedUsers(Database db) async {
     final now = DateTime.now();
 
-    // 1. Tài khoản Admin mặc định: admin@novelreader.local (mật khẩu khởi tạo: Admin@123)
-    final adminSalt = PasswordHasher.generateSalt();
-    final adminAnswerHash = PasswordHasher.hashPassword('tien hiep', adminSalt);
     final admin = AppUser(
-      id: 1,
+      id: '1',
       email: 'admin@novelreader.local',
-      passwordHash: PasswordHasher.hashPassword('Admin@123', adminSalt),
-      salt: adminSalt,
       displayName: 'Quản Trị Viên Tối Cao',
       avatar: '👑',
       avatarFrame: 'gold',
@@ -226,20 +220,13 @@ class V2SeedData {
       hasStreakShield: true,
       pinnedAchievements: const ['mot_sach', 'kien_tri_30', 'doc_gia_toan_nang'],
       unlockedItems: const ['default', 'gold', 'jade', 'neon', 'sepia_pro'],
-      secretQuestion: 'Thể loại truyện yêu thích của bạn là gì?',
-      secretAnswerHash: adminAnswerHash,
-      mustChangePassword: true,
       lastActiveAt: now,
       createdAt: now.subtract(const Duration(days: 60)),
     );
 
-    // 2. Tài khoản Tác giả mẫu: author@novelreader.local (mật khẩu: Author@123)
-    final authorSalt = PasswordHasher.generateSalt();
     final author = AppUser(
-      id: 2,
+      id: '2',
       email: 'author@novelreader.local',
-      passwordHash: PasswordHasher.hashPassword('Author@123', authorSalt),
-      salt: authorSalt,
       displayName: 'Bút Mặc Tiên Sinh',
       avatar: '🪶',
       avatarFrame: 'jade',
@@ -249,20 +236,13 @@ class V2SeedData {
       streak: 7,
       pinnedAchievements: const ['cay_but_tre', 'khoi_dau'],
       unlockedItems: const ['default', 'jade'],
-      secretQuestion: 'Thể loại truyện yêu thích của bạn là gì?',
-      secretAnswerHash: PasswordHasher.hashPassword('fantasy', authorSalt),
-      mustChangePassword: false,
       lastActiveAt: now,
       createdAt: now.subtract(const Duration(days: 30)),
     );
 
-    // 3. Tài khoản Độc giả mẫu: user@novelreader.local (mật khẩu: User@1234)
-    final userSalt = PasswordHasher.generateSalt();
     final reader = AppUser(
-      id: 3,
+      id: '3',
       email: 'user@novelreader.local',
-      passwordHash: PasswordHasher.hashPassword('User@1234', userSalt),
-      salt: userSalt,
       displayName: 'Bảo Ngọc Độc Giả',
       avatar: '🦊',
       avatarFrame: 'default',
@@ -272,9 +252,6 @@ class V2SeedData {
       streak: 5,
       pinnedAchievements: const ['khoi_dau', 'lu_khach'],
       unlockedItems: const ['default'],
-      secretQuestion: 'Thể loại truyện yêu thích của bạn là gì?',
-      secretAnswerHash: PasswordHasher.hashPassword('isekai', userSalt),
-      mustChangePassword: false,
       lastActiveAt: now,
       createdAt: now.subtract(const Duration(days: 14)),
     );

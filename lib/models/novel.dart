@@ -46,7 +46,7 @@ class Novel {
   /// Các trường mở rộng phiên bản v2 (Admin & Author)
   final String moderationStatus;
   final String? rejectionReason;
-  final int ownerId;
+  final String ownerId;
   final bool isFeatured;
   final int featuredOrder;
   final DateTime? deletedAt;
@@ -66,7 +66,7 @@ class Novel {
     required this.updatedAt,
     this.moderationStatus = ModerationStatus.approved,
     this.rejectionReason,
-    this.ownerId = 1,
+    this.ownerId = '1',
     this.isFeatured = false,
     this.featuredOrder = 0,
     this.deletedAt,
@@ -126,8 +126,8 @@ class Novel {
       moderationStatus:
           (map['moderation_status'] as String?) ?? ModerationStatus.approved,
       rejectionReason: map['rejection_reason'] as String?,
-      ownerId: (map['owner_id'] as int?) ?? 1,
-      isFeatured: (map['is_featured'] as int?) == 1,
+      ownerId: (map['owner_id'] ?? '1').toString(),
+      isFeatured: map['is_featured'] == 1 || map['is_featured'] == true,
       featuredOrder: (map['featured_order'] as int?) ?? 0,
       deletedAt: deletedMs != null
           ? DateTime.fromMillisecondsSinceEpoch(deletedMs)
@@ -150,7 +150,7 @@ class Novel {
     DateTime? updatedAt,
     String? moderationStatus,
     String? rejectionReason,
-    int? ownerId,
+    String? ownerId,
     bool? isFeatured,
     int? featuredOrder,
     DateTime? deletedAt,

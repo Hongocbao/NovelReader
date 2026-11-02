@@ -116,7 +116,7 @@ class ChapterComment {
   final int? id;
   final int novelId;
   final int chapterId;
-  final int userId;
+  final String userId;
   final String userName;
   final String content;
   final int stars;
@@ -130,7 +130,7 @@ class ChapterComment {
     this.id,
     required this.novelId,
     required this.chapterId,
-    this.userId = 0,
+    this.userId = '',
     this.userName = 'Độc giả',
     required this.content,
     this.stars = 5,
@@ -164,7 +164,7 @@ class ChapterComment {
         id: map['id'] as int?,
         novelId: map['novel_id'] as int,
         chapterId: map['chapter_id'] as int,
-        userId: (map['user_id'] as int?) ?? 0,
+        userId: map['user_id']?.toString() ?? '',
         userName: (map['user_name'] as String?) ?? 'Độc giả',
         content: (map['content'] as String?) ?? '',
         stars: (map['stars'] as int?) ?? 5,

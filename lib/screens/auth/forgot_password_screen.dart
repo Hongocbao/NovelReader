@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../providers/auth_provider.dart';
 
-/// Màn hình Quên mật khẩu (đặt lại bằng câu hỏi bí mật ở Giai đoạn A).
+/// Màn hình Quên mật khẩu qua Supabase Auth (gửi email đặt lại).
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
 
@@ -14,15 +14,11 @@ class ForgotPasswordScreen extends StatefulWidget {
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailCtrl = TextEditingController();
-  final _answerCtrl = TextEditingController();
-  final _newPassCtrl = TextEditingController();
   bool _submitting = false;
 
   @override
   void dispose() {
     _emailCtrl.dispose();
-    _answerCtrl.dispose();
-    _newPassCtrl.dispose();
     super.dispose();
   }
 
@@ -32,13 +28,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     try {
       await context.read<AuthProvider>().resetPassword(
             email: _emailCtrl.text.trim(),
-            secretAnswer: _answerCtrl.text.trim(),
-            newPassword: _newPassCtrl.text,
           );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Đặt lại mật khẩu thành công! Vui lòng đăng nhập.'),
+          content: Text('Đã gửi email khôi phục mật khẩu! Vui lòng kiểm tra hộp thư của bạn.'),
         ),
       );
       Navigator.pop(context);
@@ -67,7 +61,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const Text(
-                    'Trả lời câu hỏi bí mật đã đăng ký để đặt lại mật khẩu mới.',
+                    'Nhập email tài khoản của bạn. Hệ thống Supabase sẽ gửi liên kết để bạn đặt lại mật khẩu mới.',
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
@@ -77,38 +71,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       border: OutlineInputBorder(),
                     ),
                     validator: (v) =>
-                        (v == null || !v.contains('@')) ? 'Nhập email' : null,
-                  ),
-                  const SizedBox(height: 14),
-                  TextFormField(
-                    controller: _answerCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Thể loại truyện yêu thích của bạn là gì?',
-                      helperText: 'Gợi ý tài khoản mẫu: tien hiep / fantasy / isekai',
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (v) => (v == null || v.trim().isEmpty)
-                        ? 'Nhập câu trả lời'
-                        : null,
-                  ),
-                  const SizedBox(height: 14),
-                  TextFormField(
-                    controller: _newPassCtrl,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Mật khẩu mới (≥ 8 ký tự)',
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (v) => (v == null || v.length < 8)
-                        ? 'Mật khẩu tối thiểu 8 ký tự'
-                        : null,
+                        (v == null || !v.contains('@')) ? 'Nhập email hợp lệ' : null,
                   ),
                   const SizedBox(height: 20),
                   FilledButton(
                     onPressed: _submitting ? null : _reset,
                     child: const Padding(
                       padding: EdgeInsets.symmetric(vertical: 12),
-                      child: Text('Đặt lại mật khẩu'),
+                      child: Text('Gửi email đặt lại mật khẩu'),
                     ),
                   ),
                 ],

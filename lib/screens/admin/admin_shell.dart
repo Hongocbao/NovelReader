@@ -76,15 +76,45 @@ class _AdminShellState extends State<AdminShell> {
         ),
         actions: [
           FilledButton.tonalIcon(
-            onPressed: () => auth.toggleAdminPreviewMode(),
+            onPressed: () {
+              auth.toggleAdminPreviewMode();
+              if (Navigator.canPop(context)) {
+                Navigator.pop(context);
+              }
+            },
             icon: const Icon(Icons.menu_book_outlined, size: 18),
-            label: const Text('Chuyển sang giao diện độc giả'),
+            label: const Text('Giao diện Độc giả'),
           ),
           const SizedBox(width: 8),
           IconButton(
             tooltip: 'Đăng xuất',
             icon: const Icon(Icons.logout),
-            onPressed: () => auth.logout(),
+            onPressed: () async {
+              final ok = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Xác nhận đăng xuất'),
+                  content: Text('Bạn có chắc chắn muốn đăng xuất khỏi tài khoản Quản trị (${auth.currentUser.email})?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('Hủy'),
+                    ),
+                    FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.redAccent,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('Đăng xuất'),
+                    ),
+                  ],
+                ),
+              );
+              if (ok == true) {
+                await auth.logout();
+              }
+            },
           ),
           const SizedBox(width: 8),
         ],

@@ -29,7 +29,7 @@ class ChapterSummary {
 
 /// Phản ứng cảm xúc (emoji) gắn vào một đoạn văn trong chương.
 class ParagraphReaction {
-  final int userId;
+  final String userId;
   final int chapterId;
   final int paragraphIndex;
   final String emoji;
@@ -50,7 +50,7 @@ class ParagraphReaction {
 
   factory ParagraphReaction.fromMap(Map<String, Object?> map) =>
       ParagraphReaction(
-        userId: (map['user_id'] as int?) ?? 0,
+        userId: map['user_id']?.toString() ?? '',
         chapterId: (map['chapter_id'] as int?) ?? 0,
         paragraphIndex: (map['paragraph_index'] as int?) ?? 0,
         emoji: (map['emoji'] as String?) ?? '❤️',
@@ -60,7 +60,7 @@ class ParagraphReaction {
 /// Ghi chú Hộp thư thời gian (Time Capsule) gửi cho chính mình ở tương lai.
 class TimeCapsuleNote {
   final int? id;
-  final int userId;
+  final String userId;
   final int novelId;
   final int chapterId;
   final String note;
@@ -92,7 +92,7 @@ class TimeCapsuleNote {
 
   factory TimeCapsuleNote.fromMap(Map<String, Object?> map) => TimeCapsuleNote(
         id: map['id'] as int?,
-        userId: (map['user_id'] as int?) ?? 0,
+        userId: map['user_id']?.toString() ?? '',
         novelId: (map['novel_id'] as int?) ?? 0,
         chapterId: (map['chapter_id'] as int?) ?? 0,
         note: (map['note'] as String?) ?? '',
@@ -106,7 +106,7 @@ class TimeCapsuleNote {
 /// Đề xuất / Yêu cầu truyện mới từ cộng đồng độc giả.
 class NovelRequestItem {
   final int? id;
-  final int userId;
+  final String userId;
   final String userName;
   final String title;
   final String authorHint;
@@ -139,7 +139,7 @@ class NovelRequestItem {
   factory NovelRequestItem.fromMap(Map<String, Object?> map) =>
       NovelRequestItem(
         id: map['id'] as int?,
-        userId: (map['user_id'] as int?) ?? 0,
+        userId: map['user_id']?.toString() ?? '',
         userName: (map['user_name'] as String?) ?? 'Độc giả',
         title: (map['title'] as String?) ?? '',
         authorHint: (map['author_hint'] as String?) ?? '',

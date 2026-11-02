@@ -1,7 +1,7 @@
 /// Một thông báo trong Trung tâm thông báo của người dùng.
 class NotificationItem {
   final int? id;
-  final int userId;
+  final String userId;
   final String title;
   final String body;
 
@@ -33,7 +33,7 @@ class NotificationItem {
   factory NotificationItem.fromMap(Map<String, Object?> map) =>
       NotificationItem(
         id: map['id'] as int?,
-        userId: (map['user_id'] as int?) ?? 0,
+        userId: map['user_id']?.toString() ?? '',
         title: (map['title'] as String?) ?? '',
         body: (map['body'] as String?) ?? '',
         kind: (map['kind'] as String?) ?? 'system',

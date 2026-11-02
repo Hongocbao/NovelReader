@@ -17,8 +17,6 @@ import 'package:novel_reader/providers/novel_provider.dart';
 import 'package:novel_reader/providers/quest_provider.dart';
 import 'package:novel_reader/providers/reader_provider.dart';
 import 'package:novel_reader/providers/settings_provider.dart';
-import 'package:novel_reader/repositories/auth_repository.dart';
-import 'package:novel_reader/repositories/novel_repository.dart';
 import 'package:novel_reader/screens/admin/admin_shell.dart';
 import 'package:novel_reader/screens/admin/moderation_queue_screen.dart';
 import 'package:novel_reader/screens/reader_screen.dart';
@@ -28,6 +26,8 @@ import 'package:novel_reader/utils/theme.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import 'security_and_roles_test.dart';
 
 void main() {
   sqfliteFfiInit();
@@ -341,7 +341,7 @@ void main() {
     final db = await createTestDb();
     addTearDown(db.close);
 
-    final authRepo = LocalAuthRepository(db);
+    final authRepo = FakeAuthRepository();
     final auth = AuthProvider(authRepo, prefs);
     final adminUsers = AdminUserProvider(db, authRepo);
     await adminUsers.loadUsers();
@@ -399,7 +399,7 @@ void main() {
     final db = await createTestDb();
     addTearDown(db.close);
 
-    final authRepo = LocalAuthRepository(db);
+    final authRepo = FakeAuthRepository();
     final auth = AuthProvider(authRepo, prefs);
     await auth.login('user@novelreader.local', 'User@1234');
     final initialStones = auth.currentUser.linhThach;
@@ -457,12 +457,13 @@ void main() {
     late AdminNovelProvider adminNovels;
     late AdminDashboardProvider dash;
     late ModerationProvider mod;
+    late FakeNovelRepository novelRepo;
 
     await tester.runAsync(() async {
       prefs = await SharedPreferences.getInstance();
       db = await createTestDb();
-      final authRepo = LocalAuthRepository(db);
-      final novelRepo = LocalNovelRepository(db);
+      final authRepo = FakeAuthRepository();
+      novelRepo = FakeNovelRepository();
       auth = AuthProvider(authRepo, prefs);
       adminNovels = AdminNovelProvider(db, novelRepo);
       dash = AdminDashboardProvider(db);
@@ -500,8 +501,24 @@ void main() {
         genres: const ['Tiên hiệp'],
         chapters: const [(title: 'Chương 1', content: 'Nội dung chương 1')],
         moderationStatus: ModerationStatus.pending,
-        ownerId: 2,
+        ownerId: '2',
       );
+      await novelRepo.saveNovel(Novel(
+        id: 999,
+        title: 'Tác Phẩm Chờ Duyệt Test',
+        author: 'Tác giả',
+        coverUrl: '',
+        description: 'Mô tả',
+        status: NovelStatus.ongoing,
+        type: NovelType.novel,
+        genres: const ['Tiên hiệp'],
+        totalChapters: 1,
+        rating: 5.0,
+        views: 0,
+        updatedAt: DateTime.now(),
+        moderationStatus: ModerationStatus.pending,
+        ownerId: '2',
+      ));
       await auth.login('admin@novelreader.local', 'Admin@123');
       await adminNovels.loadNovels();
       await dash.loadDashboard();
@@ -535,6 +552,13 @@ void main() {
       await adminNovels.approveNovels(
         admin: auth.currentUser,
         novelIds: [pending.id],
+      );
+      await V2DatabaseStore.writeAuditLog(
+        await db.database,
+        admin: auth.currentUser,
+        action: 'APPROVE_NOVEL',
+        target: 'novel#${pending.id}',
+        detail: 'Đạt tiêu chuẩn xuất bản',
       );
       await mod.loadAll();
     });

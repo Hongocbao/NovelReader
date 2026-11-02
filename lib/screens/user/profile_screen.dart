@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/notification_provider.dart';
 import '../../providers/quest_provider.dart';
+import '../admin/admin_shell.dart';
 import '../auth/login_screen.dart';
 import '../auth/register_screen.dart';
 import '../downloads_screen.dart';
@@ -128,6 +129,48 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     );
   }
 
+  Future<void> _confirmLogout(BuildContext context) async {
+    final auth = context.read<AuthProvider>();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.logout, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Text('Xác nhận đăng xuất'),
+          ],
+        ),
+        content: Text(
+          'Bạn có chắc chắn muốn đăng xuất khỏi tài khoản ${auth.currentUser.displayName} (${auth.currentUser.email})?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Đăng xuất'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      await auth.logout();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã đăng xuất tài khoản thành công.')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
@@ -141,13 +184,25 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         appBar: AppBar(
           title: const Text('Hồ sơ & Thế giới Độc giả'),
           actions: [
-            if (auth.isAdmin && auth.adminPreviewAsReader)
+            if (auth.isAdmin)
               Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: FilledButton.icon(
-                  onPressed: () => auth.toggleAdminPreviewMode(),
+                padding: const EdgeInsets.only(right: 6),
+                child: FilledButton.tonalIcon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.amber.shade800,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () {
+                    if (auth.adminPreviewAsReader) {
+                      auth.toggleAdminPreviewMode();
+                    }
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const AdminShell()),
+                    );
+                  },
                   icon: const Icon(Icons.admin_panel_settings, size: 18),
-                  label: const Text('Về Admin'),
+                  label: const Text('Khu Quản Trị'),
                 ),
               ),
             IconButton(
@@ -172,6 +227,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 MaterialPageRoute(builder: (_) => const SettingsScreen()),
               ),
             ),
+            if (!user.isGuest)
+              IconButton(
+                tooltip: 'Đăng xuất',
+                icon: const Icon(Icons.logout),
+                onPressed: () => _confirmLogout(context),
+              ),
           ],
           bottom: const TabBar(
             tabs: [
@@ -302,8 +363,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         else
                           Align(
                             alignment: Alignment.centerRight,
-                            child: TextButton.icon(
-                              onPressed: () => auth.logout(),
+                            child: FilledButton.tonalIcon(
+                              style: FilledButton.styleFrom(
+                                foregroundColor: cs.error,
+                              ),
+                              onPressed: () => _confirmLogout(context),
                               icon: const Icon(Icons.logout, size: 18),
                               label: const Text('Đăng xuất'),
                             ),
@@ -312,6 +376,32 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     ),
                   ),
                 ),
+                if (auth.isAdmin) ...[
+                  const SizedBox(height: 12),
+                  Card(
+                    elevation: 0,
+                    color: Colors.amber.withValues(alpha: 0.15),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(color: Colors.amber.shade700, width: 1.5),
+                    ),
+                    child: ListTile(
+                      leading: const Icon(Icons.admin_panel_settings, color: Colors.amber, size: 36),
+                      title: const Text('Bảng Điều Khiển Quản Trị Viên (Admin Panel)', style: TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: const Text('Duyệt truyện, quản lý tài khoản, banner, từ cấm & hệ thống'),
+                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                      onTap: () {
+                        if (auth.adminPreviewAsReader) {
+                          auth.toggleAdminPreviewMode();
+                        }
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const AdminShell()),
+                        );
+                      },
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 // Nhóm tính năng Gamification & Khám phá v2
                 _MenuTile(
@@ -372,11 +462,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   ),
                 ),
                 _MenuTile(
-                  icon: Icons.edit_document,
+                  icon: Icons.history_edu,
                   color: Colors.pink,
-                  title: 'Truyện của tôi (Author Studio)',
+                  title: 'Bút Mặc Tiên Sinh (Sáng tác & Gửi duyệt)',
                   subtitle:
-                      'Soạn chương tự lưu nháp 5 giây, gửi duyệt & thống kê lượt đọc',
+                      'Viết truyện, soạn chương tự lưu nháp 5 giây & gửi duyệt Admin',
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -415,6 +505,31 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     MaterialPageRoute(builder: (_) => const DownloadsScreen()),
                   ),
                 ),
+                if (!user.isGuest) ...[
+                  const Divider(height: 28),
+                  Card(
+                    elevation: 0,
+                    color: cs.errorContainer.withValues(alpha: 0.3),
+                    child: ListTile(
+                      leading: Icon(Icons.logout, color: cs.error, size: 28),
+                      title: Text(
+                        'Đăng xuất tài khoản',
+                        style: TextStyle(
+                          color: cs.error,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Đang đăng nhập: ${user.email}',
+                        style: TextStyle(color: cs.onSurfaceVariant),
+                      ),
+                      trailing: Icon(Icons.arrow_forward_ios, size: 16, color: cs.error),
+                      onTap: () => _confirmLogout(context),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                ],
               ],
             ),
             // Tab 2: Cửa hàng Linh Thạch

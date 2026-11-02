@@ -32,7 +32,7 @@ class QuestProvider extends ChangeNotifier {
   Set<String> get unlockedCodes => _unlocked.map((e) => e.code).toSet();
 
   /// Nạp danh sách nhiệm vụ và huy hiệu cho [userId].
-  Future<void> loadForUser(int userId) async {
+  Future<void> loadForUser(String userId) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -40,7 +40,7 @@ class QuestProvider extends ChangeNotifier {
       final db = await _appDb.database;
       _quests = await V2DatabaseStore.getActiveQuests(db);
       _achievements = await V2DatabaseStore.getAllAchievements(db);
-      if (userId > 0) {
+      if (userId.isNotEmpty) {
         _userQuests = await V2DatabaseStore.getUserQuests(db, userId);
         _unlocked = await V2DatabaseStore.getUserAchievements(db, userId);
       } else {
@@ -117,8 +117,8 @@ class QuestProvider extends ChangeNotifier {
   }
 
   /// Mở khóa một huy hiệu cho người dùng nếu chưa có.
-  Future<bool> unlockBadge(int userId, String code) async {
-    if (userId <= 0) return false;
+  Future<bool> unlockBadge(String userId, String code) async {
+    if (userId.isEmpty) return false;
     final db = await _appDb.database;
     final added = await V2DatabaseStore.unlockAchievement(db, userId, code);
     if (added) {
