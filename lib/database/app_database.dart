@@ -745,7 +745,10 @@ class AppDatabase {
       whereArgs: [novelId],
       orderBy: 'chapter_index ASC',
     );
-    return rows.map(Chapter.fromMap).toList();
+    return _mergeCloudDownloadStatus(
+      novelId,
+      rows.map(Chapter.fromMap).toList(),
+    );
   }
 
   /// Lấy 1 chương (kèm nội dung nếu đã tải).
@@ -772,8 +775,7 @@ class AppDatabase {
   }) async {
     final db = await database;
     if (chapter.novelId >= 0) {
-      final cachedNovel =
-          novel ?? (await SupabaseDatabase.instance.getNovel(chapter.novelId));
+      final cachedNovel = novel ?? (await getNovel(chapter.novelId));
       await db.insert('chuong_tai_xuong_cloud', {
         ...chapter.toMap(),
         'content': content,

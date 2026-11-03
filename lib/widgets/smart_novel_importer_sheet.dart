@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data' show BytesBuilder;
 
 import 'package:archive/archive.dart';
 import 'package:file_picker/file_picker.dart';
@@ -91,14 +92,11 @@ class _SmartNovelImporterSheetState extends State<SmartNovelImporterSheet> {
       const maxTotalTextBytes = 128 * 1024 * 1024;
       var totalBytes = 0;
       for (final file in sortedFiles) {
-        final fileBytes = file.lengthSync() ?? await file.length();
-        if (fileBytes == null) {
-          throw StateError('Không xác định được dung lượng file ${file.name}.');
-        }
-        if (fileBytes > maxTextFileBytes) {
+        final fileBytes = file.lengthSync();
+        if (fileBytes != null && fileBytes > maxTextFileBytes) {
           throw StateError('File ${file.name} vượt giới hạn 32 MB.');
         }
-        totalBytes += fileBytes;
+        totalBytes += fileBytes ?? 0;
       }
       if (totalBytes > maxTotalTextBytes) {
         throw StateError('Tổng dung lượng các file TXT vượt giới hạn 128 MB.');
@@ -119,6 +117,31 @@ class _SmartNovelImporterSheetState extends State<SmartNovelImporterSheet> {
     RegExp(r'\d+'),
     (match) => match.group(0)!.padLeft(12, '0'),
   );
+
+  /// Đọc qua luồng byte của FilePicker trên cả web lẫn native. Giới hạn được
+  /// kiểm tra trong lúc đọc, kể cả khi picker không biết trước dung lượng.
+  Future<Uint8List> _readPickedBytes(
+    PlatformFile file, {
+    required int maxBytes,
+    required String kind,
+  }) async {
+    final expectedLength = file.lengthSync();
+    if (expectedLength != null && expectedLength > maxBytes) {
+      throw StateError('${file.name} vượt giới hạn dung lượng $kind.');
+    }
+    final builder = BytesBuilder(copy: false);
+    await for (final chunk in file.readAsByteStream()) {
+      if (builder.length + chunk.length > maxBytes) {
+        throw StateError('${file.name} vượt giới hạn dung lượng $kind.');
+      }
+      builder.add(chunk);
+    }
+    final bytes = builder.takeBytes();
+    if (expectedLength != null && bytes.length != expectedLength) {
+      throw StateError('Không đọc đủ dữ liệu của ${file.name}.');
+    }
+    return bytes;
+  }
 
   String _decodeText(List<int> bytes) {
     if (bytes.length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE) {
@@ -199,9 +222,13 @@ class _SmartNovelImporterSheetState extends State<SmartNovelImporterSheet> {
       if (_selectedTextFiles.isNotEmpty) {
         if (_selectedTextFiles.length == 1) {
           final file = _selectedTextFiles.single;
-          final metadata = _extractMetadata(
-            _decodeText(await file.readAsBytes()),
+          final bytes = await _readPickedBytes(
+            file,
+            maxBytes: 32 * 1024 * 1024,
+            kind: '32 MB',
           );
+          if (!mounted) return;
+          final metadata = _extractMetadata(_decodeText(bytes));
           if (_textTitleCtrl.text.trim().isEmpty) {
             _textTitleCtrl.text = metadata.title?.isNotEmpty == true
                 ? metadata.title!
@@ -218,10 +245,21 @@ class _SmartNovelImporterSheetState extends State<SmartNovelImporterSheet> {
         final chapters = <({String title, String content})>[];
         String? detectedTitle;
         String? detectedAuthor;
+        var totalBytes = 0;
         for (final file in _selectedTextFiles) {
-          final metadata = _extractMetadata(
-            _decodeText(await file.readAsBytes()),
+          final bytes = await _readPickedBytes(
+            file,
+            maxBytes: 32 * 1024 * 1024,
+            kind: '32 MB',
           );
+          if (!mounted) return;
+          totalBytes += bytes.length;
+          if (totalBytes > 128 * 1024 * 1024) {
+            throw StateError(
+              'Tổng dung lượng các file TXT vượt giới hạn 128 MB.',
+            );
+          }
+          final metadata = _extractMetadata(_decodeText(bytes));
           detectedTitle ??= metadata.title;
           detectedAuthor ??= metadata.author;
           final content = metadata.body;
@@ -269,11 +307,13 @@ class _SmartNovelImporterSheetState extends State<SmartNovelImporterSheet> {
             '⚠️ Chọn file .txt hoặc dán nội dung truyện để bắt đầu.';
       });
     } catch (e) {
-      setState(() {
-        _scanResultText = '❌ Lỗi đọc file: $e';
-      });
+      if (mounted) {
+        setState(() {
+          _scanResultText = '❌ Lỗi đọc file: $e';
+        });
+      }
     } finally {
-      setState(() => _isScanning = false);
+      if (mounted) setState(() => _isScanning = false);
     }
   }
 
@@ -439,8 +479,8 @@ class _SmartNovelImporterSheetState extends State<SmartNovelImporterSheet> {
     try {
       final files = await FilePicker.pickFiles(
         type: FileType.custom,
-        allowedExtensions: const ['zip'],
-        dialogTitle: 'Chọn một hoặc nhiều ZIP truyện tranh',
+        allowedExtensions: const ['zip', 'cbz'],
+        dialogTitle: 'Chọn một hoặc nhiều ZIP/CBZ truyện tranh',
       );
       if (!mounted || files.isEmpty) return;
       final orderedFiles = [...files]
@@ -458,24 +498,30 @@ class _SmartNovelImporterSheetState extends State<SmartNovelImporterSheet> {
       final usedTitles = <String>{};
       var totalImages = 0;
       var totalImageBytes = 0;
+      var processedImages = 0;
       final maxImageBytes = kIsWeb ? 48 * 1024 * 1024 : 160 * 1024 * 1024;
       final maxArchiveBytes = kIsWeb ? 64 * 1024 * 1024 : 200 * 1024 * 1024;
       const maxImagePages = 2000;
       const maxArchiveEntries = 10000;
 
-      for (final file in orderedFiles) {
-        final fileBytes = file.lengthSync() ?? await file.length();
-        if (fileBytes == null) {
-          throw StateError('Không xác định được dung lượng ZIP ${file.name}.');
-        }
-        if (fileBytes > maxArchiveBytes) {
-          final limitMb = maxArchiveBytes ~/ (1024 * 1024);
-          throw StateError('File ${file.name} vượt giới hạn $limitMb MB.');
-        }
+      for (var fileIndex = 0; fileIndex < orderedFiles.length; fileIndex++) {
+        final file = orderedFiles[fileIndex];
+        if (!mounted) return;
+        setState(() {
+          _scanResultText =
+              'Đang đọc ZIP ${fileIndex + 1}/${orderedFiles.length}: ${file.name}';
+        });
+        // Let Flutter paint the progress state before the synchronous ZIP
+        // decoder starts working on this archive.
+        await Future<void>.delayed(Duration.zero);
         // Decode only the archive directory first. ArchiveFile content stays
         // lazy until readBytes(), allowing us to reject oversized page sets
         // before decompressing image payloads into memory.
-        final archiveBytes = await file.readAsBytes();
+        final archiveBytes = await _readPickedBytes(
+          file,
+          maxBytes: maxArchiveBytes,
+          kind: '${maxArchiveBytes ~/ (1024 * 1024)} MB',
+        );
         final archive = ZipDecoder().decodeStream(
           InputMemoryStream(archiveBytes),
           throwOnError: true,
@@ -489,11 +535,13 @@ class _SmartNovelImporterSheetState extends State<SmartNovelImporterSheet> {
             archive.files.where((entry) {
               final path = entry.name.replaceAll('\\', '/');
               final lower = path.toLowerCase();
+              final pathParts = lower.split('/');
               return entry.isFile &&
                   !entry.isSymbolicLink &&
                   entry.size > 0 &&
-                  !lower.startsWith('__macosx/') &&
-                  !path.split('/').last.startsWith('.') &&
+                  !pathParts.any(
+                    (part) => part == '__macosx' || part.startsWith('.'),
+                  ) &&
                   RegExp(r'\.(jpe?g|png|webp|gif|bmp|avif)$').hasMatch(lower);
             }).toList()..sort(
               (a, b) =>
@@ -525,17 +573,19 @@ class _SmartNovelImporterSheetState extends State<SmartNovelImporterSheet> {
         }
         final folders = grouped.keys.toList()
           ..sort((a, b) => _naturalFileKey(a).compareTo(_naturalFileKey(b)));
-        final zipBaseName = file.name.replaceFirst(
-          RegExp(r'\.zip$', caseSensitive: false),
+        final archiveBaseName = file.name.replaceFirst(
+          RegExp(r'\.(?:zip|cbz)$', caseSensitive: false),
           '',
         );
 
         for (final folder in folders) {
           final entries = grouped[folder]!;
           final rawTitle = folder.isEmpty
-              ? zipBaseName
+              ? archiveBaseName
               : folder.split('/').last;
-          var title = rawTitle.trim().isEmpty ? zipBaseName : rawTitle.trim();
+          var title = rawTitle.trim().isEmpty
+              ? archiveBaseName
+              : rawTitle.trim();
           var uniqueTitle = title;
           var duplicate = 2;
           while (!usedTitles.add(uniqueTitle.toLowerCase())) {
@@ -562,6 +612,17 @@ class _SmartNovelImporterSheetState extends State<SmartNovelImporterSheet> {
               _ => 'application/octet-stream',
             };
             tags.add('[img]data:$mime;base64,${base64Encode(bytes)}[/img]');
+            processedImages++;
+            if (processedImages % 16 == 0) {
+              if (mounted) {
+                setState(() {
+                  _scanResultText =
+                      'Đang xử lý trang Manga $processedImages/$totalImages...';
+                });
+              }
+              await Future<void>.delayed(Duration.zero);
+              if (!mounted) return;
+            }
           }
           final content = tags.join('\n\n');
           chapters.add((title: uniqueTitle, content: content));
@@ -571,13 +632,13 @@ class _SmartNovelImporterSheetState extends State<SmartNovelImporterSheet> {
       if (chapters.isEmpty) {
         setState(
           () => _scanResultText =
-              '⚠️ ZIP không có ảnh JPG, PNG, WEBP, GIF, BMP hoặc AVIF.',
+              '⚠️ ZIP/CBZ không có ảnh JPG, PNG, WEBP, GIF, BMP hoặc AVIF.',
         );
         return;
       }
       if (_mangaTitleCtrl.text.trim().isEmpty) {
         final firstBaseName = orderedFiles.first.name.replaceFirst(
-          RegExp(r'\.zip$', caseSensitive: false),
+          RegExp(r'\.(?:zip|cbz)$', caseSensitive: false),
           '',
         );
         final withoutChapter = firstBaseName
@@ -731,6 +792,7 @@ class _SmartNovelImporterSheetState extends State<SmartNovelImporterSheet> {
       // Thêm vào Tủ sách cá nhân
       await lib.setCategory(createdNovel.id, LibraryCategory.reading);
 
+      if (!mounted) return;
       nav.pop();
       widget.onImportDone?.call();
 
@@ -816,14 +878,16 @@ class _SmartNovelImporterSheetState extends State<SmartNovelImporterSheet> {
               ),
             ],
             selected: {_tabIndex},
-            onSelectionChanged: (val) {
-              setState(() {
-                _tabIndex = val.first;
-                _parsedChapters = [];
-                _scanResultText = '';
-                _folderLinkedImport = false;
-              });
-            },
+            onSelectionChanged: _isScanning
+                ? null
+                : (val) {
+                    setState(() {
+                      _tabIndex = val.first;
+                      _parsedChapters = [];
+                      _scanResultText = '';
+                      _folderLinkedImport = false;
+                    });
+                  },
           ),
           const SizedBox(height: 16),
 
@@ -933,11 +997,13 @@ class _SmartNovelImporterSheetState extends State<SmartNovelImporterSheet> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.folder_zip_outlined),
-              label: const Text('Chọn ZIP truyện tranh (chọn được nhiều file)'),
+              label: const Text(
+                'Chọn ZIP/CBZ truyện tranh (chọn được nhiều file)',
+              ),
             ),
             const SizedBox(height: 6),
             const Text(
-              'Hoặc nén thư mục thành ZIP: ảnh được lưu cùng truyện để đọc trên thiết bị khác và có thể gửi duyệt lên cộng đồng.',
+              'Nén thư mục thành ZIP/CBZ: ảnh được lưu cùng truyện để đọc trên thiết bị khác và có thể gửi duyệt lên cộng đồng.',
               style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
           ],
@@ -1006,7 +1072,9 @@ class _SmartNovelImporterSheetState extends State<SmartNovelImporterSheet> {
                     ? 'Tác phẩm sẽ chuyển vào Hàng chờ duyệt của Admin để xuất bản công khai.'
                     : 'Tác phẩm chỉ lưu vào Tủ sách cá nhân trên máy của bạn để đọc riêng (Không cần duyệt).',
               ),
-              onChanged: (v) => setState(() => _submitToCommunity = v),
+              onChanged: _isScanning
+                  ? null
+                  : (v) => setState(() => _submitToCommunity = v),
             ),
           ),
           if (_submitToCommunity && _tabIndex == 1)

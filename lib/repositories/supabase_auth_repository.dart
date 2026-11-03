@@ -21,35 +21,45 @@ class SupabaseAuthRepository
       throw StateError('Đăng nhập thất bại.');
     }
 
-    var profileRes = await _client
-        .from('ho_so')
-        .select()
-        .eq('id', authUser.id)
-        .maybeSingle();
+    Map<String, dynamic>? profileRes;
+    try {
+      profileRes = await _client
+          .from('ho_so')
+          .select()
+          .eq('id', authUser.id)
+          .maybeSingle();
 
-    if (profileRes == null) {
-      final newProfile = {
-        'id': authUser.id,
-        'email': cleanEmail,
-        'display_name':
-            authUser.userMetadata?['display_name'] ??
-            cleanEmail.split('@').first,
-        'role': 'user',
-        'is_author': 0,
-        'status': 'active',
-        'linh_thach': 150,
-        'streak': 0,
-        'has_streak_shield': 0,
-        'pinned_achievements': '',
-        'unlocked_items': 'default',
-        'last_active_at': DateTime.now().millisecondsSinceEpoch,
-        'created_at': DateTime.now().millisecondsSinceEpoch,
-      };
-      await _client.from('ho_so').insert(newProfile);
-      profileRes = newProfile;
+      if (profileRes == null) {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final newProfile = <String, dynamic>{
+          'id': authUser.id,
+          'email': cleanEmail,
+          'display_name':
+              authUser.userMetadata?['display_name'] ??
+              cleanEmail.split('@').first,
+          'role': 'user',
+          'is_author': 0,
+          'status': 'active',
+          'linh_thach': 150,
+          'streak': 0,
+          'has_streak_shield': 0,
+          'pinned_achievements': '',
+          'unlocked_items': 'default',
+          'last_active_at': now,
+          'created_at': now,
+        };
+        await _client.from('ho_so').insert(newProfile);
+        profileRes = newProfile;
+      }
+    } catch (_) {
+      throw AuthenticatedProfileUnavailable(authUser.id);
     }
-
-    final user = AppUser.fromMap(profileRes);
+    late final AppUser user;
+    try {
+      user = AppUser.fromMap(profileRes);
+    } catch (_) {
+      throw AuthenticatedProfileUnavailable(authUser.id);
+    }
     if (user.isBanned) {
       await _client.auth.signOut();
       final reason = user.banReason?.isNotEmpty == true
@@ -58,10 +68,14 @@ class SupabaseAuthRepository
       throw StateError('Tài khoản của bạn đã bị khóa.$reason');
     }
 
-    await _client
-        .from('ho_so')
-        .update({'last_active_at': DateTime.now().millisecondsSinceEpoch})
-        .eq('id', user.id);
+    try {
+      await _client
+          .from('ho_so')
+          .update({'last_active_at': DateTime.now().millisecondsSinceEpoch})
+          .eq('id', user.id);
+    } catch (_) {
+      // Cập nhật mốc hoạt động không được làm mất phiên vừa đăng nhập.
+    }
 
     return user;
   }
@@ -110,18 +124,21 @@ class SupabaseAuthRepository
       'created_at': now,
     };
 
-    // Không báo đăng ký thành công nếu hồ sơ không được lưu. Nếu trigger đã tạo
-    // hồ sơ nhưng upsert bị RLS từ chối, lấy hồ sơ hiện có bên dưới.
     try {
-      await _client.from('ho_so').upsert(profileMap);
-    } catch (_) {
-      final existing = await getUserById(authUser.id);
-      if (existing != null) return existing;
-      rethrow;
-    }
+      // Nếu trigger đã tạo hồ sơ nhưng upsert không thành công, thử lấy lại.
+      try {
+        await _client.from('ho_so').upsert(profileMap);
+      } catch (_) {
+        final existing = await getUserById(authUser.id);
+        if (existing != null) return existing;
+        rethrow;
+      }
 
-    final existing = await getUserById(authUser.id);
-    return existing ?? AppUser.fromMap(profileMap);
+      final existing = await getUserById(authUser.id);
+      return existing ?? AppUser.fromMap(profileMap);
+    } catch (_) {
+      throw AuthenticatedProfileUnavailable(authUser.id);
+    }
   }
 
   @override

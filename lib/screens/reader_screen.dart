@@ -58,6 +58,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   final PageController _pageCtrl = PageController();
   final FocusNode _keyFocusNode = FocusNode();
   final Map<int, GlobalKey> _paragraphKeys = {};
+  final Map<int, ({Chapter chapter, double offset})> _pendingProgressSaves = {};
   Timer? _saveDebounce;
   Timer? _autoScrollTimer;
 
@@ -73,6 +74,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   int? _restoredForChapterId;
   int? _loadedCommentsForChapterId;
   bool _lastKeepOn = false;
+  bool _isSavingProgress = false;
 
   late ReaderProvider _readerProvider;
   late LibraryProvider _libraryProvider;
@@ -146,6 +148,23 @@ class _ReaderScreenState extends State<ReaderScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Không tải được bình luận: $error')),
       );
+    }
+  }
+
+  Future<void> _recordChapterSession(Chapter chapter, String content) async {
+    final user = Provider.of<AuthProvider?>(
+      context,
+      listen: false,
+    )?.currentUser;
+    try {
+      await _libraryProvider.recordChapterReadSession(
+        chapter.id,
+        content,
+        novelId: widget.novel.id,
+        userId: user == null || user.isGuest ? '' : user.id,
+      );
+    } catch (error) {
+      debugPrint('Không ghi được thống kê đọc chương: $error');
     }
   }
 
@@ -319,8 +338,41 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   void _persistNow() {
     final ch = _readerProvider.currentChapter;
-    if (ch == null) return;
-    _libraryProvider.saveProgress(widget.novel, ch, _currentRatio);
+    if (ch == null || ch.novelId != widget.novel.id) return;
+    // Đưa chương vừa đọc về cuối hàng đợi để lần đọc mới nhất được ghi sau
+    // cùng, kể cả khi người đọc chuyển A -> B -> A lúc mạng đang chậm.
+    _pendingProgressSaves.remove(ch.id);
+    _pendingProgressSaves[ch.id] = (chapter: ch, offset: _currentRatio);
+    if (_isSavingProgress) return;
+    _isSavingProgress = true;
+    unawaited(_flushProgressSaves());
+  }
+
+  /// Lưu tiến độ tuần tự để phản hồi mạng đến trễ không ghi đè vị trí mới.
+  /// Các lần lưu lặp của cùng chương được gộp, nhưng vẫn giữ snapshot khi
+  /// người đọc chuyển qua chương khác trong lúc một yêu cầu đang chờ mạng.
+  Future<void> _flushProgressSaves() async {
+    try {
+      while (_pendingProgressSaves.isNotEmpty) {
+        final entry = _pendingProgressSaves.entries.first;
+        _pendingProgressSaves.remove(entry.key);
+        try {
+          await _libraryProvider.saveProgress(
+            widget.novel,
+            entry.value.chapter,
+            entry.value.offset,
+          );
+        } catch (error) {
+          debugPrint('Không lưu được tiến độ đọc: $error');
+        }
+      }
+    } finally {
+      _isSavingProgress = false;
+      if (_pendingProgressSaves.isNotEmpty) {
+        _isSavingProgress = true;
+        unawaited(_flushProgressSaves());
+      }
+    }
   }
 
   void _scheduleRestoreIfNeeded(
@@ -576,7 +628,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
         .map((p) => p.trim())
         .where((p) => p.isNotEmpty)
         .toList();
-    final pageCount = ReaderHorizontalPager.paginate(paragraphs).length;
+    final pageCount = ReaderHorizontalPager.paginate(
+      paragraphs,
+      comicMode: widget.novel.isComic,
+    ).length;
 
     if (chapter != null && rp.content != null && !rp.isLoadingContent) {
       _scheduleRestoreIfNeeded(chapter, settings.horizontalPageMode, pageCount);
@@ -586,10 +641,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           _loadCommentsForChapter(chapter.id);
-          _libraryProvider.recordChapterReadSession(
-            chapter.id,
-            contentSnapshot,
-          );
+          unawaited(_recordChapterSession(chapter, contentSnapshot));
         });
       }
     }
@@ -839,7 +891,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
     );
 
     if (settings.horizontalPageMode) {
-      final totalPages = ReaderHorizontalPager.paginate(paragraphs).length;
+      final totalPages = ReaderHorizontalPager.paginate(
+        paragraphs,
+        comicMode: widget.novel.isComic,
+      ).length;
       return ReaderHorizontalPager(
         chapter: chapter,
         paragraphs: paragraphs,
@@ -857,6 +912,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
         onLongPressQuote: (p) => _showQuoteCardSheet(chapter, p),
         onTapImage: _openImageViewer,
         footer: footer,
+        comicMode: widget.novel.isComic,
       );
     }
 

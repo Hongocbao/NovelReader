@@ -6,6 +6,7 @@ import 'package:novel_reader/database/app_database.dart';
 import 'package:novel_reader/database/v2_database_store.dart';
 import 'package:novel_reader/models/app_user.dart';
 import 'package:novel_reader/models/bookmark.dart';
+import 'package:novel_reader/models/chapter.dart';
 import 'package:novel_reader/models/novel.dart';
 import 'package:novel_reader/providers/admin_dashboard_provider.dart';
 import 'package:novel_reader/providers/admin_novel_provider.dart';
@@ -244,8 +245,8 @@ void main() {
     late SettingsProvider sp;
     late LibraryProvider lp;
     late ReaderProvider rp;
-    late dynamic novel;
-    late List<dynamic> chapters;
+    late Novel novel;
+    late List<Chapter> chapters;
 
     await tester.runAsync(() async {
       prefs = await SharedPreferences.getInstance();
@@ -257,7 +258,7 @@ void main() {
         (i) =>
             'Đoạn văn kiểm thử số ${i + 1} của chương đầu tiên với nội dung đủ dài.',
       ).join('\n');
-      await db.saveChapterContent(chapters.first.id, sampleText);
+      await db.saveChapterContent(chapters.first, sampleText, novel: novel);
 
       sp = SettingsProvider(prefs);
       lp = LibraryProvider(db);
@@ -275,6 +276,24 @@ void main() {
       rp.dispose();
       await db.close();
     });
+
+    Future<void> waitForSavedProgress({DateTime? newerThan}) async {
+      for (var attempt = 0; attempt < 200; attempt++) {
+        final history = lp.historyFor(novel.id);
+        if (history != null && history.scrollOffset > 0 &&
+            lp.sessions.isNotEmpty &&
+            (newerThan == null || history.lastReadAt.isAfter(newerThan))) {
+          return;
+        }
+        // Allow both Flutter's fake event loop and SQLite's real isolate to
+        // complete; a fixed sleep alone leaves widget callbacks pending.
+        await tester.pump();
+        await tester.runAsync(() => Future<void>.delayed(
+          const Duration(milliseconds: 20),
+        ));
+      }
+      fail('Reading progress and session were not saved before closing the DB.');
+    }
 
     Widget buildReader({double initialOffset = 0}) {
       return MultiProvider(
@@ -309,9 +328,7 @@ void main() {
     await tester.pump();
     // Đóng màn hình đọc (trigger dispose -> _persistNow lưu vị trí cuộn hiện tại)
     await tester.pumpWidget(const SizedBox.shrink());
-    await tester.runAsync(() async {
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-    });
+    await waitForSavedProgress();
 
     final savedHistory = lp.historyFor(novel.id);
     expect(savedHistory, isNotNull);
@@ -327,10 +344,9 @@ void main() {
     await tester.pump();
     expect(find.byType(PageView), findsOneWidget);
 
+    final previousSave = lp.historyFor(novel.id)!.lastReadAt;
     await tester.pumpWidget(const SizedBox.shrink());
-    await tester.runAsync(() async {
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-    });
+    await waitForSavedProgress(newerThan: previousSave);
   });
 
   test(

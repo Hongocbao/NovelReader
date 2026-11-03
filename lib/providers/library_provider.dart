@@ -27,6 +27,7 @@ class LibraryProvider extends ChangeNotifier {
   bool _loading = false;
   bool _loaded = false;
   String? _error;
+  int _loadRequestId = 0;
   LibrarySort _sort = LibrarySort.time;
 
   bool get isLoading => _loading;
@@ -77,6 +78,7 @@ class LibraryProvider extends ChangeNotifier {
 
   /// Tải tủ sách + lịch sử + trích dẫn từ DB.
   Future<void> load({String? userId}) async {
+    final requestId = ++_loadRequestId;
     _loading = true;
     _error = null;
     notifyListeners();
@@ -87,16 +89,21 @@ class LibraryProvider extends ChangeNotifier {
         _db.getQuotes(userId: userId),
         _db.getReadingSessions(userId: userId),
       ]);
+      if (requestId != _loadRequestId) return;
       _items = results[0] as List<LibraryItem>;
       _history = results[1] as List<ReadingHistory>;
       _quotes = results[2] as List<QuoteItem>;
       _sessions = results[3] as List<ReadingSessionStat>;
       _loaded = true;
     } catch (e) {
-      _error = '${AppStrings.loadFailed}: $e';
+      if (requestId == _loadRequestId) {
+        _error = '${AppStrings.loadFailed}: $e';
+      }
     } finally {
-      _loading = false;
-      notifyListeners();
+      if (requestId == _loadRequestId) {
+        _loading = false;
+        notifyListeners();
+      }
     }
   }
 

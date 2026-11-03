@@ -38,9 +38,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (!mounted) return;
     if (ok) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            '🎉 Đăng ký thành công! Tủ sách & lịch sử đọc trên máy đã được đồng bộ, tặng 150 Linh Thạch!',
+            auth.profileNeedsRefresh
+                ? 'Tài khoản đã đăng nhập. Hồ sơ sẽ được đồng bộ khi kết nối ổn định.'
+                : '🎉 Đăng ký thành công! Tủ sách & lịch sử đọc trên máy đã được đồng bộ, tặng 150 Linh Thạch!',
           ),
         ),
       );
@@ -85,9 +87,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 children: [
                   Text(
                     'Tạo tài khoản Độc giả',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                    style: Theme.of(context).textTheme.headlineSmall
+                        ?.copyWith(fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 6),
                   Text(
@@ -113,7 +114,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     decoration: const InputDecoration(
                       labelText: 'Email',
                       hintText: 'vidu: docgia123@gmail.com',
-                      helperText: 'Tên Gmail tối thiểu 6 ký tự theo chuẩn Google',
+                      helperText:
+                          'Tên Gmail tối thiểu 6 ký tự theo chuẩn Google',
                       prefixIcon: Icon(Icons.email_outlined),
                       border: OutlineInputBorder(),
                     ),
@@ -126,7 +128,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         return 'Vui lòng nhập định dạng email hợp lệ';
                       }
                       final parts = trimmed.split('@');
-                      if (parts.length == 2 && parts[1].toLowerCase() == 'gmail.com') {
+                      if (parts.length == 2 &&
+                          parts[1].toLowerCase() == 'gmail.com') {
                         if (parts[0].length < 6 || parts[0].length > 30) {
                           return 'Tên tài khoản Gmail phải từ 6 đến 30 ký tự (ví dụ: baobao123@gmail.com)';
                         }
@@ -155,10 +158,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                   if (auth.error != null) ...[
                     const SizedBox(height: 12),
-                    Text(
-                      auth.error!,
-                      style: TextStyle(color: cs.error),
-                    ),
+                    Text(auth.error!, style: TextStyle(color: cs.error)),
                   ],
                   const SizedBox(height: 20),
                   FilledButton.icon(

@@ -262,6 +262,7 @@ class ReaderHorizontalPager extends StatelessWidget {
   final ValueChanged<String> onLongPressQuote;
   final ValueChanged<String> onTapImage;
   final Widget footer;
+  final bool comicMode;
 
   const ReaderHorizontalPager({
     super.key,
@@ -276,12 +277,18 @@ class ReaderHorizontalPager extends StatelessWidget {
     required this.onLongPressQuote,
     required this.onTapImage,
     required this.footer,
+    this.comicMode = false,
   });
 
-  /// Nhóm các đoạn văn thành từng trang (~6 đoạn mỗi trang).
-  static List<List<String>> paginate(List<String> paragraphs) {
+  /// Nhóm văn bản thành từng trang (~6 đoạn); Manga lật từng ảnh một để
+  /// không ghép nhiều trang dài vào cùng một trang ngang.
+  static List<List<String>> paginate(
+    List<String> paragraphs, {
+    bool comicMode = false,
+  }) {
     const perPage = 6;
     if (paragraphs.isEmpty) return const [[]];
+    if (comicMode) return paragraphs.map((paragraph) => [paragraph]).toList();
     final pages = <List<String>>[];
     for (var i = 0; i < paragraphs.length; i += perPage) {
       pages.add(
@@ -296,7 +303,7 @@ class ReaderHorizontalPager extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pages = paginate(paragraphs);
+    final pages = paginate(paragraphs, comicMode: comicMode);
     return PageView.builder(
       controller: controller,
       itemCount: pages.length,
@@ -326,6 +333,7 @@ class ReaderHorizontalPager extends StatelessWidget {
                   searchKeyword: searchKeyword,
                   onLongPressQuote: () => onLongPressQuote(p),
                   onTapImage: onTapImage,
+                  comicMode: comicMode,
                 ),
               const SizedBox(height: 12),
               Center(

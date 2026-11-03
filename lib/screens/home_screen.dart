@@ -110,9 +110,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   Text(
                     picked.title,
                     textAlign: TextAlign.center,
-                    style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                    style: Theme.of(ctx).textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -177,8 +176,10 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: Row(
           children: [
-            Icon(Icons.auto_stories_rounded,
-                color: Theme.of(context).colorScheme.primary),
+            Icon(
+              Icons.auto_stories_rounded,
+              color: Theme.of(context).colorScheme.primary,
+            ),
             const SizedBox(width: 8),
             const Text(
               AppInfo.appName,
@@ -200,9 +201,8 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             tooltip: AppStrings.genres,
             icon: const Icon(Icons.grid_view_rounded),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const GenreScreen()),
-            ),
+            onPressed: () => Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => const GenreScreen())),
           ),
         ],
       ),
@@ -212,10 +212,7 @@ class _HomeScreenState extends State<HomeScreen> {
             return const LoadingView();
           }
           if (np.homeError != null && !np.homeLoaded) {
-            return ErrorView(
-              message: np.homeError!,
-              onRetry: np.loadHome,
-            );
+            return ErrorView(message: np.homeError!, onRetry: np.loadHome);
           }
           if (np.featured.isEmpty && np.newest.isEmpty) {
             return EmptyView(
@@ -288,11 +285,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildBanner(List<Novel> items) {
     final scheme = Theme.of(context).colorScheme;
+    final compact = MediaQuery.sizeOf(context).width < 380;
     return Column(
       children: [
         const SizedBox(height: 8),
         SizedBox(
-          height: 176,
+          height: compact ? 160 : 176,
           child: PageView.builder(
             controller: _bannerCtrl,
             itemCount: items.length,
@@ -316,16 +314,16 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                     ),
-                    padding: const EdgeInsets.all(14),
+                    padding: EdgeInsets.all(compact ? 11 : 14),
                     child: Row(
                       children: [
                         NovelCover(
                           url: n.coverUrl,
                           title: n.title,
-                          width: 96,
-                          height: 144,
+                          width: compact ? 78 : 96,
+                          height: compact ? 122 : 144,
                         ),
-                        const SizedBox(width: 14),
+                        SizedBox(width: compact ? 10 : 14),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -333,7 +331,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             children: [
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
                                 decoration: BoxDecoration(
                                   color: scheme.primary,
                                   borderRadius: BorderRadius.circular(20),
@@ -352,9 +352,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 n.title,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
+                                style: Theme.of(context).textTheme.titleMedium
                                     ?.copyWith(fontWeight: FontWeight.bold),
                               ),
                               const SizedBox(height: 4),
@@ -413,9 +411,8 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         _SectionHeader(
           title: AppStrings.continueReading,
-          onSeeAll: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const HistoryScreen()),
-          ),
+          onSeeAll: () => Navigator.of(context)
+              .push(MaterialPageRoute(builder: (_) => const HistoryScreen())),
         ),
         SizedBox(
           height: 108,
@@ -474,7 +471,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                 Text(
                                   h.chapterTitle ??
                                       Format.progress(
-                                          chIdx, novel.totalChapters),
+                                        chIdx,
+                                        novel.totalChapters,
+                                      ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
@@ -518,9 +517,9 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         _SectionHeader(
           title: AppStrings.genres,
-          onSeeAll: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const GenreScreen()),
-          ),
+          onSeeAll: () =>
+              Navigator.of(context)
+                  .push(MaterialPageRoute(builder: (_) => const GenreScreen())),
         ),
         SizedBox(
           height: 40,
@@ -590,9 +589,8 @@ class _SectionHeader extends StatelessWidget {
         children: [
           Text(
             title,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(context).textTheme.titleMedium
+                ?.copyWith(fontWeight: FontWeight.bold),
           ),
           const Spacer(),
           if (onSeeAll != null)

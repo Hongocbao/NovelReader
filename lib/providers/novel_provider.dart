@@ -174,6 +174,7 @@ class NovelProvider extends ChangeNotifier {
   bool _homeLoading = false;
   String? _homeError;
   bool _homeLoaded = false;
+  int _homeRequestId = 0;
 
   List<Novel> get featured => _featured;
   List<Novel> get newest => _newest;
@@ -186,6 +187,7 @@ class NovelProvider extends ChangeNotifier {
 
   /// Tải dữ liệu trang chủ (đề cử, mới cập nhật, hot, hoàn thành, truyện tranh).
   Future<void> loadHome() async {
+    final requestId = ++_homeRequestId;
     _homeLoading = true;
     _homeError = null;
     notifyListeners();
@@ -205,6 +207,7 @@ class NovelProvider extends ChangeNotifier {
           limit: 12,
         ),
       ]);
+      if (requestId != _homeRequestId) return;
       _featured = results[0];
       _newest = results[1];
       _hot = results[2];
@@ -212,10 +215,13 @@ class NovelProvider extends ChangeNotifier {
       _comics = results[4];
       _homeLoaded = true;
     } catch (e) {
+      if (requestId != _homeRequestId) return;
       _homeError = '${AppStrings.loadFailed}: $e';
     } finally {
-      _homeLoading = false;
-      notifyListeners();
+      if (requestId == _homeRequestId) {
+        _homeLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -223,6 +229,7 @@ class NovelProvider extends ChangeNotifier {
   Map<String, int> _genreCounts = {};
   bool _genresLoading = false;
   String? _genresError;
+  int _genresRequestId = 0;
 
   Map<String, int> get genreCounts => _genreCounts;
   bool get genresLoading => _genresLoading;
@@ -230,16 +237,22 @@ class NovelProvider extends ChangeNotifier {
 
   /// Đếm số truyện theo thể loại.
   Future<void> loadGenres() async {
+    final requestId = ++_genresRequestId;
     _genresLoading = true;
     _genresError = null;
     notifyListeners();
     try {
-      _genreCounts = await _db.genreCounts();
+      final counts = await _db.genreCounts();
+      if (requestId != _genresRequestId) return;
+      _genreCounts = counts;
     } catch (e) {
+      if (requestId != _genresRequestId) return;
       _genresError = '${AppStrings.loadFailed}: $e';
     } finally {
-      _genresLoading = false;
-      notifyListeners();
+      if (requestId == _genresRequestId) {
+        _genresLoading = false;
+        notifyListeners();
+      }
     }
   }
 

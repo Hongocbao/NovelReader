@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../providers/auth_provider.dart';
 import '../providers/reader_provider.dart';
 import '../utils/constants.dart';
 import 'home_screen.dart';
@@ -23,6 +24,14 @@ class _MainShellState extends State<MainShell> {
   @override
   Widget build(BuildContext context) {
     final isOnline = context.select<ReaderProvider, bool>((p) => p.isOnline);
+    final profileNeedsRefresh = context.select<AuthProvider, bool>(
+      (p) => p.profileNeedsRefresh,
+    );
+    if (isOnline && profileNeedsRefresh) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) context.read<AuthProvider>().refreshCurrentUser();
+      });
+    }
     final pages = <Widget>[
       HomeScreen(onJumpToTab: (i) => setState(() => _index = i)),
       const SearchScreen(),
@@ -33,67 +42,109 @@ class _MainShellState extends State<MainShell> {
     return Scaffold(
       body: Column(
         children: [
-          if (!isOnline)
-            Material(
-              color: AppColors.offline,
-              child: SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.cloud_off,
-                          size: 16, color: AppColors.onBanner),
-                      const SizedBox(width: 8),
-                      const Expanded(
-                        child: Text(
-                          AppStrings.offlineBanner,
-                          style: TextStyle(
-                            color: AppColors.onBanner,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
+          AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: isOnline
+                ? const SizedBox(width: double.infinity, height: 0)
+                : Material(
+                    color: AppColors.offline,
+                    child: SafeArea(
+                      bottom: false,
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 820),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.cloud_off_rounded,
+                                  size: 17,
+                                  color: AppColors.onBanner,
+                                ),
+                                const SizedBox(width: 10),
+                                const Expanded(
+                                  child: Text(
+                                    AppStrings.offlineBanner,
+                                    style: TextStyle(
+                                      color: AppColors.onBanner,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                Icon(
+                                  Icons.sync_rounded,
+                                  size: 16,
+                                  color: AppColors.onBanner.withValues(
+                                    alpha: 0.8,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
-            ),
+          ),
           Expanded(
-            child: IndexedStack(
-              index: _index,
-              children: pages,
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 820),
+                child: IndexedStack(index: _index, children: pages),
+              ),
             ),
           ),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
-            label: AppStrings.navHome,
+      bottomNavigationBar: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          border: Border(
+            top: BorderSide(
+              color: Theme.of(context).colorScheme.outlineVariant
+                  .withValues(alpha: 0.45),
+            ),
           ),
-          NavigationDestination(
-            icon: Icon(Icons.search_outlined),
-            selectedIcon: Icon(Icons.search_rounded),
-            label: AppStrings.navSearch,
+        ),
+        child: Center(
+          heightFactor: 1,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 620),
+            child: NavigationBar(
+              selectedIndex: _index,
+              onDestinationSelected: (i) => setState(() => _index = i),
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.home_outlined),
+                  selectedIcon: Icon(Icons.home_rounded),
+                  label: AppStrings.navHome,
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.search_outlined),
+                  selectedIcon: Icon(Icons.search_rounded),
+                  label: AppStrings.navSearch,
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.bookmarks_outlined),
+                  selectedIcon: Icon(Icons.bookmarks_rounded),
+                  label: AppStrings.navLibrary,
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.person_outline_rounded),
+                  selectedIcon: Icon(Icons.person_rounded),
+                  label: AppStrings.navProfile,
+                ),
+              ],
+            ),
           ),
-          NavigationDestination(
-            icon: Icon(Icons.bookmarks_outlined),
-            selectedIcon: Icon(Icons.bookmarks_rounded),
-            label: AppStrings.navLibrary,
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline_rounded),
-            selectedIcon: Icon(Icons.person_rounded),
-            label: AppStrings.navProfile,
-          ),
-        ],
+        ),
       ),
     );
   }

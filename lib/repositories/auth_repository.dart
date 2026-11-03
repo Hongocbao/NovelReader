@@ -7,6 +7,13 @@ class QuestRewardClaim {
   const QuestRewardClaim({required this.user, required this.reward});
 }
 
+/// Auth đã xác thực thành công nhưng chưa đọc/ghi được hồ sơ ứng dụng.
+class AuthenticatedProfileUnavailable implements Exception {
+  final String userId;
+
+  const AuthenticatedProfileUnavailable(this.userId);
+}
+
 /// Giao diện trừu tượng của tầng xác thực và quản lý tài khoản.
 abstract class AuthRepository {
   /// Đăng nhập bằng [email] và [password].
