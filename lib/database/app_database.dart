@@ -803,38 +803,23 @@ class AppDatabase {
     );
   }
 
-  /// Xóa nội dung đã tải của 1 chương.
+  /// Xóa bản tải của chương cloud; chương cục bộ là bản gốc cần giữ lại.
   Future<void> deleteChapterContent(Chapter chapter) async {
+    if (chapter.novelId < 0) return;
     final db = await database;
-    if (chapter.novelId >= 0) {
-      await db.update(
-        'chuong_tai_xuong_cloud',
-        {'content': null, 'is_downloaded': 0, 'downloaded_at': null},
-        where: 'novel_id = ? AND id = ?',
-        whereArgs: [chapter.novelId, chapter.id],
-      );
-      return;
-    }
     await db.update(
-      'chuong',
-      {'content': null, 'is_downloaded': 0},
-      where: 'id = ?',
-      whereArgs: [chapter.id],
+      'chuong_tai_xuong_cloud',
+      {'content': null, 'is_downloaded': 0, 'downloaded_at': null},
+      where: 'novel_id = ? AND id = ?',
+      whereArgs: [chapter.novelId, chapter.id],
     );
   }
 
   /// Xóa nội dung đã tải của cả truyện, hoặc toàn bộ nếu [novelId] = null.
   Future<int> deleteDownloads({int? novelId}) async {
+    if (novelId != null && novelId < 0) return 0;
     final db = await database;
-    final localCount = await db.update(
-      'chuong',
-      {'content': null, 'is_downloaded': 0},
-      where: novelId == null
-          ? 'is_downloaded = 1 AND novel_id < 0'
-          : 'is_downloaded = 1 AND novel_id = ? AND novel_id < 0',
-      whereArgs: novelId == null ? null : [novelId],
-    );
-    final cloudCount = await db.update(
+    return db.update(
       'chuong_tai_xuong_cloud',
       {'content': null, 'is_downloaded': 0, 'downloaded_at': null},
       where: novelId == null
@@ -842,32 +827,20 @@ class AppDatabase {
           : 'is_downloaded = 1 AND novel_id = ?',
       whereArgs: novelId == null ? null : [novelId],
     );
-    return localCount + cloudCount;
   }
 
-  /// Danh sách chương đã tải kèm tên truyện và dung lượng.
+  /// Các bản tải có thể dọn; truyện tự nhập là bản gốc trong Tủ sách.
   Future<List<DownloadedChapter>> getDownloadedChapters() async {
     final db = await database;
-    final localRows = await db.rawQuery('''
-      SELECT c.id, c.novel_id, c.chapter_index, c.title, c.is_downloaded,
-             n.title AS novel_title, n.cover_url,
-             LENGTH(CAST(c.content AS BLOB)) AS size
-      FROM chuong c JOIN truyen n ON n.id = c.novel_id
-      WHERE c.is_downloaded = 1 AND c.novel_id < 0
-      ORDER BY n.title COLLATE NOCASE, c.chapter_index
-    ''');
     final cloudRows = await db.rawQuery('''
-      SELECT id, novel_id, chapter_index, title, content, is_downloaded,
+      SELECT id, novel_id, chapter_index, title, is_downloaded,
              novel_title, cover_url,
              LENGTH(CAST(content AS BLOB)) AS size
       FROM chuong_tai_xuong_cloud
       WHERE is_downloaded = 1 AND content IS NOT NULL
       ORDER BY novel_title COLLATE NOCASE, chapter_index
     ''');
-    final combined = [
-      ...localRows.map(DownloadedChapter.fromMap),
-      ...cloudRows.map(DownloadedChapter.fromMap),
-    ];
+    final combined = cloudRows.map(DownloadedChapter.fromMap).toList();
     combined.sort((a, b) {
       final novelOrder = a.novelTitle.toLowerCase().compareTo(
         b.novelTitle.toLowerCase(),

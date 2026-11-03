@@ -353,6 +353,7 @@ class ReaderProvider extends ChangeNotifier {
 
   /// Xóa 1 chương đã tải.
   Future<void> deleteDownload(Chapter chapter) async {
+    if (chapter.novelId < 0) return;
     await _db.deleteChapterContent(chapter);
     _updateCachedChapter(chapter.novelId, chapter.id, false);
     await _refreshDownloadsSilently();
@@ -361,14 +362,18 @@ class ReaderProvider extends ChangeNotifier {
 
   /// Xóa các chương đã tải của 1 truyện, hoặc tất cả nếu [novelId] = null.
   Future<void> deleteDownloads({int? novelId}) async {
+    if (novelId != null && novelId < 0) return;
     await _db.deleteDownloads(novelId: novelId);
     final ids = novelId == null ? _chapters.keys.toList() : [novelId];
     for (final id in ids) {
+      if (id < 0) continue;
       final list = _chapters[id];
       if (list == null) continue;
       _chapters[id] = [for (final c in list) c.copyWith(isDownloaded: false)];
     }
-    if (_current != null && (novelId == null || _current!.novelId == novelId)) {
+    if (_current != null &&
+        _current!.novelId >= 0 &&
+        (novelId == null || _current!.novelId == novelId)) {
       _current = _current!.copyWith(isDownloaded: false);
     }
     await _refreshDownloadsSilently();

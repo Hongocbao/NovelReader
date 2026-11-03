@@ -284,7 +284,8 @@ class AppStrings {
 
   // Tải xuống
   static const String downloads = 'Tải xuống';
-  static const String emptyDownloads = 'Chưa có chương nào được tải';
+  static const String emptyDownloads =
+      'Chưa có chương nào được tải.\nTruyện tự nhập được lưu trong Tủ sách.';
   static const String confirmDeleteDownloads = 'Xóa tất cả chương đã tải?';
   static const String totalSize = 'Tổng dung lượng';
   static const String deleteNovelDownloads = 'Xóa các chương đã tải của truyện';

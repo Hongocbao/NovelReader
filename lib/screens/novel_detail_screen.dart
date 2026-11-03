@@ -160,7 +160,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
 
   Future<void> _showDownloadOptions(List<Chapter> chapters) async {
     final novel = _novel;
-    if (novel == null || chapters.isEmpty) return;
+    if (novel == null || novel.id < 0 || chapters.isEmpty) return;
     final rp = context.read<ReaderProvider>();
     final notDownloaded = chapters.where((c) => !c.isDownloaded).toList();
     final hasDownloaded = chapters.any((c) => c.isDownloaded);
@@ -535,7 +535,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                   const Spacer(),
                   if (downloadedCount > 0)
                     Text(
-                      'Đã tải $downloadedCount/${chapters.length}',
+                      '${novel.id < 0 ? 'Đã lưu' : 'Đã tải'} $downloadedCount/${chapters.length}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                 ],
@@ -561,8 +561,10 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                         ? history!.scrollOffset
                         : 0,
                   ),
-                  onDownload: () => _runDownload([ch]),
-                  onDeleteDownload: () => rp.deleteDownload(ch),
+                  onDownload: novel.id < 0 ? null : () => _runDownload([ch]),
+                  onDeleteDownload: novel.id < 0
+                      ? null
+                      : () => rp.deleteDownload(ch),
                 ),
           ],
         ),
@@ -715,13 +717,14 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                   : Format.category(category),
             ),
           ),
-          OutlinedButton.icon(
-            onPressed: (task?.running ?? false) || chapters.isEmpty
-                ? null
-                : () => _showDownloadOptions(chapters),
-            icon: const Icon(Icons.download_outlined),
-            label: const Text(AppStrings.download),
-          ),
+          if (novel.id >= 0)
+            OutlinedButton.icon(
+              onPressed: (task?.running ?? false) || chapters.isEmpty
+                  ? null
+                  : () => _showDownloadOptions(chapters),
+              icon: const Icon(Icons.download_outlined),
+              label: const Text(AppStrings.download),
+            ),
         ],
       ),
     );

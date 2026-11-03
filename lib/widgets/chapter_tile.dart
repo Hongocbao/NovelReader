@@ -28,8 +28,9 @@ class ChapterTile extends StatelessWidget {
       selectedTileColor: scheme.primaryContainer.withValues(alpha: 0.35),
       leading: CircleAvatar(
         radius: 16,
-        backgroundColor:
-            isCurrent ? scheme.primary : scheme.surfaceContainerHighest,
+        backgroundColor: isCurrent
+            ? scheme.primary
+            : scheme.surfaceContainerHighest,
         foregroundColor: isCurrent ? scheme.onPrimary : scheme.onSurfaceVariant,
         child: Text(
           '${chapter.chapterIndex}',
@@ -49,7 +50,9 @@ class ChapterTile extends StatelessWidget {
         children: [
           if (chapter.isDownloaded)
             Tooltip(
-              message: AppStrings.downloaded,
+              message: chapter.novelId < 0
+                  ? 'Đã lưu trên thiết bị'
+                  : AppStrings.downloaded,
               child: IconButton(
                 icon: Icon(
                   Icons.download_done_rounded,
