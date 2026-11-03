@@ -1,7 +1,8 @@
 /// Bản ghi chi tiết một phiên đọc truyện của người dùng (phục vụ Heatmap, Wrapped & Nhiệm vụ).
 class ReadingSession {
   final int? id;
-  final int userId;
+  /// UUID Supabase hoặc mã người dùng cũ ở dữ liệu local.
+  final String userId;
   final int novelId;
   final int chapterId;
   final DateTime startedAt;
@@ -40,7 +41,7 @@ class ReadingSession {
 
   factory ReadingSession.fromMap(Map<String, Object?> map) => ReadingSession(
         id: map['id'] as int?,
-        userId: (map['user_id'] as int?) ?? 0,
+        userId: map['user_id']?.toString() ?? '',
         novelId: (map['novel_id'] as int?) ?? 0,
         chapterId: (map['chapter_id'] as int?) ?? 0,
         startedAt: DateTime.fromMillisecondsSinceEpoch(

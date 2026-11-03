@@ -1,9 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:sqflite/sqflite.dart';
 
 import '../../database/app_database.dart';
+import '../../database/v2_database_store.dart';
 
 /// Màn hình Sổ tay & Sơ đồ quan hệ nhân vật tự vẽ (Mục 5.5).
 /// Cho phép kéo thả các nút nhân vật, nối bằng đường có nhãn (Sư đồ, Bạn bè, Kẻ thù, Người yêu) và lưu JSON theo truyện.
@@ -89,14 +89,10 @@ class _CharacterGraphScreenState extends State<CharacterGraphScreen> {
 
   Future<void> _loadGraph() async {
     final db = await AppDatabase.instance.database;
-    final rows = await db.query(
-      'character_graphs',
-      where: 'novel_id = ?',
-      whereArgs: [widget.novelId],
-    );
-    if (rows.isNotEmpty) {
+    final graphJson = await V2DatabaseStore.getCharacterGraph(db, widget.novelId);
+    if (graphJson != null && graphJson.isNotEmpty) {
       final decoded =
-          jsonDecode(rows.first['graph_json'] as String) as Map<String, dynamic>;
+          jsonDecode(graphJson) as Map<String, dynamic>;
       _nodes = (decoded['nodes'] as List)
           .map((e) => _CharNode.fromJson(e as Map<String, dynamic>))
           .toList();
@@ -138,10 +134,10 @@ class _CharacterGraphScreenState extends State<CharacterGraphScreen> {
       'nodes': _nodes.map((e) => e.toJson()).toList(),
       'edges': _edges.map((e) => e.toJson()).toList(),
     });
-    await db.insert(
-      'character_graphs',
-      {'novel_id': widget.novelId, 'graph_json': payload},
-      conflictAlgorithm: ConflictAlgorithm.replace,
+    await V2DatabaseStore.saveCharacterGraph(
+      db,
+      novelId: widget.novelId,
+      graphJson: payload,
     );
   }
 

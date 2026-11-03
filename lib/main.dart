@@ -33,7 +33,7 @@ import 'utils/theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Kiểm tra cấu hình môi trường SUPABASE_URL & SUPABASE_ANON_KEY (Yêu cầu 2)
+  // Hỗ trợ SUPABASE_* và NEXT_PUBLIC_SUPABASE_* khi build bằng dart-define.
   if (SupabaseConfig.isMissing) {
     runApp(const MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -50,6 +50,11 @@ Future<void> main() async {
     );
   } catch (e) {
     debugPrint('Supabase init error: $e');
+    runApp(MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: ConfigErrorScreen(message: 'Không thể khởi tạo Supabase.\n\n$e'),
+    ));
+    return;
   }
 
   // Hỗ trợ SQLite fallback khi offline

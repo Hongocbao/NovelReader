@@ -6,7 +6,7 @@ class AppInfo {
 
   static const String appName = 'NovelReader';
   static const String dbName = 'novel_reader.db';
-  static const int dbVersion = 6;
+  static const int dbVersion = 8;
   static const String sampleDataAsset = 'assets/data/sample_novels.json';
 
   /// Số truyện mỗi trang khi phân trang (infinite scroll).
@@ -14,9 +14,6 @@ class AppInfo {
 
   /// Thời gian debounce khi gõ tìm kiếm.
   static const Duration searchDebounce = Duration(milliseconds: 300);
-
-  /// Độ trễ giả lập khi "tải từ máy chủ".
-  static const Duration fakeNetworkDelay = Duration(milliseconds: 250);
 
   /// Số mục tối đa trong lịch sử tìm kiếm.
   static const int maxSearchHistory = 10;
@@ -49,6 +46,7 @@ class PrefKeys {
   static const String brightness = 'reader_brightness';
   static const String keepScreenOn = 'reader_keep_screen_on';
   static const String pageMode = 'reader_page_mode';
+  static const String showAiBubble = 'reader_show_ai_bubble';
   static const String forceOffline = 'force_offline';
   static const String searchHistory = 'search_history';
   static const String currentUserId = 'current_user_id';
@@ -61,16 +59,25 @@ class SupabaseConfig {
 
   static const String projectRef = 'lkxqsngzsnbsazarqbgj';
 
-  /// Đọc SUPABASE_URL qua String.fromEnvironment
+  /// Nhận cả tên biến Flutter và tên NEXT_PUBLIC lấy từ hướng dẫn Supabase.
   static const String url = String.fromEnvironment(
     'SUPABASE_URL',
-    defaultValue: 'https://lkxqsngzsnbsazarqbgj.supabase.co',
+    defaultValue: String.fromEnvironment(
+      'NEXT_PUBLIC_SUPABASE_URL',
+      defaultValue: 'https://lkxqsngzsnbsazarqbgj.supabase.co',
+    ),
   );
 
-  /// Đọc SUPABASE_ANON_KEY qua String.fromEnvironment
+  /// SUPABASE Flutter client dùng publishable key ở tham số anonKey.
   static const String anonKey = String.fromEnvironment(
-    'SUPABASE_ANON_KEY',
-    defaultValue: 'sb_publishable_WLEErw5CiknkzNtlGpO4OQ_siS0xBLu',
+    'SUPABASE_PUBLISHABLE_KEY',
+    defaultValue: String.fromEnvironment(
+      'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
+      defaultValue: String.fromEnvironment(
+        'SUPABASE_ANON_KEY',
+        defaultValue: 'sb_publishable_WLEErw5CiknkzNtlGpO4OQ_siS0xBLu',
+      ),
+    ),
   );
 
   /// Kiểm tra xem biến môi trường có bị thiếu hay không.

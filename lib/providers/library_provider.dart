@@ -39,8 +39,7 @@ class LibraryProvider extends ChangeNotifier {
   List<ReadingSessionStat> get sessions => List.unmodifiable(_sessions);
 
   /// Tổng số từ đã đọc trên toàn bộ các ngày.
-  int get totalWordsRead =>
-      _sessions.fold<int>(0, (s, e) => s + e.wordsRead);
+  int get totalWordsRead => _sessions.fold<int>(0, (s, e) => s + e.wordsRead);
 
   /// Tổng số phút đã đọc trên toàn bộ các ngày.
   int get totalMinutesRead =>
@@ -112,13 +111,17 @@ class LibraryProvider extends ChangeNotifier {
   List<LibraryItem> itemsOf(String category) {
     final list = _items.where((e) => e.category == category).toList();
     if (_sort == LibrarySort.name) {
-      list.sort((a, b) => (a.novel?.title ?? '')
-          .toLowerCase()
-          .compareTo((b.novel?.title ?? '').toLowerCase()));
+      list.sort(
+        (a, b) => (a.novel?.title ?? '').toLowerCase().compareTo(
+          (b.novel?.title ?? '').toLowerCase(),
+        ),
+      );
     } else {
       // Mới đọc/mới thêm lên đầu
-      list.sort((a, b) =>
-          (b.lastReadAt ?? b.addedAt).compareTo(a.lastReadAt ?? a.addedAt));
+      list.sort(
+        (a, b) =>
+            (b.lastReadAt ?? b.addedAt).compareTo(a.lastReadAt ?? a.addedAt),
+      );
     }
     return list;
   }
@@ -134,11 +137,13 @@ class LibraryProvider extends ChangeNotifier {
   /// Thêm truyện vào tủ sách hoặc chuyển danh mục.
   Future<void> setCategory(int novelId, String category) async {
     final existing = _items.where((e) => e.novelId == novelId).firstOrNull;
-    await _db.upsertLibrary(LibraryItem(
-      novelId: novelId,
-      category: category,
-      addedAt: existing?.addedAt ?? DateTime.now(),
-    ));
+    await _db.upsertLibrary(
+      LibraryItem(
+        novelId: novelId,
+        category: category,
+        addedAt: existing?.addedAt ?? DateTime.now(),
+      ),
+    );
     await _reloadLibrary();
   }
 
@@ -170,12 +175,14 @@ class LibraryProvider extends ChangeNotifier {
   /// Nếu truyện đang ở "Muốn đọc" sẽ tự chuyển sang "Đang đọc".
   Future<void> saveProgress(Novel novel, Chapter chapter, double offset) async {
     final now = DateTime.now();
-    await _db.saveHistory(ReadingHistory(
-      novelId: novel.id,
-      lastChapterId: chapter.id,
-      scrollOffset: offset.clamp(0, 1).toDouble(),
-      lastReadAt: now,
-    ));
+    await _db.saveHistory(
+      ReadingHistory(
+        novelId: novel.id,
+        lastChapterId: chapter.id,
+        scrollOffset: offset.clamp(0, 1).toDouble(),
+        lastReadAt: now,
+      ),
+    );
     final updated = ReadingHistory(
       novelId: novel.id,
       lastChapterId: chapter.id,
@@ -196,7 +203,9 @@ class LibraryProvider extends ChangeNotifier {
       for (final item in _items)
         item.novelId == novel.id
             ? item.copyWith(
-                lastChapterIndex: chapter.chapterIndex, lastReadAt: now)
+                lastChapterIndex: chapter.chapterIndex,
+                lastReadAt: now,
+              )
             : item,
     ];
     notifyListeners();
@@ -232,14 +241,20 @@ class LibraryProvider extends ChangeNotifier {
   }
 
   /// Thêm bookmark tại vị trí [offset] (0..1) của chương.
-  Future<void> addBookmark(Chapter chapter, double offset, {String note = ''}) async {
-    await _db.addBookmark(Bookmark(
-      novelId: chapter.novelId,
-      chapterId: chapter.id,
-      scrollOffset: offset.clamp(0, 1).toDouble(),
-      note: note.trim(),
-      createdAt: DateTime.now(),
-    ));
+  Future<void> addBookmark(
+    Chapter chapter,
+    double offset, {
+    String note = '',
+  }) async {
+    await _db.addBookmark(
+      Bookmark(
+        novelId: chapter.novelId,
+        chapterId: chapter.id,
+        scrollOffset: offset.clamp(0, 1).toDouble(),
+        note: note.trim(),
+        createdAt: DateTime.now(),
+      ),
+    );
     await loadBookmarks(chapter.novelId);
   }
 
@@ -335,10 +350,14 @@ class LibraryProvider extends ChangeNotifier {
     int novelId = 0,
   }) async {
     if (_recordedChapterSessions.contains(chapterId)) return;
-    _recordedChapterSessions.add(chapterId);
-    final words = content.trim().isEmpty
+    // Bỏ thẻ ảnh để không đếm base64/đường dẫn ảnh thành "từ" của truyện tranh.
+    final readable = content.replaceAll(
+      RegExp(r'\[img\].*?\[/img\]', dotAll: true),
+      ' ',
+    );
+    final words = readable.trim().isEmpty
         ? 0
-        : content.trim().split(RegExp(r'\s+')).length;
+        : readable.trim().split(RegExp(r'\s+')).length;
     final minutes = (words / 220).ceil().clamp(1, 60);
     await _db.recordReadingSession(
       words: words,
@@ -347,6 +366,9 @@ class LibraryProvider extends ChangeNotifier {
       novelId: novelId,
       chapterId: chapterId,
     );
+    // Chỉ đánh dấu sau khi đã ghi local/cloud thành công để có thể thử lại
+    // nếu ghi phiên đọc gặp lỗi tạm thời.
+    _recordedChapterSessions.add(chapterId);
     _sessions = await _db.getReadingSessions();
     notifyListeners();
   }

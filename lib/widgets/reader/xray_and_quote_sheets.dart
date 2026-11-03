@@ -46,8 +46,9 @@ class ReaderXraySheet extends StatelessWidget {
     final topEntities = counts.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     final entities = topEntities.take(8).toList();
-    final wordCount =
-        content.isEmpty ? 0 : content.split(RegExp(r'\s+')).length;
+    final wordCount = content.isEmpty
+        ? 0
+        : content.split(RegExp(r'\s+')).length;
 
     return SafeArea(
       child: Padding(
@@ -63,9 +64,8 @@ class ReaderXraySheet extends StatelessWidget {
                 Expanded(
                   child: Text(
                     AppStrings.xrayTitle,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                    style: Theme.of(context).textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.bold),
                   ),
                 ),
               ],
@@ -83,9 +83,8 @@ class ReaderXraySheet extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               'Thống kê chương đang đọc (${chapter?.title ?? ""}): $wordCount từ • ước tính ${(wordCount / 220).ceil()} phút đọc',
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: scheme.primary,
-                  ),
+              style: Theme.of(context).textTheme.labelMedium
+                  ?.copyWith(color: scheme.primary),
             ),
             const SizedBox(height: 12),
             Text(
@@ -120,9 +119,8 @@ class ReaderXraySheet extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               AppStrings.keyboardShortcutsHint,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: scheme.onSurfaceVariant),
             ),
           ],
         ),
@@ -163,10 +161,7 @@ class ReaderQuoteSheet extends StatelessWidget {
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [
-                    scheme.primaryContainer,
-                    scheme.secondaryContainer,
-                  ],
+                  colors: [scheme.primaryContainer, scheme.secondaryContainer],
                 ),
               ),
               child: Column(
@@ -180,17 +175,14 @@ class ReaderQuoteSheet extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     paragraph,
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          fontStyle: FontStyle.italic,
-                          height: 1.5,
-                        ),
+                    style: Theme.of(context).textTheme.bodyLarge
+                        ?.copyWith(fontStyle: FontStyle.italic, height: 1.5),
                   ),
                   const SizedBox(height: 14),
                   Text(
                     '— ${novel.title} (${novel.author})',
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                    style: Theme.of(context).textTheme.labelLarge
+                        ?.copyWith(fontWeight: FontWeight.bold),
                   ),
                   Text(
                     chapter.title,
@@ -230,11 +222,21 @@ class ReaderQuoteSheet extends StatelessWidget {
                     onPressed: () async {
                       final messenger = ScaffoldMessenger.of(context);
                       final nav = Navigator.of(context);
-                      await onSaveQuote();
-                      nav.pop();
-                      messenger.showSnackBar(
-                        const SnackBar(content: Text(AppStrings.quoteSaved)),
-                      );
+                      try {
+                        await onSaveQuote();
+                        nav.pop();
+                        messenger.showSnackBar(
+                          const SnackBar(content: Text(AppStrings.quoteSaved)),
+                        );
+                      } catch (_) {
+                        messenger.showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Không lưu được trích dẫn. Hãy kiểm tra kết nối.',
+                            ),
+                          ),
+                        );
+                      }
                     },
                   ),
                 ),

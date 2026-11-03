@@ -46,62 +46,62 @@ class V2DatabaseStore {
     // 1. Bổ sung cột mới cho bảng novels, chapters, comments nếu chưa có
     await _addColumnIfMissing(
       db,
-      'novels',
+      'truyen',
       'moderation_status',
       "TEXT NOT NULL DEFAULT 'approved'",
     );
-    await _addColumnIfMissing(db, 'novels', 'rejection_reason', 'TEXT');
+    await _addColumnIfMissing(db, 'truyen', 'rejection_reason', 'TEXT');
     await _addColumnIfMissing(
       db,
-      'novels',
+      'truyen',
       'owner_id',
       'INTEGER NOT NULL DEFAULT 1',
     );
     await _addColumnIfMissing(
       db,
-      'novels',
+      'truyen',
       'is_featured',
       'INTEGER NOT NULL DEFAULT 0',
     );
     await _addColumnIfMissing(
       db,
-      'novels',
+      'truyen',
       'featured_order',
       'INTEGER NOT NULL DEFAULT 0',
     );
-    await _addColumnIfMissing(db, 'novels', 'deleted_at', 'INTEGER');
+    await _addColumnIfMissing(db, 'truyen', 'deleted_at', 'INTEGER');
 
-    await _addColumnIfMissing(db, 'chapters', 'publish_at', 'INTEGER');
+    await _addColumnIfMissing(db, 'chuong', 'publish_at', 'INTEGER');
 
     await _addColumnIfMissing(
       db,
-      'comments',
+      'binh_luan',
       'user_id',
       'INTEGER NOT NULL DEFAULT 0',
     );
     await _addColumnIfMissing(
       db,
-      'comments',
+      'binh_luan',
       'chapter_index',
       'INTEGER NOT NULL DEFAULT 1',
     );
     await _addColumnIfMissing(
       db,
-      'comments',
+      'binh_luan',
       'is_hidden',
       'INTEGER NOT NULL DEFAULT 0',
     );
     await _addColumnIfMissing(
       db,
-      'comments',
+      'binh_luan',
       'likes',
       'INTEGER NOT NULL DEFAULT 0',
     );
-    await _addColumnIfMissing(db, 'comments', 'parent_id', 'INTEGER');
+    await _addColumnIfMissing(db, 'binh_luan', 'parent_id', 'INTEGER');
 
     // 2. Tạo các bảng mới của phiên bản v2
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS users (
+      CREATE TABLE IF NOT EXISTS nguoi_dung (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         email TEXT NOT NULL UNIQUE,
         display_name TEXT NOT NULL,
@@ -123,7 +123,7 @@ class V2DatabaseStore {
     ''');
 
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS reading_session_logs (
+      CREATE TABLE IF NOT EXISTS nhat_ky_phien_doc (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL DEFAULT 0,
         novel_id INTEGER NOT NULL DEFAULT 0,
@@ -136,7 +136,7 @@ class V2DatabaseStore {
     ''');
 
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS achievements (
+      CREATE TABLE IF NOT EXISTS thanh_tuu (
         code TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         description TEXT NOT NULL,
@@ -146,7 +146,7 @@ class V2DatabaseStore {
     ''');
 
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS user_achievements (
+      CREATE TABLE IF NOT EXISTS thanh_tuu_nguoi_dung (
         user_id INTEGER NOT NULL,
         code TEXT NOT NULL,
         unlocked_at INTEGER NOT NULL,
@@ -155,7 +155,7 @@ class V2DatabaseStore {
     ''');
 
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS quests (
+      CREATE TABLE IF NOT EXISTS nhiem_vu (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         type TEXT NOT NULL,
         title TEXT NOT NULL,
@@ -169,7 +169,7 @@ class V2DatabaseStore {
     ''');
 
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS user_quests (
+      CREATE TABLE IF NOT EXISTS nhiem_vu_nguoi_dung (
         user_id INTEGER NOT NULL,
         quest_id INTEGER NOT NULL,
         progress INTEGER NOT NULL DEFAULT 0,
@@ -179,7 +179,7 @@ class V2DatabaseStore {
     ''');
 
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS reports (
+      CREATE TABLE IF NOT EXISTS bao_cao (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         reporter_id INTEGER NOT NULL,
         reporter_name TEXT NOT NULL DEFAULT 'Độc giả',
@@ -195,7 +195,7 @@ class V2DatabaseStore {
     ''');
 
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS announcements (
+      CREATE TABLE IF NOT EXISTS thong_bao_chung (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
         body TEXT NOT NULL,
@@ -207,7 +207,7 @@ class V2DatabaseStore {
     ''');
 
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS notifications (
+      CREATE TABLE IF NOT EXISTS thong_bao (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
         title TEXT NOT NULL,
@@ -219,7 +219,7 @@ class V2DatabaseStore {
     ''');
 
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS glossary_terms (
+      CREATE TABLE IF NOT EXISTS thuat_ngu (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         novel_id INTEGER NOT NULL,
         term TEXT NOT NULL,
@@ -229,7 +229,7 @@ class V2DatabaseStore {
     ''');
 
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS chapter_summaries (
+      CREATE TABLE IF NOT EXISTS tom_tat_chuong (
         chapter_id INTEGER PRIMARY KEY,
         novel_id INTEGER NOT NULL,
         chapter_index INTEGER NOT NULL DEFAULT 1,
@@ -238,7 +238,7 @@ class V2DatabaseStore {
     ''');
 
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS paragraph_reactions (
+      CREATE TABLE IF NOT EXISTS cam_xuc_doan (
         user_id INTEGER NOT NULL,
         chapter_id INTEGER NOT NULL,
         paragraph_index INTEGER NOT NULL,
@@ -248,7 +248,7 @@ class V2DatabaseStore {
     ''');
 
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS time_capsules (
+      CREATE TABLE IF NOT EXISTS hop_thoi_gian (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
         novel_id INTEGER NOT NULL,
@@ -260,7 +260,7 @@ class V2DatabaseStore {
     ''');
 
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS novel_requests (
+      CREATE TABLE IF NOT EXISTS yeu_cau_truyen (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
         user_name TEXT NOT NULL,
@@ -273,20 +273,20 @@ class V2DatabaseStore {
     ''');
 
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS character_graphs (
+      CREATE TABLE IF NOT EXISTS so_do_nhan_vat (
         novel_id INTEGER PRIMARY KEY,
         graph_json TEXT NOT NULL
       )
     ''');
 
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS banned_words (
+      CREATE TABLE IF NOT EXISTS tu_cam (
         word TEXT PRIMARY KEY
       )
     ''');
 
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS audit_logs (
+      CREATE TABLE IF NOT EXISTS nhat_ky_quan_tri (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         admin_id INTEGER NOT NULL,
         admin_name TEXT NOT NULL DEFAULT 'Admin',
@@ -298,7 +298,7 @@ class V2DatabaseStore {
     ''');
 
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS app_config (
+      CREATE TABLE IF NOT EXISTS cau_hinh_ung_dung (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
       )
@@ -325,11 +325,13 @@ class V2DatabaseStore {
   static Future<List<Achievement>> getAllAchievements(Database db) async {
     if (_isSupabaseReady) {
       try {
-        final res = await Supabase.instance.client.from('achievements').select();
-        return (res as List).map((r) => Achievement.fromMap(r as Map<String, dynamic>)).toList();
+        final res = await Supabase.instance.client.from('thanh_tuu').select();
+        return (res as List)
+            .map((r) => Achievement.fromMap(r as Map<String, dynamic>))
+            .toList();
       } catch (_) {}
     }
-    final rows = await db.query('achievements');
+    final rows = await db.query('thanh_tuu');
     return rows.map(Achievement.fromMap).toList();
   }
 
@@ -340,15 +342,17 @@ class V2DatabaseStore {
     if (_isSupabaseReady) {
       try {
         final res = await Supabase.instance.client
-            .from('user_achievements')
+            .from('thanh_tuu_nguoi_dung')
             .select()
             .eq('user_id', userId)
             .order('unlocked_at', ascending: false);
-        return (res as List).map((r) => UserAchievement.fromMap(r as Map<String, dynamic>)).toList();
+        return (res as List)
+            .map((r) => UserAchievement.fromMap(r as Map<String, dynamic>))
+            .toList();
       } catch (_) {}
     }
     final rows = await db.query(
-      'user_achievements',
+      'thanh_tuu_nguoi_dung',
       where: 'user_id = ?',
       whereArgs: [userId],
       orderBy: 'unlocked_at DESC',
@@ -365,13 +369,13 @@ class V2DatabaseStore {
       try {
         final client = Supabase.instance.client;
         final existing = await client
-            .from('user_achievements')
+            .from('thanh_tuu_nguoi_dung')
             .select()
             .eq('user_id', userId)
             .eq('code', code)
             .maybeSingle();
         if (existing != null) return false;
-        await client.from('user_achievements').insert({
+        await client.from('thanh_tuu_nguoi_dung').insert({
           'user_id': userId,
           'code': code,
           'unlocked_at': DateTime.now().millisecondsSinceEpoch,
@@ -380,12 +384,12 @@ class V2DatabaseStore {
       } catch (_) {}
     }
     final existing = await db.query(
-      'user_achievements',
+      'thanh_tuu_nguoi_dung',
       where: 'user_id = ? AND code = ?',
       whereArgs: [userId, code],
     );
     if (existing.isNotEmpty) return false;
-    await db.insert('user_achievements', {
+    await db.insert('thanh_tuu_nguoi_dung', {
       'user_id': userId,
       'code': code,
       'unlocked_at': DateTime.now().millisecondsSinceEpoch,
@@ -394,35 +398,49 @@ class V2DatabaseStore {
   }
 
   static Future<List<Quest>> getActiveQuests(Database db) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
     if (_isSupabaseReady) {
       try {
         final res = await Supabase.instance.client
-            .from('quests')
+            .from('nhiem_vu')
             .select()
             .eq('is_active', 1)
+            .lte('starts_at', now)
+            .gte('ends_at', now)
             .order('id', ascending: true);
-        return (res as List).map((r) => Quest.fromMap(r as Map<String, dynamic>)).toList();
+        return (res as List)
+            .map((r) => Quest.fromMap(r as Map<String, dynamic>))
+            .toList();
       } catch (_) {}
     }
     final rows = await db.query(
-      'quests',
+      'nhiem_vu',
       where: 'is_active = 1',
       orderBy: 'id ASC',
     );
-    return rows.map(Quest.fromMap).toList();
+    return rows
+        .map(Quest.fromMap)
+        .where(
+          (quest) =>
+              quest.startsAt.millisecondsSinceEpoch <= now &&
+              quest.endsAt.millisecondsSinceEpoch >= now,
+        )
+        .toList();
   }
 
   static Future<List<Quest>> getAllQuests(Database db) async {
     if (_isSupabaseReady) {
       try {
         final res = await Supabase.instance.client
-            .from('quests')
+            .from('nhiem_vu')
             .select()
             .order('id', ascending: false);
-        return (res as List).map((r) => Quest.fromMap(r as Map<String, dynamic>)).toList();
+        return (res as List)
+            .map((r) => Quest.fromMap(r as Map<String, dynamic>))
+            .toList();
       } catch (_) {}
     }
-    final rows = await db.query('quests', orderBy: 'id DESC');
+    final rows = await db.query('nhiem_vu', orderBy: 'id DESC');
     return rows.map(Quest.fromMap).toList();
   }
 
@@ -433,15 +451,17 @@ class V2DatabaseStore {
     if (_isSupabaseReady) {
       try {
         final res = await Supabase.instance.client
-            .from('user_quests')
+            .from('nhiem_vu_nguoi_dung')
             .select()
             .eq('user_id', userId);
-        final list = (res as List).map((r) => UserQuest.fromMap(r as Map<String, dynamic>));
+        final list = (res as List).map(
+          (r) => UserQuest.fromMap(r as Map<String, dynamic>),
+        );
         return {for (final uq in list) uq.questId: uq};
       } catch (_) {}
     }
     final rows = await db.query(
-      'user_quests',
+      'nhiem_vu_nguoi_dung',
       where: 'user_id = ?',
       whereArgs: [userId],
     );
@@ -454,34 +474,65 @@ class V2DatabaseStore {
     required String userId,
     required String goalType,
     required int delta,
+    Set<int>? questIds,
   }) async {
     if (userId.isEmpty || delta <= 0) return;
+    if (_isSupabaseReady) {
+      // Cloud quest progress is updated by trusted database events: reading
+      // session RPCs and the comment-insert trigger. Never expose a generic
+      // client-controlled progress increment to authenticated users.
+    }
     final quests = await getActiveQuests(db);
-    for (final q in quests.where((e) => e.goalType == goalType)) {
+    for (final q in quests.where(
+      (e) =>
+          e.goalType == goalType &&
+          e.startsAt.millisecondsSinceEpoch <=
+              DateTime.now().millisecondsSinceEpoch &&
+          e.endsAt.millisecondsSinceEpoch >=
+              DateTime.now().millisecondsSinceEpoch &&
+          (questIds == null || questIds.contains(e.id)),
+    )) {
       final rows = await db.query(
-        'user_quests',
+        'nhiem_vu_nguoi_dung',
         where: 'user_id = ? AND quest_id = ?',
         whereArgs: [userId, q.id],
       );
-      if (rows.isEmpty) {
-        await db.insert('user_quests', {
-          'user_id': userId,
-          'quest_id': q.id,
-          'progress': delta,
-          'claimed': 0,
-        });
+      final current = rows.isEmpty ? null : UserQuest.fromMap(rows.first);
+      if (current?.claimed ?? false) continue;
+      final newProgress = ((current?.progress ?? 0) + delta).clamp(
+        0,
+        q.goalValue,
+      );
+      final progressMap = {
+        'user_id': userId,
+        'quest_id': q.id,
+        'progress': newProgress,
+        'claimed': current?.claimed == true ? 1 : 0,
+      };
+      if (current == null) {
+        await db.insert('nhiem_vu_nguoi_dung', progressMap);
       } else {
-        final current = UserQuest.fromMap(rows.first);
-        if (!current.claimed) {
-          await db.update(
-            'user_quests',
-            {'progress': current.progress + delta},
-            where: 'user_id = ? AND quest_id = ?',
-            whereArgs: [userId, q.id],
-          );
-        }
+        await db.update(
+          'nhiem_vu_nguoi_dung',
+          {'progress': newProgress},
+          where: 'user_id = ? AND quest_id = ?',
+          whereArgs: [userId, q.id],
+        );
       }
     }
+  }
+
+  static Future<void> cacheQuestClaim(
+    Database db, {
+    required String userId,
+    required int questId,
+  }) async {
+    await db.update(
+      'nhiem_vu_nguoi_dung',
+      {'claimed': 1},
+      where: 'user_id = ? AND quest_id = ?',
+      whereArgs: [userId, questId],
+    );
   }
 
   static Future<List<GlossaryTerm>> getGlossaryForNovel(
@@ -496,7 +547,7 @@ class V2DatabaseStore {
         ? [novelId]
         : [novelId, maxChapterIndex];
     final rows = await db.query(
-      'glossary_terms',
+      'thuat_ngu',
       where: where,
       whereArgs: args,
       orderBy: 'first_chapter_index ASC, id ASC',
@@ -510,7 +561,7 @@ class V2DatabaseStore {
     int maxChapterIndex,
   ) async {
     final rows = await db.query(
-      'chapter_summaries',
+      'tom_tat_chuong',
       where: 'novel_id = ? AND chapter_index <= ?',
       whereArgs: [novelId, maxChapterIndex],
       orderBy: 'chapter_index DESC',
@@ -523,11 +574,28 @@ class V2DatabaseStore {
     Database db,
     int chapterId,
   ) async {
-    final rows = await db.query(
-      'paragraph_reactions',
-      where: 'chapter_id = ?',
-      whereArgs: [chapterId],
-    );
+    List<Map<String, dynamic>> rows;
+    if (_isSupabaseReady) {
+      try {
+        final response = await Supabase.instance.client
+            .from('cam_xuc_doan')
+            .select()
+            .eq('chapter_id', chapterId);
+        rows = (response as List).cast<Map<String, dynamic>>();
+      } catch (_) {
+        rows = await db.query(
+          'cam_xuc_doan',
+          where: 'chapter_id = ?',
+          whereArgs: [chapterId],
+        );
+      }
+    } else {
+      rows = await db.query(
+        'cam_xuc_doan',
+        where: 'chapter_id = ?',
+        whereArgs: [chapterId],
+      );
+    }
     final result = <int, Map<String, int>>{};
     for (final r in rows) {
       final pIdx = (r['paragraph_index'] as int?) ?? 0;
@@ -542,9 +610,102 @@ class V2DatabaseStore {
     Database db,
     ParagraphReaction reaction,
   ) async {
+    if (_isSupabaseReady && reaction.userId.isNotEmpty) {
+      try {
+        await Supabase.instance.client
+            .from('cam_xuc_doan')
+            .upsert(
+              reaction.toMap(),
+              onConflict: 'user_id,chapter_id,paragraph_index',
+            );
+      } catch (_) {}
+    }
     await db.insert(
-      'paragraph_reactions',
+      'cam_xuc_doan',
       reaction.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  static Future<List<TimeCapsuleNote>> getTimeCapsules(
+    Database db, {
+    required int chapterId,
+    required String userId,
+  }) async {
+    if (_isSupabaseReady && userId.isNotEmpty) {
+      try {
+        final rows = await Supabase.instance.client
+            .from('hop_thoi_gian')
+            .select()
+            .eq('user_id', userId)
+            .eq('chapter_id', chapterId)
+            .order('created_at', ascending: false);
+        return (rows as List)
+            .map((row) => TimeCapsuleNote.fromMap(row as Map<String, dynamic>))
+            .toList();
+      } catch (_) {}
+    }
+    final rows = await db.query(
+      'hop_thoi_gian',
+      where: 'user_id = ? AND chapter_id = ?',
+      whereArgs: [userId, chapterId],
+      orderBy: 'created_at DESC',
+    );
+    return rows.map(TimeCapsuleNote.fromMap).toList();
+  }
+
+  static Future<void> createTimeCapsule(
+    Database db,
+    TimeCapsuleNote note,
+  ) async {
+    if (_isSupabaseReady && note.userId.isNotEmpty) {
+      try {
+        final map = note.toMap()..remove('id');
+        await Supabase.instance.client.from('hop_thoi_gian').insert(map);
+        await db.insert('hop_thoi_gian', map);
+        return;
+      } catch (_) {}
+    }
+    await db.insert('hop_thoi_gian', note.toMap());
+  }
+
+  static Future<String?> getCharacterGraph(Database db, int novelId) async {
+    if (_isSupabaseReady) {
+      try {
+        final row = await Supabase.instance.client
+            .from('so_do_nhan_vat')
+            .select('graph_json')
+            .eq('novel_id', novelId)
+            .maybeSingle();
+        if (row != null) return row['graph_json'] as String?;
+      } catch (_) {}
+    }
+    final rows = await db.query(
+      'so_do_nhan_vat',
+      columns: ['graph_json'],
+      where: 'novel_id = ?',
+      whereArgs: [novelId],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first['graph_json'] as String?;
+  }
+
+  static Future<void> saveCharacterGraph(
+    Database db, {
+    required int novelId,
+    required String graphJson,
+  }) async {
+    final map = {'novel_id': novelId, 'graph_json': graphJson};
+    if (_isSupabaseReady) {
+      try {
+        await Supabase.instance.client
+            .from('so_do_nhan_vat')
+            .upsert(map, onConflict: 'novel_id');
+      } catch (_) {}
+    }
+    await db.insert(
+      'so_do_nhan_vat',
+      map,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
@@ -556,15 +717,17 @@ class V2DatabaseStore {
     if (_isSupabaseReady) {
       try {
         final res = await Supabase.instance.client
-            .from('notifications')
+            .from('thong_bao')
             .select()
-            .or('user_id.eq.$userId,user_id.eq.')
+            .eq('user_id', userId)
             .order('created_at', ascending: false);
-        return (res as List).map((r) => NotificationItem.fromMap(r as Map<String, dynamic>)).toList();
+        return (res as List)
+            .map((r) => NotificationItem.fromMap(r as Map<String, dynamic>))
+            .toList();
       } catch (_) {}
     }
     final rows = await db.query(
-      'notifications',
+      'thong_bao',
       where: 'user_id = ? OR user_id = ?',
       whereArgs: [userId, ''],
       orderBy: 'created_at DESC',
@@ -576,28 +739,96 @@ class V2DatabaseStore {
     Database db,
     NotificationItem item,
   ) async {
-    if (_isSupabaseReady) {
+    if (_isSupabaseReady && item.userId.isNotEmpty) {
       try {
-        await Supabase.instance.client.from('notifications').insert(item.toMap());
+        await Supabase.instance.client.from('thong_bao').insert(item.toMap());
         return;
       } catch (_) {}
     }
-    await db.insert('notifications', item.toMap());
+    await db.insert('thong_bao', item.toMap());
+  }
+
+  static Future<void> markNotificationRead(
+    Database db, {
+    required int notificationId,
+    required String userId,
+  }) async {
+    if (_isSupabaseReady && userId.isNotEmpty) {
+      try {
+        await Supabase.instance.client
+            .from('thong_bao')
+            .update({'is_read': 1})
+            .eq('id', notificationId)
+            .eq('user_id', userId);
+      } catch (_) {}
+    }
+    await db.update(
+      'thong_bao',
+      {'is_read': 1},
+      where: 'id = ?',
+      whereArgs: [notificationId],
+    );
+  }
+
+  static Future<void> markAllNotificationsRead(
+    Database db, {
+    required String userId,
+  }) async {
+    if (_isSupabaseReady && userId.isNotEmpty) {
+      try {
+        await Supabase.instance.client
+            .from('thong_bao')
+            .update({'is_read': 1})
+            .eq('user_id', userId);
+      } catch (_) {}
+    }
+    await db.update(
+      'thong_bao',
+      {'is_read': 1},
+      where: 'user_id = ? OR user_id = ?',
+      whereArgs: [userId, ''],
+    );
+  }
+
+  static Future<void> createAnnouncement(Database db, Announcement item) async {
+    if (_isSupabaseReady) {
+      try {
+        await Supabase.instance.client
+            .from('thong_bao_chung')
+            .insert(item.toMap());
+        return;
+      } catch (_) {}
+    }
+    await db.insert('thong_bao_chung', item.toMap());
+  }
+
+  static Future<void> deleteAnnouncement(Database db, int id) async {
+    if (_isSupabaseReady) {
+      try {
+        await Supabase.instance.client
+            .from('thong_bao_chung')
+            .delete()
+            .eq('id', id);
+      } catch (_) {}
+    }
+    await db.delete('thong_bao_chung', where: 'id = ?', whereArgs: [id]);
   }
 
   static Future<List<Announcement>> getAnnouncements(Database db) async {
     if (_isSupabaseReady) {
       try {
         final res = await Supabase.instance.client
-            .from('announcements')
+            .from('thong_bao_chung')
             .select()
             .order('pinned', ascending: false)
             .order('created_at', ascending: false);
-        return (res as List).map((r) => Announcement.fromMap(r as Map<String, dynamic>)).toList();
+        return (res as List)
+            .map((r) => Announcement.fromMap(r as Map<String, dynamic>))
+            .toList();
       } catch (_) {}
     }
     final rows = await db.query(
-      'announcements',
+      'thong_bao_chung',
       orderBy: 'pinned DESC, created_at DESC',
     );
     return rows.map(Announcement.fromMap).toList();
@@ -607,28 +838,147 @@ class V2DatabaseStore {
     if (_isSupabaseReady) {
       try {
         final res = await Supabase.instance.client
-            .from('reports')
+            .from('bao_cao')
             .select()
             .order('created_at', ascending: false);
-        return (res as List).map((r) => ReportItem.fromMap(r as Map<String, dynamic>)).toList();
+        return (res as List)
+            .map((r) => ReportItem.fromMap(r as Map<String, dynamic>))
+            .toList();
       } catch (_) {}
     }
-    final rows = await db.query('reports', orderBy: 'created_at DESC');
+    final rows = await db.query('bao_cao', orderBy: 'created_at DESC');
     return rows.map(ReportItem.fromMap).toList();
+  }
+
+  static Future<int> createReport(Database db, ReportItem report) async {
+    if (_isSupabaseReady) {
+      try {
+        final row = await Supabase.instance.client
+            .from('bao_cao')
+            .insert(report.toMap()..remove('id'))
+            .select('id')
+            .single();
+        return row['id'] as int;
+      } catch (_) {}
+    }
+    return db.insert('bao_cao', report.toMap());
+  }
+
+  static Future<void> updateReport(Database db, ReportItem report) async {
+    if (report.id == null) return;
+    if (_isSupabaseReady) {
+      try {
+        await Supabase.instance.client
+            .from('bao_cao')
+            .update({
+              'status': report.status,
+              'handled_by': report.handledBy,
+              'resolution_note': report.resolutionNote,
+            })
+            .eq('id', report.id!);
+      } catch (_) {}
+    }
+    await db.update(
+      'bao_cao',
+      {
+        'status': report.status,
+        'handled_by': report.handledBy,
+        'resolution_note': report.resolutionNote,
+      },
+      where: 'id = ?',
+      whereArgs: [report.id],
+    );
+  }
+
+  static Future<int> countReportsForTarget(
+    Database db, {
+    required String targetType,
+    required int targetId,
+  }) async {
+    if (_isSupabaseReady) {
+      try {
+        final rows = await Supabase.instance.client
+            .from('bao_cao')
+            .select('id')
+            .eq('target_type', targetType)
+            .eq('target_id', targetId);
+        return (rows as List).length;
+      } catch (_) {}
+    }
+    return Sqflite.firstIntValue(
+          await db.rawQuery(
+            'SELECT COUNT(*) FROM bao_cao WHERE target_type = ? AND target_id = ?',
+            [targetType, targetId],
+          ),
+        ) ??
+        0;
+  }
+
+  static Future<void> hideComment(Database db, int commentId) async {
+    if (_isSupabaseReady) {
+      try {
+        await Supabase.instance.client
+            .from('binh_luan')
+            .update({'is_hidden': 1})
+            .eq('id', commentId);
+      } catch (_) {}
+    }
+    await db.update(
+      'binh_luan',
+      {'is_hidden': 1},
+      where: 'id = ?',
+      whereArgs: [commentId],
+    );
   }
 
   static Future<List<AuditLog>> getAuditLogs(Database db) async {
     if (_isSupabaseReady) {
       try {
         final res = await Supabase.instance.client
-            .from('audit_logs')
+            .from('nhat_ky_quan_tri')
             .select()
             .order('created_at', ascending: false);
-        return (res as List).map((r) => AuditLog.fromMap(r as Map<String, dynamic>)).toList();
+        return (res as List)
+            .map((r) => AuditLog.fromMap(r as Map<String, dynamic>))
+            .toList();
       } catch (_) {}
     }
-    final rows = await db.query('audit_logs', orderBy: 'created_at DESC');
+    final rows = await db.query('nhat_ky_quan_tri', orderBy: 'created_at DESC');
     return rows.map(AuditLog.fromMap).toList();
+  }
+
+  static Future<Map<String, dynamic>?> getAdminDashboardMetrics(
+    int rangeDays,
+  ) async {
+    if (!_isSupabaseReady) return null;
+    try {
+      final result = await Supabase.instance.client.rpc(
+        'admin_dashboard_metrics',
+        params: {'p_days': rangeDays},
+      );
+      if (result is Map<String, dynamic>) return result;
+      if (result is Map) return Map<String, dynamic>.from(result);
+    } catch (_) {}
+    return null;
+  }
+
+  static Future<List<Map<String, dynamic>>?> getAdminNovelChapterReaders(
+    int novelId,
+  ) async {
+    if (!_isSupabaseReady) return null;
+    try {
+      final result = await Supabase.instance.client.rpc(
+        'admin_novel_chapter_readers',
+        params: {'p_novel_id': novelId},
+      );
+      if (result is! List) return null;
+      return result
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+    } catch (_) {
+      return null;
+    }
   }
 
   static Future<void> writeAuditLog(
@@ -648,7 +998,9 @@ class V2DatabaseStore {
           detail: detail,
           createdAt: DateTime.now(),
         );
-        await Supabase.instance.client.from('audit_logs').insert(log.toMap());
+        await Supabase.instance.client
+            .from('nhat_ky_quan_tri')
+            .insert(log.toMap());
         return;
       } catch (_) {}
     }
@@ -660,20 +1012,22 @@ class V2DatabaseStore {
       detail: detail,
       createdAt: DateTime.now(),
     );
-    await db.insert('audit_logs', log.toMap());
+    await db.insert('nhat_ky_quan_tri', log.toMap());
   }
 
   static Future<Map<String, String>> getAppConfig(Database db) async {
     if (_isSupabaseReady) {
       try {
-        final res = await Supabase.instance.client.from('app_config').select();
+        final res = await Supabase.instance.client
+            .from('cau_hinh_ung_dung')
+            .select();
         return {
           for (final r in (res as List))
             (r['key'] as String? ?? ''): (r['value'] as String? ?? ''),
         };
       } catch (_) {}
     }
-    final rows = await db.query('app_config');
+    final rows = await db.query('cau_hinh_ung_dung');
     return {
       for (final r in rows)
         (r['key'] as String? ?? ''): (r['value'] as String? ?? ''),
@@ -687,31 +1041,190 @@ class V2DatabaseStore {
   ) async {
     if (_isSupabaseReady) {
       try {
-        await Supabase.instance.client.from('app_config').upsert({'key': key, 'value': value});
+        await Supabase.instance.client.from('cau_hinh_ung_dung').upsert({
+          'key': key,
+          'value': value,
+        });
         return;
       } catch (_) {}
     }
-    await db.insert(
-      'app_config',
-      {'key': key, 'value': value},
-      conflictAlgorithm: ConflictAlgorithm.replace,
+    await db.insert('cau_hinh_ung_dung', {
+      'key': key,
+      'value': value,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<void> addBannedWord(Database db, String word) async {
+    if (_isSupabaseReady) {
+      try {
+        await Supabase.instance.client
+            .from('tu_cam')
+            .upsert({'word': word}, onConflict: 'word', ignoreDuplicates: true);
+      } catch (_) {}
+    }
+    await db.insert('tu_cam', {
+      'word': word,
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+  }
+
+  static Future<void> removeBannedWord(Database db, String word) async {
+    if (_isSupabaseReady) {
+      try {
+        await Supabase.instance.client.from('tu_cam').delete().eq('word', word);
+      } catch (_) {}
+    }
+    await db.delete('tu_cam', where: 'word = ?', whereArgs: [word]);
+  }
+
+  static Future<int> createQuest(Database db, Quest quest) async {
+    final row = quest.toMap()..remove('id');
+    if (_isSupabaseReady) {
+      try {
+        final inserted = await Supabase.instance.client
+            .from('nhiem_vu')
+            .insert(row)
+            .select('id')
+            .single();
+        final id = inserted['id'] as int;
+        await db.insert('nhiem_vu', {
+          'id': id,
+          ...row,
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
+        return id;
+      } catch (_) {}
+    }
+    return db.insert('nhiem_vu', row);
+  }
+
+  static Future<List<NovelRequestItem>> getNovelRequests(Database db) async {
+    if (_isSupabaseReady) {
+      try {
+        final rows = await Supabase.instance.client
+            .from('yeu_cau_truyen')
+            .select()
+            .order('votes', ascending: false)
+            .order('created_at', ascending: false);
+        return (rows as List)
+            .map((row) => NovelRequestItem.fromMap(row as Map<String, dynamic>))
+            .toList();
+      } catch (_) {}
+    }
+    final rows = await db.query(
+      'yeu_cau_truyen',
+      orderBy: 'votes DESC, created_at DESC',
     );
+    return rows.map(NovelRequestItem.fromMap).toList();
+  }
+
+  static Future<void> _ensureLocalRequestVotes(Database db) => db.execute('''
+    CREATE TABLE IF NOT EXISTS yeu_cau_binh_chon (
+      request_id INTEGER NOT NULL,
+      user_id TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (request_id, user_id)
+    )
+  ''');
+
+  static Future<int> submitNovelRequest(
+    Database db,
+    NovelRequestItem request,
+  ) async {
+    if (_isSupabaseReady) {
+      try {
+        final map = request.toMap()..remove('id');
+        map['votes'] = 0;
+        final row = await Supabase.instance.client
+            .from('yeu_cau_truyen')
+            .insert(map)
+            .select('id')
+            .single();
+        final id = row['id'] as int;
+        var firstVoteRecorded = false;
+        try {
+          await Supabase.instance.client.from('yeu_cau_binh_chon').insert({
+            'request_id': id,
+            'user_id': request.userId,
+            'created_at': request.createdAt.millisecondsSinceEpoch,
+          });
+          firstVoteRecorded = true;
+        } catch (_) {}
+        await db.insert('yeu_cau_truyen', {
+          'id': id,
+          ...map,
+          'votes': firstVoteRecorded ? 1 : 0,
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
+        await _ensureLocalRequestVotes(db);
+        if (firstVoteRecorded) {
+          await db.insert('yeu_cau_binh_chon', {
+            'request_id': id,
+            'user_id': request.userId,
+            'created_at': request.createdAt.millisecondsSinceEpoch,
+          }, conflictAlgorithm: ConflictAlgorithm.ignore);
+        }
+        return id;
+      } catch (_) {}
+    }
+    final id = await db.insert('yeu_cau_truyen', request.toMap());
+    await _ensureLocalRequestVotes(db);
+    await db.insert('yeu_cau_binh_chon', {
+      'request_id': id,
+      'user_id': request.userId,
+      'created_at': request.createdAt.millisecondsSinceEpoch,
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    return id;
+  }
+
+  static Future<bool> voteNovelRequest(
+    Database db, {
+    required int requestId,
+    required String userId,
+  }) async {
+    if (_isSupabaseReady) {
+      try {
+        await Supabase.instance.client.from('yeu_cau_binh_chon').insert({
+          'request_id': requestId,
+          'user_id': userId,
+          'created_at': DateTime.now().millisecondsSinceEpoch,
+        });
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+    await _ensureLocalRequestVotes(db);
+    try {
+      await db.insert('yeu_cau_binh_chon', {
+        'request_id': requestId,
+        'user_id': userId,
+        'created_at': DateTime.now().millisecondsSinceEpoch,
+      });
+      await db.rawUpdate(
+        'UPDATE yeu_cau_truyen SET votes = votes + 1 WHERE id = ?',
+        [requestId],
+      );
+      return true;
+    } on DatabaseException {
+      return false;
+    }
   }
 
   static Future<List<String>> getBannedWords(Database db) async {
     if (_isSupabaseReady) {
       try {
-        final res = await Supabase.instance.client.from('banned_words').select().order('word', ascending: true);
+        final res = await Supabase.instance.client
+            .from('tu_cam')
+            .select()
+            .order('word', ascending: true);
         return (res as List).map((r) => (r['word'] as String?) ?? '').toList();
       } catch (_) {}
     }
-    final rows = await db.query('banned_words', orderBy: 'word ASC');
+    final rows = await db.query('tu_cam', orderBy: 'word ASC');
     return rows.map((r) => (r['word'] as String?) ?? '').toList();
   }
 
   static Future<List<ReadingSession>> getSessionLogs(Database db) async {
     final rows = await db.query(
-      'reading_session_logs',
+      'nhat_ky_phien_doc',
       orderBy: 'started_at DESC',
       limit: 500,
     );

@@ -43,10 +43,7 @@ class _GenreScreenState extends State<GenreScreen> {
             return const LoadingView();
           }
           if (np.genresError != null && np.genreCounts.isEmpty) {
-            return ErrorView(
-              message: np.genresError!,
-              onRetry: np.loadGenres,
-            );
+            return ErrorView(message: np.genresError!, onRetry: np.loadGenres);
           }
           return RefreshIndicator(
             onRefresh: np.loadGenres,
@@ -195,18 +192,12 @@ class _NovelListScreenState extends State<NovelListScreen> {
                 value: NovelSort.rating,
                 child: Text('Đánh giá cao'),
               ),
-              PopupMenuItem(
-                value: NovelSort.title,
-                child: Text('Tên A-Z'),
-              ),
+              PopupMenuItem(value: NovelSort.title, child: Text('Tên A-Z')),
             ],
           ),
         ],
       ),
-      body: PaginatedNovelList(
-        pager: _pager,
-        scrollController: _scrollCtrl,
-      ),
+      body: PaginatedNovelList(pager: _pager, scrollController: _scrollCtrl),
     );
   }
 }
@@ -245,6 +236,21 @@ class PaginatedNovelList extends StatelessWidget {
         separatorBuilder: (_, _) => const SizedBox(height: 10),
         itemBuilder: (context, i) {
           if (i == pager.items.length) {
+            if (pager.error != null) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Column(
+                  children: [
+                    Text('Không tải thêm được truyện: ${pager.error}'),
+                    TextButton.icon(
+                      onPressed: pager.retryLoadMore,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Thử tải lại'),
+                    ),
+                  ],
+                ),
+              );
+            }
             if (pager.isLoadingMore) {
               return const Padding(
                 padding: EdgeInsets.all(16),

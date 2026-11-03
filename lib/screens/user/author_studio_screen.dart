@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../database/app_database.dart';
 import '../../database/supabase_database.dart';
 import '../../models/chapter.dart';
 import '../../models/novel.dart';
@@ -39,6 +38,25 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
   Timer? _autoSaveTimer;
   String _lastSavedLabel = 'Chưa lưu nháp';
   bool _previewMode = false;
+  String? _submissionRequestId;
+
+  String _draftKey(String userId, String field) =>
+      'author_draft_${field}_$userId';
+
+  void _invalidateSubmissionRequest() {
+    final requestId = _submissionRequestId;
+    if (requestId == null) return;
+    _submissionRequestId = null;
+    final userId = context.read<AuthProvider>().currentUser.id;
+    unawaited(() async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(_draftKey(userId, 'request_id'));
+      } catch (error) {
+        debugPrint('Could not invalidate saved author submission key: $error');
+      }
+    }());
+  }
 
   @override
   void initState() {
@@ -64,13 +82,26 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
   Future<void> _loadMyNovelsAndDraft() async {
     final user = context.read<AuthProvider>().currentUser;
     final list = await context.read<AdminNovelProvider>().getAuthorNovels(
-          user.id,
-        );
+      user.id,
+    );
     final prefs = await SharedPreferences.getInstance();
-    final savedDraft = prefs.getString('author_draft_content_${user.id}') ?? '';
+    final savedDraft = prefs.getString(_draftKey(user.id, 'content')) ?? '';
     if (savedDraft.isNotEmpty && _draftContentCtrl.text.isEmpty) {
       _draftContentCtrl.text = savedDraft;
     }
+    if (_titleCtrl.text.isEmpty) {
+      _titleCtrl.text = prefs.getString(_draftKey(user.id, 'title')) ?? '';
+    }
+    if (_descCtrl.text.isEmpty) {
+      _descCtrl.text = prefs.getString(_draftKey(user.id, 'description')) ?? '';
+    }
+    final savedChapterTitle = prefs.getString(
+      _draftKey(user.id, 'chapter_title'),
+    );
+    if (savedChapterTitle != null && savedChapterTitle.isNotEmpty) {
+      _draftChapterTitleCtrl.text = savedChapterTitle;
+    }
+    _submissionRequestId ??= prefs.getString(_draftKey(user.id, 'request_id'));
     if (mounted) {
       setState(() => _myNovels = list);
     }
@@ -80,10 +111,17 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
     if (_draftContentCtrl.text.trim().isEmpty) return;
     final user = context.read<AuthProvider>().currentUser;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      'author_draft_content_${user.id}',
-      _draftContentCtrl.text,
-    );
+    _submissionRequestId ??= SupabaseDatabase.newImportRequestId();
+    await Future.wait([
+      prefs.setString(_draftKey(user.id, 'content'), _draftContentCtrl.text),
+      prefs.setString(_draftKey(user.id, 'title'), _titleCtrl.text),
+      prefs.setString(_draftKey(user.id, 'description'), _descCtrl.text),
+      prefs.setString(
+        _draftKey(user.id, 'chapter_title'),
+        _draftChapterTitleCtrl.text,
+      ),
+      prefs.setString(_draftKey(user.id, 'request_id'), _submissionRequestId!),
+    ]);
     if (mounted) {
       final now = TimeOfDay.now();
       setState(() {
@@ -95,7 +133,10 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
 
   Future<void> _submitForModeration() async {
     final auth = context.read<AuthProvider>();
+    final questProvider = context.read<QuestProvider>();
     final user = auth.currentUser;
+    final requestId = _submissionRequestId ??=
+        SupabaseDatabase.newImportRequestId();
     RoleGuard.requireAuthorOrAdmin(user);
 
     if (_titleCtrl.text.trim().isEmpty ||
@@ -109,6 +150,24 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
     }
 
     try {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await Future.wait([
+          prefs.setString(
+            _draftKey(user.id, 'content'),
+            _draftContentCtrl.text,
+          ),
+          prefs.setString(_draftKey(user.id, 'title'), _titleCtrl.text),
+          prefs.setString(_draftKey(user.id, 'description'), _descCtrl.text),
+          prefs.setString(
+            _draftKey(user.id, 'chapter_title'),
+            _draftChapterTitleCtrl.text,
+          ),
+          prefs.setString(_draftKey(user.id, 'request_id'), requestId),
+        ]);
+      } catch (error) {
+        debugPrint('Could not persist the pending author submission: $error');
+      }
       await SupabaseDatabase.instance.insertCustomNovel(
         title: _titleCtrl.text.trim(),
         author: user.displayName,
@@ -118,39 +177,59 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
         genres: const ['Tiên hiệp', 'Fantasy'],
         chapterTitles: [_draftChapterTitleCtrl.text.trim()],
         chapterContents: [_draftContentCtrl.text.trim()],
+        requestId: requestId,
         moderationStatus: user.isAdmin
             ? ModerationStatus.approved
             : ModerationStatus.pending,
         ownerId: user.id,
       );
-    } catch (_) {
-      // Fallback lưu cục bộ nếu offline
-      await AppDatabase.instance.insertCustomNovel(
-        title: _titleCtrl.text.trim(),
-        author: user.displayName,
-        description: _descCtrl.text.trim(),
-        status: NovelStatus.ongoing,
-        type: NovelType.novel,
-        genres: const ['Tiên hiệp', 'Fantasy'],
-        chapters: [
-          (
-            title: _draftChapterTitleCtrl.text.trim(),
-            content: _draftContentCtrl.text.trim(),
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Chưa gửi được lên Supabase: $error. Nội dung vẫn còn trong biểu mẫu, hãy thử lại khi kết nối ổn định.',
           ),
-        ],
-        moderationStatus: user.isAdmin
-            ? ModerationStatus.approved
-            : ModerationStatus.pending,
-        ownerId: user.id,
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 6),
+        ),
       );
+      return;
     }
 
+    try {
+      await questProvider.unlockBadge(user.id, 'cay_but_tre');
+    } catch (error) {
+      debugPrint(
+        'Could not award author badge after successful submission: $error',
+      );
+    }
     if (!mounted) return;
-    await context.read<QuestProvider>().unlockBadge(user.id, 'cay_but_tre');
     _titleCtrl.clear();
     _descCtrl.clear();
+    _draftChapterTitleCtrl.clear();
     _draftContentCtrl.clear();
-    await _loadMyNovelsAndDraft();
+    _submissionRequestId = null;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await Future.wait([
+        for (final field in [
+          'content',
+          'title',
+          'description',
+          'chapter_title',
+          'request_id',
+        ])
+          prefs.remove(_draftKey(user.id, field)),
+      ]);
+    } catch (error) {
+      debugPrint('Could not clear submitted author draft: $error');
+    }
+    try {
+      await _loadMyNovelsAndDraft();
+    } catch (error) {
+      debugPrint('Could not refresh author novels after submission: $error');
+    }
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -164,10 +243,13 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
   }
 
   Future<void> _checkWithAi() async {
-    if (_titleCtrl.text.trim().isEmpty || _draftContentCtrl.text.trim().isEmpty) {
+    if (_titleCtrl.text.trim().isEmpty ||
+        _draftContentCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Vui lòng nhập Tên truyện và Nội dung chương trước khi kiểm tra AI!'),
+          content: Text(
+            'Vui lòng nhập Tên truyện và Nội dung chương trước khi kiểm tra AI!',
+          ),
         ),
       );
       return;
@@ -235,14 +317,18 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
                   style: TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
-                    color: report.safetyScore >= 85 ? Colors.green : Colors.orange,
+                    color: report.safetyScore >= 85
+                        ? Colors.green
+                        : Colors.orange,
                   ),
                 ),
                 title: Text(
                   report.recommendationLabel,
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
-                subtitle: Text('Điểm an toàn nội dung: ${report.safetyScore}/100'),
+                subtitle: Text(
+                  'Điểm an toàn nội dung: ${report.safetyScore}/100',
+                ),
               ),
             ),
             const SizedBox(height: 12),
@@ -251,9 +337,15 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 2),
                 child: Row(
                   children: [
-                    const Icon(Icons.check_circle, color: Colors.green, size: 16),
+                    const Icon(
+                      Icons.check_circle,
+                      color: Colors.green,
+                      size: 16,
+                    ),
                     const SizedBox(width: 8),
-                    Expanded(child: Text(p, style: const TextStyle(fontSize: 13))),
+                    Expanded(
+                      child: Text(p, style: const TextStyle(fontSize: 13)),
+                    ),
                   ],
                 ),
               ),
@@ -264,12 +356,19 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
                   padding: const EdgeInsets.symmetric(vertical: 2),
                   child: Row(
                     children: [
-                      const Icon(Icons.warning_amber, color: Colors.orange, size: 16),
+                      const Icon(
+                        Icons.warning_amber,
+                        color: Colors.orange,
+                        size: 16,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           w,
-                          style: const TextStyle(fontSize: 13, color: Colors.orange),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Colors.orange,
+                          ),
                         ),
                       ),
                     ],
@@ -295,7 +394,9 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
     final user = context.watch<AuthProvider>().currentUser;
     if (user.isGuest) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Bút Mặc Tiên Sinh • Sáng tác truyện')),
+        appBar: AppBar(
+          title: const Text('Bút Mặc Tiên Sinh • Sáng tác truyện'),
+        ),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(28),
@@ -308,7 +409,11 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
                     color: Colors.amber.withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.history_edu, size: 64, color: Colors.amber),
+                  child: const Icon(
+                    Icons.history_edu,
+                    size: 64,
+                    color: Colors.amber,
+                  ),
                 ),
                 const SizedBox(height: 20),
                 const Text(
@@ -362,10 +467,7 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
           ],
           bottom: const TabBar(
             tabs: [
-              Tab(
-                icon: Icon(Icons.edit_note),
-                text: 'Soạn thảo & Tự lưu nháp',
-              ),
+              Tab(icon: Icon(Icons.edit_note), text: 'Soạn thảo & Tự lưu nháp'),
               Tab(
                 icon: Icon(Icons.analytics_outlined),
                 text: 'Tác phẩm của tôi',
@@ -379,11 +481,13 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 Card(
-                  color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.35),
+                  color: Theme.of(context).colorScheme.primaryContainer
+                      .withValues(alpha: 0.35),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                     side: BorderSide(
-                      color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+                      color: Theme.of(context).colorScheme.primary
+                          .withValues(alpha: 0.3),
                     ),
                   ),
                   child: Padding(
@@ -393,7 +497,8 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
                         Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+                            color: Theme.of(context).colorScheme.primary
+                                .withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Icon(
@@ -409,14 +514,19 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
                             children: [
                               const Text(
                                 'Nạp truyện tự động (File TXT / Folder Manga)',
-                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                'Tự động tách chương từ file .txt hoặc quét folder ảnh truyện tranh manga.',
+                                'Chọn file .txt để tự điền thông tin và tách chương.',
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
                                 ),
                               ),
                             ],
@@ -455,6 +565,7 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
                 const SizedBox(height: 12),
                 TextField(
                   controller: _titleCtrl,
+                  onChanged: (_) => _invalidateSubmissionRequest(),
                   decoration: const InputDecoration(
                     labelText: 'Tên tác phẩm mới',
                     border: OutlineInputBorder(),
@@ -464,6 +575,7 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
                 TextField(
                   controller: _descCtrl,
                   maxLines: 2,
+                  onChanged: (_) => _invalidateSubmissionRequest(),
                   decoration: const InputDecoration(
                     labelText: 'Tóm tắt / Giới thiệu truyện',
                     border: OutlineInputBorder(),
@@ -472,6 +584,7 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
                 const SizedBox(height: 12),
                 TextField(
                   controller: _draftChapterTitleCtrl,
+                  onChanged: (_) => _invalidateSubmissionRequest(),
                   decoration: const InputDecoration(
                     labelText: 'Tiêu đề chương đầu',
                     border: OutlineInputBorder(),
@@ -482,6 +595,7 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
                   children: [
                     OutlinedButton.icon(
                       onPressed: () {
+                        _invalidateSubmissionRequest();
                         _draftContentCtrl.text =
                             '${_draftContentCtrl.text}\n[img]https://picsum.photos/seed/ln/600/400[/img]\n';
                         setState(() {});
@@ -520,10 +634,12 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
                   TextField(
                     controller: _draftContentCtrl,
                     maxLines: 9,
-                    onChanged: (_) => setState(() {}),
+                    onChanged: (_) {
+                      _invalidateSubmissionRequest();
+                      setState(() {});
+                    },
                     decoration: const InputDecoration(
-                      hintText:
-                          'Soạn nội dung chương tại đây (hệ thống tự lưu nháp mỗi 5 giây)...',
+                      hintText: 'Soạn nội dung chương tại đây (hệ thống tự lưu nháp mỗi 5 giây)...',
                       border: OutlineInputBorder(),
                     ),
                   ),

@@ -3,17 +3,17 @@
 -- =============================================================================
 
 -- 1. TÀI KHOẢN MẪU (Admin, Author, Reader)
-INSERT INTO public.users (id, email, password_hash, salt, display_name, avatar, avatar_frame, role, is_author, status, linh_thach, streak, has_streak_shield, pinned_achievements, unlocked_items, secret_question, secret_answer_hash, must_change_password, last_active_at, created_at)
+INSERT INTO public.nguoi_dung (id, email, password_hash, salt, display_name, avatar, avatar_frame, role, is_author, status, linh_thach, streak, has_streak_shield, pinned_achievements, unlocked_items, secret_question, secret_answer_hash, must_change_password, last_active_at, created_at)
 VALUES
 (1, 'admin@novelreader.local', '42c2a0d1656bc6936ee22ecbca81313426e6423971c69c6fcfa0a066b26ecf17', 'nr_salt_admin', 'Quản Trị Viên Tối Cao', '👑', 'gold', 'admin', 1, 'active', 9999, 15, 1, 'mot_sach,kien_tri_30,doc_gia_toan_nang', 'default,gold,jade,neon,sepia_pro', 'Thể loại truyện yêu thích của bạn là gì?', '', 1, 1793630000000, 1788440000000),
 (2, 'author@novelreader.local', 'bfca33cce7a08fb92795cf643f80c65aa1b16259fba75490fe4bcbcfa5d070b4', 'nr_salt_author', 'Bút Mặc Tiên Sinh', '🪶', 'jade', 'user', 1, 'active', 450, 7, 0, 'cay_but_tre,khoi_dau', 'default,jade', 'Thể loại truyện yêu thích của bạn là gì?', '', 0, 1793630000000, 1791040000000),
 (3, 'user@novelreader.local', '4c84a51ebaf569503ea29e7978297b69c73d577002ca658510cf2e252654d3d8', 'nr_salt_user', 'Bảo Ngọc Độc Giả', '🦊', 'default', 'user', 0, 'active', 220, 5, 0, 'khoi_dau,lu_khach', 'default', 'Thể loại truyện yêu thích của bạn là gì?', '', 0, 1793630000000, 1792420000000)
 ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email;
-SELECT setval('public.users_id_seq', (SELECT MAX(id) FROM public.users));
+SELECT setval('public.nguoi_dung_id_seq', (SELECT MAX(id) FROM public.nguoi_dung));
 
 
 -- 2. 20 HUY HIỆU THÀNH TỰU MẶC ĐỊNH
-INSERT INTO public.achievements (code, name, description, icon, rule_json) VALUES
+INSERT INTO public.thanh_tuu (code, name, description, icon, rule_json) VALUES
 ('khoi_dau', 'Khởi Đầu Hành Trình', 'Hoàn thành chương truyện đầu tiên.', '🌱', '{"type":"chapters","count":1}'),
 ('cu_dem', 'Cú Đêm', 'Đọc truyện sau 0 giờ đêm đủ 5 lần.', '🦉', '{"type":"night_reads","count":5}'),
 ('mot_sach', 'Mọt Sách Chính Hiệu', 'Đọc tổng cộng 100 chương truyện.', '📚', '{"type":"chapters","count":100}'),
@@ -37,7 +37,7 @@ INSERT INTO public.achievements (code, name, description, icon, rule_json) VALUE
 ON CONFLICT (code) DO NOTHING;
 
 -- 3. NHIỆM VỤ MẪU
-INSERT INTO public.quests (id, type, title, goal_type, goal_value, reward, starts_at, ends_at, is_active)
+INSERT INTO public.nhiem_vu (id, type, title, goal_type, goal_value, reward, starts_at, ends_at, is_active)
 VALUES
 (1, 'daily', 'Đọc truyện 15 phút mỗi ngày', 'read_minutes', 15, 25, 1793600000000, 1825000000000, 1),
 (2, 'daily', 'Hoàn thành 2 chương truyện bất kỳ', 'read_chapters', 2, 30, 1793600000000, 1825000000000, 1),
@@ -46,10 +46,10 @@ VALUES
 (5, 'weekly', 'Hoàn thành trọn vẹn 1 bộ truyện', 'finish_novel', 1, 150, 1793600000000, 1825000000000, 1),
 (6, 'event', 'Sự kiện Tuần Lễ Trinh Thám & Kỳ Ảo: Đọc 3 chương', 'read_chapters', 3, 120, 1793600000000, 1800000000000, 1)
 ON CONFLICT (id) DO NOTHING;
-SELECT setval('public.quests_id_seq', (SELECT MAX(id) FROM public.quests));
+SELECT setval('public.nhiem_vu_id_seq', (SELECT MAX(id) FROM public.nhiem_vu));
 
 -- 4. CẤU HÌNH HỆ THỐNG VÀ TỪ KHÓA BỊ CẤM
-INSERT INTO public.app_config (key, value) VALUES
+INSERT INTO public.cau_hinh_ung_dung (key, value) VALUES
 ('maintenance_mode', 'false'),
 ('maintenance_message', 'Hệ thống đang bảo trì nâng cấp máy chủ định kỳ. Vui lòng quay lại sau ít phút!'),
 ('feature_tts', 'true'),
@@ -58,7 +58,7 @@ INSERT INTO public.app_config (key, value) VALUES
 ('max_offline_chapters', '200')
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
 
-INSERT INTO public.banned_words (word) VALUES
+INSERT INTO public.tu_cam (word) VALUES
 ('lừa đảo'),
 ('spam_link'),
 ('cá độ'),
@@ -66,16 +66,16 @@ INSERT INTO public.banned_words (word) VALUES
 ON CONFLICT (word) DO NOTHING;
 
 -- 5. THUẬT NGỮ VÀ TÓM TẮT CHƯƠNG MẪU
-INSERT INTO public.glossary_terms (id, novel_id, term, meaning, first_chapter_index) VALUES
+INSERT INTO public.thuat_ngu (id, novel_id, term, meaning, first_chapter_index) VALUES
 (1, 1, 'Linh khí', 'Năng lượng tinh thuần của trời đất mà tu sĩ hấp thu để rèn luyện kinh mạch và đột phá cảnh giới.', 1),
 (2, 1, 'Trúc Cơ', 'Cảnh giới thứ hai trên con đường tu tiên, đặt nền móng vững chắc cho đạo cơ trước khi kết Kim Đan.', 1),
 (3, 1, 'Kim Đan', 'Cảnh giới đại năng khi linh lực ngưng tụ thành viên đan vàng rực trong đan điền, thọ nguyên tăng vọt.', 2),
 (4, 2, 'Ma pháp trận', 'Vòng tròn cổ ngữ khắc họa dòng chảy mana để triệu hồi hoặc kích hoạt phép thuật cấp cao.', 1),
 (5, 3, 'Hồ sơ mật', 'Tập tài liệu điều tra chưa từng công bố của thanh tra về chuỗi án mạng liên hoàn.', 1)
 ON CONFLICT (id) DO NOTHING;
-SELECT setval('public.glossary_terms_id_seq', (SELECT MAX(id) FROM public.glossary_terms));
+SELECT setval('public.thuat_ngu_id_seq', (SELECT MAX(id) FROM public.thuat_ngu));
 
-INSERT INTO public.chapter_summaries (chapter_id, novel_id, chapter_index, summary) VALUES
+INSERT INTO public.tom_tat_chuong (chapter_id, novel_id, chapter_index, summary) VALUES
 (10001, 1, 1, 'Nhân vật chính tình cờ phát hiện cổ vật ẩn chứa truyền thừa tu tiên giữa đêm mưa bão.'),
 (10002, 1, 2, 'Bước đầu cảm ứng linh khí, vượt qua khảo nghiệm nhập môn và đối mặt kẻ thù đầu tiên.'),
 (20001, 2, 1, 'Chuyển sinh sang thế giới kiếm và ma thuật, thức tỉnh kỹ năng thẩm định hiếm có.')

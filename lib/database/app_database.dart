@@ -33,8 +33,9 @@ class AppDatabase {
     this.factory,
     this.path,
     Future<String> Function()? sampleJsonLoader,
-  }) : _sampleJsonLoader = sampleJsonLoader ??
-            (() => rootBundle.loadString(AppInfo.sampleDataAsset));
+  }) : _sampleJsonLoader =
+           sampleJsonLoader ??
+           (() => rootBundle.loadString(AppInfo.sampleDataAsset));
 
   /// Thể hiện dùng chung trong app.
   static final AppDatabase instance = AppDatabase();
@@ -65,7 +66,8 @@ class AppDatabase {
 
   Future<Database> _open() async {
     final dbFactory = factory ?? databaseFactory;
-    final dbPath = path ??
+    final dbPath =
+        path ??
         (kIsWeb
             ? AppInfo.dbName
             : p.join(await dbFactory.getDatabasesPath(), AppInfo.dbName));
@@ -76,8 +78,9 @@ class AppDatabase {
         onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
         onCreate: _onCreate,
         onUpgrade: (db, oldVersion, newVersion) async {
-          await _ensureExtraTables(db);
+          await _migrateLegacyTableNames(db);
           await V2DatabaseStore.migrateToV2(db);
+          await _ensureExtraTables(db);
           // Bổ sung truyện mới từ sample_novels.json mà không làm mất lịch sử/tủ sách cũ.
           await _syncSampleNovels(db);
         },
@@ -89,11 +92,55 @@ class AppDatabase {
     return db;
   }
 
+  /// Đổi tên các bảng SQLite cũ sang tiếng Việt không dấu, giữ nguyên dữ liệu.
+  Future<void> _migrateLegacyTableNames(Database db) async {
+    const names = <String, String>{
+      'novels': 'truyen',
+      'chapters': 'chuong',
+      'library': 'tu_sach',
+      'reading_history': 'lich_su_doc',
+      'bookmarks': 'dau_trang',
+      'quotes': 'trich_dan',
+      'comments': 'binh_luan',
+      'reading_sessions': 'phien_doc',
+      'users': 'nguoi_dung',
+      'reading_session_logs': 'nhat_ky_phien_doc',
+      'achievements': 'thanh_tuu',
+      'user_achievements': 'thanh_tuu_nguoi_dung',
+      'quests': 'nhiem_vu',
+      'user_quests': 'nhiem_vu_nguoi_dung',
+      'reports': 'bao_cao',
+      'announcements': 'thong_bao_chung',
+      'notifications': 'thong_bao',
+      'glossary_terms': 'thuat_ngu',
+      'chapter_summaries': 'tom_tat_chuong',
+      'paragraph_reactions': 'cam_xuc_doan',
+      'time_capsules': 'hop_thoi_gian',
+      'novel_requests': 'yeu_cau_truyen',
+      'character_graphs': 'so_do_nhan_vat',
+      'banned_words': 'tu_cam',
+      'audit_logs': 'nhat_ky_quan_tri',
+      'app_config': 'cau_hinh_ung_dung',
+    };
+    final existing = (await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table'",
+    )).map((row) => row['name'] as String).toSet();
+
+    for (final entry in names.entries) {
+      if (existing.contains(entry.key) && !existing.contains(entry.value)) {
+        await db.execute('ALTER TABLE ${entry.key} RENAME TO ${entry.value}');
+        existing
+          ..remove(entry.key)
+          ..add(entry.value);
+      }
+    }
+  }
+
   /// Tạo các bảng và chỉ mục.
   Future<void> _onCreate(Database db, int version) async {
     final batch = db.batch();
     batch.execute('''
-      CREATE TABLE novels (
+      CREATE TABLE truyen (
         id INTEGER PRIMARY KEY,
         title TEXT NOT NULL,
         author TEXT NOT NULL,
@@ -110,44 +157,46 @@ class AppDatabase {
       )
     ''');
     batch.execute('''
-      CREATE TABLE chapters (
+      CREATE TABLE chuong (
         id INTEGER PRIMARY KEY,
-        novel_id INTEGER NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+        novel_id INTEGER NOT NULL REFERENCES truyen(id) ON DELETE CASCADE,
         chapter_index INTEGER NOT NULL,
         title TEXT NOT NULL,
         content TEXT,
         is_downloaded INTEGER NOT NULL DEFAULT 0,
+        publish_at INTEGER,
         UNIQUE(novel_id, chapter_index)
       )
     ''');
     batch.execute('''
-      CREATE TABLE library (
-        novel_id INTEGER PRIMARY KEY REFERENCES novels(id) ON DELETE CASCADE,
+      CREATE TABLE tu_sach (
+        novel_id INTEGER PRIMARY KEY REFERENCES truyen(id) ON DELETE CASCADE,
         category TEXT NOT NULL,
         added_at INTEGER NOT NULL
       )
     ''');
     batch.execute('''
-      CREATE TABLE reading_history (
-        novel_id INTEGER PRIMARY KEY REFERENCES novels(id) ON DELETE CASCADE,
+      CREATE TABLE lich_su_doc (
+        novel_id INTEGER PRIMARY KEY REFERENCES truyen(id) ON DELETE CASCADE,
         last_chapter_id INTEGER NOT NULL,
         scroll_offset REAL NOT NULL DEFAULT 0,
         last_read_at INTEGER NOT NULL
       )
     ''');
     batch.execute('''
-      CREATE TABLE bookmarks (
+      CREATE TABLE dau_trang (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        novel_id INTEGER NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
-        chapter_id INTEGER NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
+        novel_id INTEGER NOT NULL REFERENCES truyen(id) ON DELETE CASCADE,
+        chapter_id INTEGER NOT NULL REFERENCES chuong(id) ON DELETE CASCADE,
         scroll_offset REAL NOT NULL DEFAULT 0,
         note TEXT,
         created_at INTEGER NOT NULL
       )
     ''');
     batch.execute(
-        'CREATE INDEX idx_chapters_novel ON chapters(novel_id, chapter_index)');
-    batch.execute('CREATE INDEX idx_bookmarks_novel ON bookmarks(novel_id)');
+      'CREATE INDEX idx_chapters_novel ON chuong(novel_id, chapter_index)',
+    );
+    batch.execute('CREATE INDEX idx_bookmarks_novel ON dau_trang(novel_id)');
     await batch.commit(noResult: true);
     await _ensureExtraTables(db);
   }
@@ -155,7 +204,7 @@ class AppDatabase {
   /// Tạo các bảng mở rộng (trích dẫn yêu thích & bình luận chương).
   Future<void> _ensureExtraTables(Database db) async {
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS quotes (
+      CREATE TABLE IF NOT EXISTS trich_dan (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         novel_id INTEGER NOT NULL,
         novel_title TEXT NOT NULL,
@@ -166,7 +215,7 @@ class AppDatabase {
       )
     ''');
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS comments (
+      CREATE TABLE IF NOT EXISTS binh_luan (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         novel_id INTEGER NOT NULL,
         chapter_id INTEGER NOT NULL,
@@ -177,11 +226,57 @@ class AppDatabase {
       )
     ''');
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS reading_sessions (
+      CREATE TABLE IF NOT EXISTS phien_doc (
         date_key TEXT PRIMARY KEY,
         words_read INTEGER NOT NULL DEFAULT 0,
         minutes_read INTEGER NOT NULL DEFAULT 0
       )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS phien_doc_cuc_bo (
+        date_key TEXT PRIMARY KEY,
+        words_read INTEGER NOT NULL DEFAULT 0,
+        minutes_read INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS chuong_tai_xuong_cloud (
+        novel_id INTEGER NOT NULL,
+        id INTEGER NOT NULL,
+        chapter_index INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        content TEXT,
+        is_downloaded INTEGER NOT NULL DEFAULT 0,
+        publish_at INTEGER,
+        novel_title TEXT NOT NULL DEFAULT '',
+        cover_url TEXT NOT NULL DEFAULT '',
+        novel_author TEXT NOT NULL DEFAULT '',
+        novel_description TEXT NOT NULL DEFAULT '',
+        novel_status TEXT NOT NULL DEFAULT 'ongoing',
+        novel_type TEXT NOT NULL DEFAULT 'novel',
+        novel_genres TEXT NOT NULL DEFAULT '',
+        novel_total_chapters INTEGER NOT NULL DEFAULT 0,
+        novel_rating REAL NOT NULL DEFAULT 0,
+        novel_views INTEGER NOT NULL DEFAULT 0,
+        novel_updated_at INTEGER NOT NULL DEFAULT 0,
+        downloaded_at INTEGER,
+        PRIMARY KEY (novel_id, id)
+      )
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_chuong_cloud_novel
+      ON chuong_tai_xuong_cloud(novel_id, chapter_index)
+    ''');
+    await db.execute('''
+      INSERT OR IGNORE INTO chuong_tai_xuong_cloud (
+        novel_id, id, chapter_index, title, content, is_downloaded, publish_at,
+        novel_title, cover_url, downloaded_at
+      )
+      SELECT c.novel_id, c.id, c.chapter_index, c.title, c.content, 1,
+             c.publish_at, n.title, COALESCE(n.cover_url, ''),
+             strftime('%s','now') * 1000
+      FROM chuong c JOIN truyen n ON n.id = c.novel_id
+      WHERE c.novel_id >= 0 AND c.is_downloaded = 1 AND c.content IS NOT NULL
     ''');
   }
 
@@ -198,8 +293,10 @@ class AppDatabase {
 
   /// Nạp dữ liệu mẫu vào SQLite nếu bảng novels đang trống (lần chạy đầu).
   Future<void> _seedIfNeeded(Database db) async {
-    final count = Sqflite.firstIntValue(
-            await db.rawQuery('SELECT COUNT(*) FROM novels')) ??
+    final count =
+        Sqflite.firstIntValue(
+          await db.rawQuery('SELECT COUNT(*) FROM truyen'),
+        ) ??
         0;
     if (count > 0) return;
     await _syncSampleNovels(db);
@@ -228,18 +325,14 @@ class AppDatabase {
           views: (n['views'] as int?) ?? 0,
           updatedAt: DateTime.parse(n['updated_at'] as String),
         );
-        batch.insert(
-          'novels',
-          {
-            ...novel.toMap(),
-            'search_text': Format.normalize('${novel.title} ${novel.author}'),
-          },
-          conflictAlgorithm: ConflictAlgorithm.ignore,
-        );
+        batch.insert('truyen', {
+          ...novel.toMap(),
+          'search_text': Format.normalize('${novel.title} ${novel.author}'),
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
         for (final c in chapters) {
           final index = c['index'] as int;
           batch.insert(
-            'chapters',
+            'chuong',
             Chapter(
               id: novelId * 10000 + index,
               novelId: novelId,
@@ -265,22 +358,36 @@ class AppDatabase {
     }
   }
 
-  /// "Gọi máy chủ" lấy nội dung chương (trực tiếp từ Supabase hoặc file mẫu).
+  /// Lấy nội dung chương từ Supabase hoặc dữ liệu mẫu khi chưa cấu hình Supabase.
   /// Ném [StateError] nếu không tìm thấy chương.
   Future<String> fetchChapterContent(int novelId, int chapterIndex) async {
-    if (isSupabaseReady) {
-      try {
-        return await SupabaseDatabase.instance.fetchChapterContent(novelId, chapterIndex);
-      } catch (e) {
-        debugPrint('Supabase fetchChapterContent fallback: $e');
+    if (novelId < 0) {
+      final db = await database;
+      final rows = await db.query(
+        'chuong',
+        columns: ['content'],
+        where: 'novel_id = ? AND chapter_index = ?',
+        whereArgs: [novelId, chapterIndex],
+        limit: 1,
+      );
+      if (rows.isEmpty || rows.first['content'] == null) {
+        throw StateError('Không tìm thấy nội dung chương truyện cục bộ.');
       }
+      return rows.first['content'] as String;
+    }
+    if (isSupabaseReady) {
+      return SupabaseDatabase.instance.fetchChapterContent(
+        novelId,
+        chapterIndex,
+      );
     }
     if (_remoteContent == null) {
       final novels = await _loadSampleData();
       _remoteContent = {
         for (final n in novels)
           n['id'] as int: {
-            for (final c in (n['chapters'] as List).cast<Map<String, dynamic>>())
+            for (final c
+                in (n['chapters'] as List).cast<Map<String, dynamic>>())
               c['index'] as int: c['content'] as String,
           },
       };
@@ -310,23 +417,17 @@ class AppDatabase {
     bool includeUnapproved = false,
   }) async {
     if (isSupabaseReady) {
-      try {
-        return await SupabaseDatabase.instance.queryNovels(
-          keyword: keyword,
-          genres: genres,
-          status: status,
-          type: type,
-          sort: sort,
-          limit: limit,
-          offset: offset,
-          includeUnapproved: includeUnapproved,
-        );
-      } catch (e) {
-        debugPrint('Supabase queryNovels error: $e');
-        if (kIsWeb) return [];
-      }
+      return SupabaseDatabase.instance.queryNovels(
+        keyword: keyword,
+        genres: genres,
+        status: status,
+        type: type,
+        sort: sort,
+        limit: limit,
+        offset: offset,
+        includeUnapproved: includeUnapproved,
+      );
     }
-    if (kIsWeb) return [];
     final db = await database;
     final where = <String>['deleted_at IS NULL'];
     final args = <Object?>[];
@@ -357,7 +458,7 @@ class AppDatabase {
       NovelSort.title => 'title COLLATE NOCASE ASC',
     };
     final rows = await db.query(
-      'novels',
+      'truyen',
       where: where.isEmpty ? null : where.join(' AND '),
       whereArgs: args.isEmpty ? null : args,
       orderBy: '$orderBy, id ASC',
@@ -369,36 +470,104 @@ class AppDatabase {
 
   /// Lấy 1 truyện theo id.
   Future<Novel?> getNovel(int id) async {
+    if (id < 0) {
+      final db = await database;
+      final rows = await db.query('truyen', where: 'id = ?', whereArgs: [id]);
+      return rows.isEmpty ? null : Novel.fromMap(rows.first);
+    }
     if (isSupabaseReady) {
       try {
-        final n = await SupabaseDatabase.instance.getNovel(id);
-        if (n != null) return n;
+        return await SupabaseDatabase.instance.getNovel(id);
       } catch (e) {
         debugPrint('Supabase getNovel error: $e');
-        if (kIsWeb) return null;
+        final cachedNovel = await getCachedNovel(id);
+        if (cachedNovel != null) return cachedNovel;
+        rethrow;
       }
-      if (kIsWeb) return null;
     }
-    if (kIsWeb) return null;
+    final cachedNovel = await getCachedNovel(id);
+    if (cachedNovel != null) return cachedNovel;
     final db = await database;
-    final rows = await db.query('novels', where: 'id = ?', whereArgs: [id]);
+    final rows = await db.query('truyen', where: 'id = ?', whereArgs: [id]);
     return rows.isEmpty ? null : Novel.fromMap(rows.first);
   }
 
-  /// Đếm số truyện theo từng thể loại.
-  Future<Map<String, int>> genreCounts() async {
-    if (isSupabaseReady) {
-      try {
-        return await SupabaseDatabase.instance.genreCounts();
-      } catch (e) {
-        debugPrint('Supabase genreCounts error: $e');
-        if (kIsWeb) return {};
-      }
-      if (kIsWeb) return {};
-    }
-    if (kIsWeb) return {};
+  /// Trả metadata đã lưu cùng các chương cloud để mở Tải xuống khi offline.
+  Future<Novel?> getCachedNovel(int novelId) async {
     final db = await database;
-    final rows = await db.query('novels', columns: ['genres']);
+    final rows = await db.query(
+      'chuong_tai_xuong_cloud',
+      where: 'novel_id = ?',
+      whereArgs: [novelId],
+      orderBy: 'chapter_index ASC',
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    final row = rows.first;
+    return Novel(
+      id: novelId,
+      title: (row['novel_title'] as String?) ?? '',
+      author: (row['novel_author'] as String?) ?? '',
+      coverUrl: (row['cover_url'] as String?) ?? '',
+      description: (row['novel_description'] as String?) ?? '',
+      status: (row['novel_status'] as String?) ?? NovelStatus.ongoing,
+      type: (row['novel_type'] as String?) ?? NovelType.novel,
+      genres: ((row['novel_genres'] as String?) ?? '')
+          .split(',')
+          .where((genre) => genre.isNotEmpty)
+          .toList(),
+      totalChapters: (row['novel_total_chapters'] as int?) ?? 0,
+      rating: ((row['novel_rating'] as num?) ?? 0).toDouble(),
+      views: (row['novel_views'] as int?) ?? 0,
+      updatedAt: DateTime.fromMillisecondsSinceEpoch(
+        (row['novel_updated_at'] as int?) ?? 0,
+      ),
+    );
+  }
+
+  /// Ghi nhận một lượt mở trang truyện, trả về tổng lượt xem mới.
+  Future<int?> recordNovelView(int novelId) async {
+    if (novelId >= 0 && isSupabaseReady) {
+      try {
+        return await SupabaseDatabase.instance.recordNovelView(novelId);
+      } catch (e) {
+        debugPrint('Supabase recordNovelView error: $e');
+        return null;
+      }
+    }
+    if (kIsWeb && novelId >= 0) return null;
+
+    final db = await database;
+    final changed = await db.rawUpdate(
+      'UPDATE truyen SET views = views + 1 WHERE id = ?',
+      [novelId],
+    );
+    if (changed == 0) return null;
+    final rows = await db.query(
+      'truyen',
+      columns: ['views'],
+      where: 'id = ?',
+      whereArgs: [novelId],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first['views'] as int?;
+  }
+
+  /// Đếm số truyện theo thể loại, bỏ truyện đã xóa và chờ duyệt mặc định.
+  Future<Map<String, int>> genreCounts({bool includeUnapproved = false}) async {
+    if (isSupabaseReady) {
+      return SupabaseDatabase.instance.genreCounts(
+        includeUnapproved: includeUnapproved,
+      );
+    }
+    final db = await database;
+    final rows = await db.query(
+      'truyen',
+      columns: ['genres'],
+      where: includeUnapproved
+          ? 'deleted_at IS NULL'
+          : "deleted_at IS NULL AND moderation_status = 'approved'",
+    );
     final result = <String, int>{};
     for (final r in rows) {
       for (final g in ((r['genres'] as String?) ?? '').split(',')) {
@@ -425,10 +594,11 @@ class AppDatabase {
     String ownerId = '',
   }) async {
     final db = await database;
-    final maxId = Sqflite.firstIntValue(
-            await db.rawQuery('SELECT MAX(id) FROM novels')) ??
-        100;
-    final newId = maxId + 1;
+    // ID âm dành riêng cho truyện chỉ lưu trên máy, tránh va chạm với ID cloud.
+    final minLocalId = Sqflite.firstIntValue(
+      await db.rawQuery('SELECT MIN(id) FROM truyen WHERE id < 0'),
+    );
+    final newId = (minLocalId ?? 0) - 1;
     final now = DateTime.now();
     final novel = Novel(
       id: newId,
@@ -442,15 +612,15 @@ class AppDatabase {
       type: type,
       genres: genres,
       totalChapters: chapters.length,
-      rating: 5.0,
-      views: 1,
+      rating: 0.0,
+      views: 0,
       updatedAt: now,
       moderationStatus: moderationStatus,
       ownerId: ownerId,
     );
 
     await db.transaction((txn) async {
-      await txn.insert('novels', {
+      await txn.insert('truyen', {
         ...novel.toMap(),
         'search_text': Format.normalize('${novel.title} ${novel.author}'),
       });
@@ -458,7 +628,7 @@ class AppDatabase {
         final idx = i + 1;
         final ch = chapters[i];
         await txn.insert(
-          'chapters',
+          'chuong',
           Chapter(
             id: newId * 10000 + idx,
             novelId: newId,
@@ -479,26 +649,54 @@ class AppDatabase {
     required String title,
     required String content,
   }) async {
+    final normalizedTitle = title.trim();
+    final normalizedContent = content.trim();
+    if (normalizedContent.isEmpty) {
+      throw ArgumentError.value(
+        content,
+        'content',
+        'Nội dung chương không được để trống.',
+      );
+    }
+
+    // Cloud novels use positive IDs. Persist their chapters through Supabase;
+    // writing them to SQLite made the detail screen report success even though
+    // the chapter disappeared as soon as the cloud list was refreshed.
+    if (novelId > 0) {
+      return SupabaseDatabase.instance.appendChapter(
+        novelId: novelId,
+        title: normalizedTitle.isEmpty ? 'Chương mới' : normalizedTitle,
+        content: normalizedContent,
+      );
+    }
+
     final db = await database;
-    final maxIdx = Sqflite.firstIntValue(await db.rawQuery(
-            'SELECT MAX(chapter_index) FROM chapters WHERE novel_id = ?',
-            [novelId])) ??
+    final maxIdx =
+        Sqflite.firstIntValue(
+          await db.rawQuery(
+            'SELECT MAX(chapter_index) FROM chuong WHERE novel_id = ?',
+            [novelId],
+          ),
+        ) ??
         0;
     final nextIdx = maxIdx + 1;
+    final chapterTitle = normalizedTitle.isEmpty
+        ? 'Chương $nextIdx: Mới'
+        : normalizedTitle.startsWith('Chương')
+        ? normalizedTitle
+        : 'Chương $nextIdx: $normalizedTitle';
     final chapter = Chapter(
       id: novelId * 10000 + nextIdx,
       novelId: novelId,
       chapterIndex: nextIdx,
-      title: title.trim().startsWith('Chương')
-          ? title.trim()
-          : 'Chương $nextIdx: ${title.trim()}',
-      content: content.trim(),
+      title: chapterTitle,
+      content: normalizedContent,
       isDownloaded: true,
     );
     await db.transaction((txn) async {
-      await txn.insert('chapters', chapter.toMap());
+      await txn.insert('chuong', chapter.toMap());
       await txn.update(
-        'novels',
+        'truyen',
         {
           'total_chapters': nextIdx,
           'updated_at': DateTime.now().millisecondsSinceEpoch,
@@ -515,20 +713,33 @@ class AppDatabase {
   // ---------------------------------------------------------------------------
 
   /// Danh sách chương của truyện (không kèm nội dung cho nhẹ).
-  Future<List<Chapter>> getChapters(int novelId) async {
+  Future<List<Chapter>> getChapters(int novelId, {Novel? novel}) async {
+    if (novelId < 0) {
+      final db = await database;
+      final rows = await db.query(
+        'chuong',
+        columns: ['id', 'novel_id', 'chapter_index', 'title', 'is_downloaded'],
+        where: 'novel_id = ?',
+        whereArgs: [novelId],
+        orderBy: 'chapter_index ASC',
+      );
+      return rows.map(Chapter.fromMap).toList();
+    }
     if (isSupabaseReady) {
       try {
-        return await SupabaseDatabase.instance.getChapters(novelId);
+        final chapters = await SupabaseDatabase.instance.getChapters(novelId);
+        await _cacheCloudChapterMetadata(novelId, chapters, novel: novel);
+        return await _mergeCloudDownloadStatus(novelId, chapters);
       } catch (e) {
         debugPrint('Supabase getChapters error: $e');
-        if (kIsWeb) return [];
+        final cached = await _getCachedCloudChapters(novelId);
+        if (cached.isNotEmpty) return cached;
+        rethrow;
       }
-      if (kIsWeb) return [];
     }
-    if (kIsWeb) return [];
     final db = await database;
     final rows = await db.query(
-      'chapters',
+      'chuong',
       columns: ['id', 'novel_id', 'chapter_index', 'title', 'is_downloaded'],
       where: 'novel_id = ?',
       whereArgs: [novelId],
@@ -538,66 +749,222 @@ class AppDatabase {
   }
 
   /// Lấy 1 chương (kèm nội dung nếu đã tải).
-  Future<Chapter?> getChapter(int id) async {
+  Future<Chapter?> getChapter(int id, {int? novelId}) async {
     final db = await database;
-    final rows = await db.query('chapters', where: 'id = ?', whereArgs: [id]);
+    if (novelId != null && novelId >= 0) {
+      final cachedRows = await db.query(
+        'chuong_tai_xuong_cloud',
+        where: 'novel_id = ? AND id = ? AND is_downloaded = 1 AND content IS NOT NULL',
+        whereArgs: [novelId, id],
+        limit: 1,
+      );
+      if (cachedRows.isNotEmpty) return Chapter.fromMap(cachedRows.first);
+    }
+    final rows = await db.query('chuong', where: 'id = ?', whereArgs: [id]);
     return rows.isEmpty ? null : Chapter.fromMap(rows.first);
   }
 
   /// Lưu nội dung chương để đọc offline (is_downloaded = 1).
-  Future<void> saveChapterContent(int chapterId, String content) async {
+  Future<void> saveChapterContent(
+    Chapter chapter,
+    String content, {
+    Novel? novel,
+  }) async {
     final db = await database;
+    if (chapter.novelId >= 0) {
+      final cachedNovel =
+          novel ?? (await SupabaseDatabase.instance.getNovel(chapter.novelId));
+      await db.insert('chuong_tai_xuong_cloud', {
+        ...chapter.toMap(),
+        'content': content,
+        'is_downloaded': 1,
+        'novel_title': cachedNovel?.title ?? '',
+        'cover_url': cachedNovel?.coverUrl ?? '',
+        'novel_author': cachedNovel?.author ?? '',
+        'novel_description': cachedNovel?.description ?? '',
+        'novel_status': cachedNovel?.status ?? NovelStatus.ongoing,
+        'novel_type': cachedNovel?.type ?? NovelType.novel,
+        'novel_genres': cachedNovel?.genres.join(',') ?? '',
+        'novel_total_chapters': cachedNovel?.totalChapters ?? 0,
+        'novel_rating': cachedNovel?.rating ?? 0.0,
+        'novel_views': cachedNovel?.views ?? 0,
+        'novel_updated_at': cachedNovel?.updatedAt.millisecondsSinceEpoch ?? 0,
+        'downloaded_at': DateTime.now().millisecondsSinceEpoch,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      return;
+    }
     await db.update(
-      'chapters',
+      'chuong',
       {'content': content, 'is_downloaded': 1},
       where: 'id = ?',
-      whereArgs: [chapterId],
+      whereArgs: [chapter.id],
     );
   }
 
   /// Xóa nội dung đã tải của 1 chương.
-  Future<void> deleteChapterContent(int chapterId) async {
+  Future<void> deleteChapterContent(Chapter chapter) async {
     final db = await database;
+    if (chapter.novelId >= 0) {
+      await db.update(
+        'chuong_tai_xuong_cloud',
+        {'content': null, 'is_downloaded': 0, 'downloaded_at': null},
+        where: 'novel_id = ? AND id = ?',
+        whereArgs: [chapter.novelId, chapter.id],
+      );
+      return;
+    }
     await db.update(
-      'chapters',
+      'chuong',
       {'content': null, 'is_downloaded': 0},
       where: 'id = ?',
-      whereArgs: [chapterId],
+      whereArgs: [chapter.id],
     );
   }
 
   /// Xóa nội dung đã tải của cả truyện, hoặc toàn bộ nếu [novelId] = null.
   Future<int> deleteDownloads({int? novelId}) async {
     final db = await database;
-    return db.update(
-      'chapters',
+    final localCount = await db.update(
+      'chuong',
       {'content': null, 'is_downloaded': 0},
-      where: novelId == null ? 'is_downloaded = 1' : 'is_downloaded = 1 AND novel_id = ?',
+      where: novelId == null
+          ? 'is_downloaded = 1 AND novel_id < 0'
+          : 'is_downloaded = 1 AND novel_id = ? AND novel_id < 0',
       whereArgs: novelId == null ? null : [novelId],
     );
+    final cloudCount = await db.update(
+      'chuong_tai_xuong_cloud',
+      {'content': null, 'is_downloaded': 0, 'downloaded_at': null},
+      where: novelId == null
+          ? 'is_downloaded = 1'
+          : 'is_downloaded = 1 AND novel_id = ?',
+      whereArgs: novelId == null ? null : [novelId],
+    );
+    return localCount + cloudCount;
   }
 
   /// Danh sách chương đã tải kèm tên truyện và dung lượng.
   Future<List<DownloadedChapter>> getDownloadedChapters() async {
     final db = await database;
-    final rows = await db.rawQuery('''
+    final localRows = await db.rawQuery('''
       SELECT c.id, c.novel_id, c.chapter_index, c.title, c.is_downloaded,
              n.title AS novel_title, n.cover_url,
              LENGTH(CAST(c.content AS BLOB)) AS size
-      FROM chapters c JOIN novels n ON n.id = c.novel_id
-      WHERE c.is_downloaded = 1
+      FROM chuong c JOIN truyen n ON n.id = c.novel_id
+      WHERE c.is_downloaded = 1 AND c.novel_id < 0
       ORDER BY n.title COLLATE NOCASE, c.chapter_index
     ''');
-    return rows.map(DownloadedChapter.fromMap).toList();
+    final cloudRows = await db.rawQuery('''
+      SELECT id, novel_id, chapter_index, title, content, is_downloaded,
+             novel_title, cover_url,
+             LENGTH(CAST(content AS BLOB)) AS size
+      FROM chuong_tai_xuong_cloud
+      WHERE is_downloaded = 1 AND content IS NOT NULL
+      ORDER BY novel_title COLLATE NOCASE, chapter_index
+    ''');
+    final combined = [
+      ...localRows.map(DownloadedChapter.fromMap),
+      ...cloudRows.map(DownloadedChapter.fromMap),
+    ];
+    combined.sort((a, b) {
+      final novelOrder = a.novelTitle.toLowerCase().compareTo(
+        b.novelTitle.toLowerCase(),
+      );
+      return novelOrder != 0
+          ? novelOrder
+          : a.chapter.chapterIndex.compareTo(b.chapter.chapterIndex);
+    });
+    return combined;
   }
 
   /// Số chương đã tải.
   Future<int> countDownloaded() async {
-    final db = await database;
-    return Sqflite.firstIntValue(await db.rawQuery(
-            'SELECT COUNT(*) FROM chapters WHERE is_downloaded = 1')) ??
-        0;
+    return (await getDownloadedChapters()).length;
   }
+
+  Future<void> _cacheCloudChapterMetadata(
+    int novelId,
+    List<Chapter> chapters, {
+    Novel? novel,
+  }) async {
+    if (chapters.isEmpty) return;
+    final db = await database;
+    final batch = db.batch();
+    for (final chapter in chapters) {
+      batch.insert('chuong_tai_xuong_cloud', {
+        ...chapter.toMap(),
+        'content': null,
+        'is_downloaded': 0,
+        'downloaded_at': null,
+        'novel_title': novel?.title ?? '',
+        'cover_url': novel?.coverUrl ?? '',
+        'novel_author': novel?.author ?? '',
+        'novel_description': novel?.description ?? '',
+        'novel_status': novel?.status ?? NovelStatus.ongoing,
+        'novel_type': novel?.type ?? NovelType.novel,
+        'novel_genres': novel?.genres.join(',') ?? '',
+        'novel_total_chapters': novel?.totalChapters ?? 0,
+        'novel_rating': novel?.rating ?? 0.0,
+        'novel_views': novel?.views ?? 0,
+        'novel_updated_at': novel?.updatedAt.millisecondsSinceEpoch ?? 0,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      batch.update(
+        'chuong_tai_xuong_cloud',
+        {
+          'chapter_index': chapter.chapterIndex,
+          'title': chapter.title,
+          if (novel != null) 'novel_title': novel.title,
+          if (novel != null) 'cover_url': novel.coverUrl,
+          if (novel != null) 'novel_author': novel.author,
+          if (novel != null) 'novel_description': novel.description,
+          if (novel != null) 'novel_status': novel.status,
+          if (novel != null) 'novel_type': novel.type,
+          if (novel != null) 'novel_genres': novel.genres.join(','),
+          if (novel != null) 'novel_total_chapters': novel.totalChapters,
+          if (novel != null) 'novel_rating': novel.rating,
+          if (novel != null) 'novel_views': novel.views,
+          if (novel != null)
+            'novel_updated_at': novel.updatedAt.millisecondsSinceEpoch,
+        },
+        where: 'novel_id = ? AND id = ?',
+        whereArgs: [novelId, chapter.id],
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
+  Future<List<Chapter>> _mergeCloudDownloadStatus(
+    int novelId,
+    List<Chapter> chapters,
+  ) async {
+    final db = await database;
+    final rows = await db.query(
+      'chuong_tai_xuong_cloud',
+      columns: ['id', 'is_downloaded'],
+      where: 'novel_id = ? AND is_downloaded = 1 AND content IS NOT NULL',
+      whereArgs: [novelId],
+    );
+    final downloadedIds = rows.map((row) => row['id'] as int).toSet();
+    return [
+      for (final chapter in chapters)
+        chapter.copyWith(isDownloaded: downloadedIds.contains(chapter.id)),
+    ];
+  }
+
+  Future<List<Chapter>> _getCachedCloudChapters(int novelId) async {
+    final db = await database;
+    final rows = await db.query(
+      'chuong_tai_xuong_cloud',
+      where: 'novel_id = ?',
+      whereArgs: [novelId],
+      orderBy: 'chapter_index ASC',
+    );
+    return rows.map(Chapter.fromMap).toList();
+  }
+
+  /// Danh sách chapter metadata đã cache để vào trình đọc khi offline.
+  Future<List<Chapter>> getCachedChapters(int novelId) =>
+      _getCachedCloudChapters(novelId);
 
   // ---------------------------------------------------------------------------
   // Tủ sách
@@ -606,58 +973,77 @@ class AppDatabase {
   static const String _librarySelect = '''
     SELECT l.novel_id, l.category, l.added_at, n.*,
            c.chapter_index AS last_chapter_index, h.last_read_at
-    FROM library l
-    JOIN novels n ON n.id = l.novel_id
-    LEFT JOIN reading_history h ON h.novel_id = l.novel_id
-    LEFT JOIN chapters c ON c.id = h.last_chapter_id
+    FROM tu_sach l
+    JOIN truyen n ON n.id = l.novel_id
+    LEFT JOIN lich_su_doc h ON h.novel_id = l.novel_id
+    LEFT JOIN chuong c ON c.id = h.last_chapter_id
   ''';
 
   /// Toàn bộ tủ sách (kèm thông tin truyện + tiến độ).
   Future<List<LibraryItem>> getLibrary({String? userId}) async {
+    final db = await database;
+    final localRows = await db.rawQuery(
+      '$_librarySelect WHERE l.novel_id < 0 ORDER BY l.added_at DESC',
+    );
+    final localItems = localRows.map(LibraryItem.fromMap).toList();
     if (isSupabaseReady) {
       try {
-        return await SupabaseDatabase.instance.getLibrary(userId: userId);
+        final cloudItems = await SupabaseDatabase.instance.getLibrary(
+          userId: userId,
+        );
+        return [...cloudItems, ...localItems]
+          ..sort((a, b) => b.addedAt.compareTo(a.addedAt));
       } catch (e) {
         debugPrint('Supabase getLibrary error: $e');
-        if (kIsWeb) return [];
+        if (localItems.isNotEmpty) return localItems;
+        rethrow;
       }
-      if (kIsWeb) return [];
     }
-    if (kIsWeb) return [];
-    final db = await database;
     final rows = await db.rawQuery('$_librarySelect ORDER BY l.added_at DESC');
     return rows.map(LibraryItem.fromMap).toList();
   }
 
   /// Thêm hoặc cập nhật danh mục của truyện trong tủ sách.
   Future<void> upsertLibrary(LibraryItem item, {String? userId}) async {
+    if (item.novelId < 0) {
+      final db = await database;
+      await db.insert(
+        'tu_sach',
+        item.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      return;
+    }
     if (isSupabaseReady) {
-      try {
-        await SupabaseDatabase.instance.upsertLibrary(item, userId: userId);
-      } catch (e) {
-        debugPrint('Supabase upsertLibrary error: $e');
-      }
-      if (kIsWeb) return;
+      await SupabaseDatabase.instance.upsertLibrary(item, userId: userId);
+      return;
     }
     if (kIsWeb) return;
     final db = await database;
-    await db.insert('library', item.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.insert(
+      'tu_sach',
+      item.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   /// Xóa truyện khỏi tủ sách.
   Future<void> removeFromLibrary(int novelId, {String? userId}) async {
+    if (novelId < 0) {
+      final db = await database;
+      await db.delete('tu_sach', where: 'novel_id = ?', whereArgs: [novelId]);
+      return;
+    }
     if (isSupabaseReady) {
-      try {
-        await SupabaseDatabase.instance.removeFromLibrary(novelId, userId: userId);
-      } catch (e) {
-        debugPrint('Supabase removeFromLibrary error: $e');
-      }
-      if (kIsWeb) return;
+      await SupabaseDatabase.instance.removeFromLibrary(
+        novelId,
+        userId: userId,
+      );
+      return;
     }
     if (kIsWeb) return;
     final db = await database;
-    await db.delete('library', where: 'novel_id = ?', whereArgs: [novelId]);
+    await db.delete('tu_sach', where: 'novel_id = ?', whereArgs: [novelId]);
   }
 
   // ---------------------------------------------------------------------------
@@ -666,34 +1052,52 @@ class AppDatabase {
 
   static const String _historySelect = '''
     SELECT h.*, n.*, c.chapter_index, c.title AS chapter_title
-    FROM reading_history h
-    JOIN novels n ON n.id = h.novel_id
-    LEFT JOIN chapters c ON c.id = h.last_chapter_id
+    FROM lich_su_doc h
+    JOIN truyen n ON n.id = h.novel_id
+    LEFT JOIN chuong c ON c.id = h.last_chapter_id
   ''';
 
   /// Lịch sử đọc, mới nhất trước.
   Future<List<ReadingHistory>> getHistory({String? userId}) async {
+    final db = await database;
+    final localRows = await db.rawQuery(
+      '$_historySelect WHERE h.novel_id < 0 ORDER BY h.last_read_at DESC',
+    );
+    final localHistory = localRows.map(ReadingHistory.fromMap).toList();
     if (isSupabaseReady) {
       try {
-        return await SupabaseDatabase.instance.getHistory(userId: userId);
+        final cloudHistory = await SupabaseDatabase.instance.getHistory(
+          userId: userId,
+        );
+        return [...cloudHistory, ...localHistory]
+          ..sort((a, b) => b.lastReadAt.compareTo(a.lastReadAt));
       } catch (e) {
         debugPrint('Supabase getHistory error: $e');
-        if (kIsWeb) return [];
+        if (localHistory.isNotEmpty) return localHistory;
+        rethrow;
       }
-      if (kIsWeb) return [];
     }
-    if (kIsWeb) return [];
-    final db = await database;
-    final rows =
-        await db.rawQuery('$_historySelect ORDER BY h.last_read_at DESC');
+    final rows = await db.rawQuery(
+      '$_historySelect ORDER BY h.last_read_at DESC',
+    );
     return rows.map(ReadingHistory.fromMap).toList();
   }
 
   /// Lịch sử đọc của 1 truyện.
   Future<ReadingHistory?> getHistoryFor(int novelId, {String? userId}) async {
+    if (novelId < 0) {
+      final db = await database;
+      final rows = await db.rawQuery('$_historySelect WHERE h.novel_id = ?', [
+        novelId,
+      ]);
+      return rows.isEmpty ? null : ReadingHistory.fromMap(rows.first);
+    }
     if (isSupabaseReady) {
       try {
-        final h = await SupabaseDatabase.instance.getHistoryFor(novelId, userId: userId);
+        final h = await SupabaseDatabase.instance.getHistoryFor(
+          novelId,
+          userId: userId,
+        );
         if (h != null) return h;
       } catch (e) {
         debugPrint('Supabase getHistoryFor error: $e');
@@ -703,13 +1107,23 @@ class AppDatabase {
     }
     if (kIsWeb) return null;
     final db = await database;
-    final rows = await db
-        .rawQuery('$_historySelect WHERE h.novel_id = ?', [novelId]);
+    final rows = await db.rawQuery('$_historySelect WHERE h.novel_id = ?', [
+      novelId,
+    ]);
     return rows.isEmpty ? null : ReadingHistory.fromMap(rows.first);
   }
 
   /// Ghi (hoặc ghi đè) lịch sử đọc.
   Future<void> saveHistory(ReadingHistory history) async {
+    if (history.novelId < 0) {
+      final db = await database;
+      await db.insert(
+        'lich_su_doc',
+        history.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      return;
+    }
     if (isSupabaseReady) {
       try {
         await SupabaseDatabase.instance.saveHistory(history);
@@ -720,21 +1134,29 @@ class AppDatabase {
     }
     if (kIsWeb) return;
     final db = await database;
-    await db.insert('reading_history', history.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.insert(
+      'lich_su_doc',
+      history.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   /// Xóa lịch sử của 1 truyện.
   Future<void> deleteHistory(int novelId) async {
+    if (novelId >= 0 && isSupabaseReady) {
+      await SupabaseDatabase.instance.deleteHistory(novelId);
+    }
     final db = await database;
-    await db.delete('reading_history',
-        where: 'novel_id = ?', whereArgs: [novelId]);
+    await db.delete('lich_su_doc', where: 'novel_id = ?', whereArgs: [novelId]);
   }
 
   /// Xóa toàn bộ lịch sử.
   Future<void> clearHistory() async {
+    if (isSupabaseReady) {
+      await SupabaseDatabase.instance.clearHistory();
+    }
     final db = await database;
-    await db.delete('reading_history');
+    await db.delete('lich_su_doc');
   }
 
   // ---------------------------------------------------------------------------
@@ -743,54 +1165,96 @@ class AppDatabase {
 
   /// Danh sách bookmark của truyện (kèm số/tên chương).
   Future<List<Bookmark>> getBookmarks(int novelId) async {
+    if (novelId < 0) {
+      final db = await database;
+      final rows = await db.rawQuery(
+        '''
+        SELECT b.*, c.chapter_index, c.title AS chapter_title
+        FROM dau_trang b JOIN chuong c ON c.id = b.chapter_id
+        WHERE b.novel_id = ?
+        ORDER BY c.chapter_index, b.scroll_offset
+      ''',
+        [novelId],
+      );
+      return rows.map(Bookmark.fromMap).toList();
+    }
     if (isSupabaseReady) {
       try {
         return await SupabaseDatabase.instance.getBookmarks(novelId);
       } catch (e) {
         debugPrint('Supabase getBookmarks error: $e');
-        if (kIsWeb) return [];
+        if (!kIsWeb) {
+          final db = await database;
+          final rows = await db.rawQuery(
+            '''
+            SELECT b.*, c.chapter_index, c.title AS chapter_title
+            FROM dau_trang b JOIN chuong c ON c.id = b.chapter_id
+            WHERE b.novel_id = ?
+            ORDER BY c.chapter_index, b.scroll_offset
+            ''',
+            [novelId],
+          );
+          if (rows.isNotEmpty) return rows.map(Bookmark.fromMap).toList();
+        }
+        rethrow;
       }
-      if (kIsWeb) return [];
     }
     if (kIsWeb) return [];
     final db = await database;
-    final rows = await db.rawQuery('''
+    final rows = await db.rawQuery(
+      '''
       SELECT b.*, c.chapter_index, c.title AS chapter_title
-      FROM bookmarks b JOIN chapters c ON c.id = b.chapter_id
+      FROM dau_trang b JOIN chuong c ON c.id = b.chapter_id
       WHERE b.novel_id = ?
       ORDER BY c.chapter_index, b.scroll_offset
-    ''', [novelId]);
+    ''',
+      [novelId],
+    );
     return rows.map(Bookmark.fromMap).toList();
   }
 
   /// Thêm bookmark, trả về id mới.
   Future<int> addBookmark(Bookmark bookmark) async {
+    if (bookmark.novelId < 0) {
+      final db = await database;
+      final minId = Sqflite.firstIntValue(
+        await db.rawQuery('SELECT MIN(id) FROM dau_trang WHERE id < 0'),
+      );
+      final localId = (minId ?? 0) - 1;
+      return db.insert('dau_trang', {...bookmark.toMap(), 'id': localId});
+    }
     if (isSupabaseReady) {
       try {
         return await SupabaseDatabase.instance.addBookmark(bookmark);
       } catch (e) {
         debugPrint('Supabase addBookmark error: $e');
+        if (kIsWeb) rethrow;
       }
-      if (kIsWeb) return 1;
     }
-    if (kIsWeb) return 1;
+    if (kIsWeb) throw StateError('Supabase is not configured.');
     final db = await database;
-    return db.insert('bookmarks', bookmark.toMap());
+    return db.insert('dau_trang', bookmark.toMap());
   }
 
   /// Xóa bookmark.
   Future<void> deleteBookmark(int id) async {
+    if (id < 0) {
+      final db = await database;
+      await db.delete('dau_trang', where: 'id = ?', whereArgs: [id]);
+      return;
+    }
     if (isSupabaseReady) {
       try {
         await SupabaseDatabase.instance.deleteBookmark(id);
+        return;
       } catch (e) {
         debugPrint('Supabase deleteBookmark error: $e');
+        if (kIsWeb) rethrow;
       }
-      if (kIsWeb) return;
     }
-    if (kIsWeb) return;
+    if (kIsWeb) throw StateError('Supabase is not configured.');
     final db = await database;
-    await db.delete('bookmarks', where: 'id = ?', whereArgs: [id]);
+    await db.delete('dau_trang', where: 'id = ?', whereArgs: [id]);
   }
 
   // ---------------------------------------------------------------------------
@@ -804,13 +1268,17 @@ class AppDatabase {
         return await SupabaseDatabase.instance.getQuotes(userId: userId);
       } catch (e) {
         debugPrint('Supabase getQuotes error: $e');
-        if (kIsWeb) return [];
+        final rows = await (await database).query(
+          'trich_dan',
+          orderBy: 'created_at DESC',
+        );
+        if (rows.isNotEmpty) return rows.map(QuoteItem.fromMap).toList();
+        rethrow;
       }
-      if (kIsWeb) return [];
     }
     if (kIsWeb) return [];
     final db = await database;
-    final rows = await db.query('quotes', orderBy: 'created_at DESC');
+    final rows = await db.query('trich_dan', orderBy: 'created_at DESC');
     return rows.map(QuoteItem.fromMap).toList();
   }
 
@@ -821,12 +1289,12 @@ class AppDatabase {
         return await SupabaseDatabase.instance.addQuote(quote);
       } catch (e) {
         debugPrint('Supabase addQuote error: $e');
+        if (kIsWeb) rethrow;
       }
-      if (kIsWeb) return 1;
     }
-    if (kIsWeb) return 1;
+    if (kIsWeb) throw StateError('Supabase is not configured.');
     final db = await database;
-    return db.insert('quotes', quote.toMap());
+    return db.insert('trich_dan', quote.toMap());
   }
 
   /// Xóa một trích dẫn.
@@ -834,14 +1302,15 @@ class AppDatabase {
     if (isSupabaseReady) {
       try {
         await SupabaseDatabase.instance.deleteQuote(id);
+        return;
       } catch (e) {
         debugPrint('Supabase deleteQuote error: $e');
+        if (kIsWeb) rethrow;
       }
-      if (kIsWeb) return;
     }
-    if (kIsWeb) return;
+    if (kIsWeb) throw StateError('Supabase is not configured.');
     final db = await database;
-    await db.delete('quotes', where: 'id = ?', whereArgs: [id]);
+    await db.delete('trich_dan', where: 'id = ?', whereArgs: [id]);
   }
 
   /// Lấy danh sách bình luận của một chương.
@@ -851,14 +1320,22 @@ class AppDatabase {
         return await SupabaseDatabase.instance.getComments(chapterId);
       } catch (e) {
         debugPrint('Supabase getComments error: $e');
-        if (kIsWeb) return [];
+        final rows = await (await database).query(
+          'binh_luan',
+          where: 'chapter_id = ?',
+          whereArgs: [chapterId],
+          orderBy: 'created_at DESC',
+        );
+        if (rows.isNotEmpty) {
+          return rows.map(ChapterComment.fromMap).toList();
+        }
+        rethrow;
       }
-      if (kIsWeb) return [];
     }
     if (kIsWeb) return [];
     final db = await database;
     final rows = await db.query(
-      'comments',
+      'binh_luan',
       where: 'chapter_id = ?',
       whereArgs: [chapterId],
       orderBy: 'created_at DESC',
@@ -871,14 +1348,15 @@ class AppDatabase {
     if (isSupabaseReady) {
       try {
         await SupabaseDatabase.instance.addComment(comment);
+        return;
       } catch (e) {
         debugPrint('Supabase addComment error: $e');
+        if (kIsWeb) rethrow;
       }
-      if (kIsWeb) return;
     }
-    if (kIsWeb) return;
+    if (kIsWeb) throw StateError('Supabase is not configured.');
     final db = await database;
-    await db.insert('comments', comment.toMap());
+    await db.insert('binh_luan', comment.toMap());
   }
 
   /// Xóa bình luận.
@@ -886,27 +1364,31 @@ class AppDatabase {
     if (isSupabaseReady) {
       try {
         await SupabaseDatabase.instance.deleteComment(id);
+        return;
       } catch (e) {
         debugPrint('Supabase deleteComment error: $e');
+        if (kIsWeb) rethrow;
       }
-      if (kIsWeb) return;
     }
-    if (kIsWeb) return;
+    if (kIsWeb) throw StateError('Supabase is not configured.');
     final db = await database;
-    await db.delete('comments', where: 'id = ?', whereArgs: [id]);
+    await db.delete('binh_luan', where: 'id = ?', whereArgs: [id]);
   }
 
   /// Cập nhật điểm đánh giá (1..5 sao) cho bộ truyện.
   Future<double> updateNovelRating(int novelId, double userStars) async {
     if (isSupabaseReady) {
       try {
-        return await SupabaseDatabase.instance.updateNovelRating(novelId, userStars);
+        return await SupabaseDatabase.instance.updateNovelRating(
+          novelId,
+          userStars,
+        );
       } catch (e) {
         debugPrint('Supabase updateNovelRating error: $e');
+        if (kIsWeb) rethrow;
       }
-      if (kIsWeb) return userStars;
     }
-    if (kIsWeb) return userStars;
+    if (kIsWeb) throw StateError('Supabase is not configured.');
     final db = await database;
     final current = await getNovel(novelId);
     if (current == null) return userStars;
@@ -915,7 +1397,7 @@ class AppDatabase {
       ((current.rating * 4 + userStars) / 5).clamp(1.0, 5.0).toStringAsFixed(1),
     );
     await db.update(
-      'novels',
+      'truyen',
       {'rating': newRating},
       where: 'id = ?',
       whereArgs: [novelId],
@@ -945,9 +1427,10 @@ class AppDatabase {
     int chapterId = 0,
   }) async {
     if (words <= 0 && minutes <= 0) return;
-    if (isSupabaseReady) {
+    var recordedInCloud = false;
+    if (isSupabaseReady && novelId >= 0) {
       try {
-        await SupabaseDatabase.instance.recordReadingSession(
+        recordedInCloud = await SupabaseDatabase.instance.recordReadingSession(
           wordsRead: words,
           minutesRead: minutes,
           userId: userId.isNotEmpty ? userId : null,
@@ -957,19 +1440,17 @@ class AppDatabase {
       } catch (e) {
         debugPrint('Supabase recordReadingSession error: $e');
       }
-      if (kIsWeb) return;
     }
-    if (kIsWeb) return;
     final db = await database;
     final now = date ?? DateTime.now();
     final key = _dateKeyOf(now);
     final existing = await db.query(
-      'reading_sessions',
+      'phien_doc',
       where: 'date_key = ?',
       whereArgs: [key],
     );
     if (existing.isEmpty) {
-      await db.insert('reading_sessions', {
+      await db.insert('phien_doc', {
         'date_key': key,
         'words_read': words,
         'minutes_read': minutes,
@@ -978,7 +1459,7 @@ class AppDatabase {
       final prevWords = (existing.first['words_read'] as int?) ?? 0;
       final prevMinutes = (existing.first['minutes_read'] as int?) ?? 0;
       await db.update(
-        'reading_sessions',
+        'phien_doc',
         {
           'words_read': prevWords + words,
           'minutes_read': prevMinutes + minutes,
@@ -988,67 +1469,138 @@ class AppDatabase {
       );
     }
 
-    await db.insert('reading_session_logs', {
+    // Keep a separate, mergeable aggregate for device-only and offline
+    // sessions. The main local aggregate also contains cloud-synced sessions
+    // and must not be blindly added to cloud totals.
+    if (novelId < 0 ||
+        (isSupabaseReady && novelId >= 0 && !recordedInCloud) ||
+        !isSupabaseReady) {
+      final localSession = await db.query(
+        'phien_doc_cuc_bo',
+        where: 'date_key = ?',
+        whereArgs: [key],
+        limit: 1,
+      );
+      final localWords = (localSession.firstOrNull?['words_read'] as int?) ?? 0;
+      final localMinutes =
+          (localSession.firstOrNull?['minutes_read'] as int?) ?? 0;
+      await db.insert('phien_doc_cuc_bo', {
+        'date_key': key,
+        'words_read': localWords + words,
+        'minutes_read': localMinutes + minutes,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+
+    final newlyReadQuestIds = <int>[];
+    if (userId.isNotEmpty && novelId > 0 && chapterId > 0) {
+      final activeChapterQuests = (await V2DatabaseStore.getActiveQuests(db))
+          .where((quest) => quest.goalType == 'read_chapters');
+      for (final quest in activeChapterQuests) {
+        final seenInQuestWindow = await db.query(
+          'nhat_ky_phien_doc',
+          columns: ['id'],
+          where: 'user_id = ? AND novel_id = ? AND chapter_id = ? AND ended_at >= ? AND ended_at <= ?',
+          whereArgs: [
+            userId,
+            novelId,
+            chapterId,
+            quest.startsAt.millisecondsSinceEpoch,
+            quest.endsAt.millisecondsSinceEpoch,
+          ],
+          limit: 1,
+        );
+        if (seenInQuestWindow.isEmpty) newlyReadQuestIds.add(quest.id);
+      }
+    }
+
+    await db.insert('nhat_ky_phien_doc', {
       'user_id': userId,
       'novel_id': novelId,
       'chapter_id': chapterId,
-      'started_at':
-          now.subtract(Duration(minutes: minutes.clamp(1, 120))).millisecondsSinceEpoch,
+      'started_at': now
+          .subtract(Duration(minutes: minutes.clamp(1, 120)))
+          .millisecondsSinceEpoch,
       'ended_at': now.millisecondsSinceEpoch,
       'words_read': words,
       'hour_of_day': now.hour,
     });
 
     if (userId.isNotEmpty) {
-      await V2DatabaseStore.incrementQuestProgress(
-        db,
-        userId: userId,
-        goalType: 'read_minutes',
-        delta: minutes.clamp(1, 120),
-      );
-      await V2DatabaseStore.incrementQuestProgress(
-        db,
-        userId: userId,
-        goalType: 'read_chapters',
-        delta: 1,
-      );
+      if (minutes > 0) {
+        await V2DatabaseStore.incrementQuestProgress(
+          db,
+          userId: userId,
+          goalType: 'read_minutes',
+          delta: minutes.clamp(1, 120),
+        );
+      }
+      if (newlyReadQuestIds.isNotEmpty) {
+        await V2DatabaseStore.incrementQuestProgress(
+          db,
+          userId: userId,
+          goalType: 'read_chapters',
+          delta: 1,
+          questIds: newlyReadQuestIds.toSet(),
+        );
+      }
     }
   }
 
   /// Lấy toàn bộ lịch sử phiên đọc theo ngày (tăng dần theo ngày).
   Future<List<ReadingSessionStat>> getReadingSessions({String? userId}) async {
+    List<ReadingSessionStat> cloudSessions = [];
     if (isSupabaseReady) {
       try {
-        return await SupabaseDatabase.instance.getReadingSessions(userId: userId);
+        cloudSessions = await SupabaseDatabase.instance.getReadingSessions(
+          userId: userId,
+        );
       } catch (e) {
         debugPrint('Supabase getReadingSessions error: $e');
-        if (kIsWeb) return [];
       }
-      if (kIsWeb) return [];
     }
-    if (kIsWeb) return [];
     final db = await database;
-    final rows = await db.query('reading_sessions', orderBy: 'date_key ASC');
-    return rows.map(ReadingSessionStat.fromMap).toList();
+    final localRows = await db.query('phien_doc_cuc_bo');
+    final byDate = {
+      for (final session in cloudSessions) session.dateKey: session,
+    };
+    for (final row in localRows) {
+      final dateKey = row['date_key'] as String;
+      final existing = byDate[dateKey];
+      byDate[dateKey] = ReadingSessionStat(
+        dateKey: dateKey,
+        wordsRead:
+            (existing?.wordsRead ?? 0) + ((row['words_read'] as int?) ?? 0),
+        minutesRead:
+            (existing?.minutesRead ?? 0) + ((row['minutes_read'] as int?) ?? 0),
+      );
+    }
+    if (cloudSessions.isEmpty) {
+      final localTotals = await db.query('phien_doc', orderBy: 'date_key ASC');
+      return localTotals.map(ReadingSessionStat.fromMap).toList();
+    }
+    return byDate.values.toList()
+      ..sort((a, b) => a.dateKey.compareTo(b.dateKey));
   }
 
   /// Xuất toàn bộ dữ liệu cá nhân (tủ sách, lịch sử, bookmark, quotes, reading_sessions) ra JSON.
   Future<String> exportUserBackupJson() async {
     final db = await database;
-    final libraryRows = await db.query('library');
-    final historyRows = await db.query('reading_history');
-    final bookmarkRows = await db.query('bookmarks');
-    final quoteRows = await db.query('quotes');
-    final sessionRows = await db.query('reading_sessions');
+    final libraryRows = await db.query('tu_sach');
+    final historyRows = await db.query('lich_su_doc');
+    final bookmarkRows = await db.query('dau_trang');
+    final quoteRows = await db.query('trich_dan');
+    final sessionRows = await db.query('phien_doc');
+    final localSessionRows = await db.query('phien_doc_cuc_bo');
 
     return const JsonEncoder.withIndent('  ').convert({
-      'backup_version': 1,
+      'backup_version': 2,
       'exported_at': DateTime.now().toIso8601String(),
       'library': libraryRows,
       'reading_history': historyRows,
       'bookmarks': bookmarkRows,
       'quotes': quoteRows,
       'reading_sessions': sessionRows,
+      'local_reading_sessions': localSessionRows,
     });
   }
 
@@ -1060,19 +1612,21 @@ class AppDatabase {
     }
     final db = await database;
     await db.transaction((txn) async {
-      for (final table in const [
-        'library',
-        'reading_history',
-        'bookmarks',
-        'quotes',
-        'reading_sessions',
-      ]) {
-        final list = decoded[table];
+      const backupTables = <String, String>{
+        'library': 'tu_sach',
+        'reading_history': 'lich_su_doc',
+        'bookmarks': 'dau_trang',
+        'quotes': 'trich_dan',
+        'reading_sessions': 'phien_doc',
+        'local_reading_sessions': 'phien_doc_cuc_bo',
+      };
+      for (final entry in backupTables.entries) {
+        final list = decoded[entry.key];
         if (list is! List) continue;
         for (final item in list) {
           if (item is Map<String, dynamic>) {
             await txn.insert(
-              table,
+              entry.value,
               item,
               conflictAlgorithm: ConflictAlgorithm.replace,
             );

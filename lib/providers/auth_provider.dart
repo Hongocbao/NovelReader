@@ -185,26 +185,42 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Cộng hoặc trừ Linh Thạch của người dùng hiện tại.
-  Future<void> adjustLinhThach(int delta) async {
-    if (_currentUser.isGuest) return;
-    final nextBalance = (_currentUser.linhThach + delta).clamp(0, 9999999);
-    _currentUser = await _repo.updateUser(
-      _currentUser.copyWith(linhThach: nextBalance),
-    );
+  /// Nhận thưởng bằng RPC để đánh dấu nhiệm vụ và cộng tiền nguyên tử.
+  Future<int?> claimQuestReward(int questId, int reward) async {
+    if (_currentUser.isGuest || reward < 0 || reward > 100000) return null;
+    final economyRepo = _repo is AtomicEconomyRepository ? _repo as AtomicEconomyRepository : null;
+    if (economyRepo == null) {
+      _currentUser = _currentUser.copyWith(
+        linhThach: (_currentUser.linhThach + reward).clamp(0, 9999999),
+      );
+      notifyListeners();
+      return reward;
+    }
+    final claim = await economyRepo.claimQuestReward(questId);
+    if (claim == null) return null;
+    _currentUser = claim.user;
     notifyListeners();
+    return claim.reward;
   }
 
   /// Mua vật phẩm trong Cửa hàng Linh Thạch (khung avatar, nền đọc, hiệu ứng).
   Future<bool> purchaseShopItem(String itemKey, int cost) async {
     RoleGuard.requirePermission(_currentUser, AppPermission.interactAndGamify);
+    if (itemKey.trim().isEmpty || cost <= 0) return false;
     if (_currentUser.unlockedItems.contains(itemKey)) return true;
     if (_currentUser.linhThach < cost) return false;
-    final updated = _currentUser.copyWith(
-      linhThach: _currentUser.linhThach - cost,
-      unlockedItems: [..._currentUser.unlockedItems, itemKey],
-    );
-    _currentUser = await _repo.updateUser(updated);
+    final economyRepo = _repo is AtomicEconomyRepository ? _repo as AtomicEconomyRepository : null;
+    if (economyRepo == null) {
+      _currentUser = _currentUser.copyWith(
+        linhThach: _currentUser.linhThach - cost,
+        unlockedItems: [..._currentUser.unlockedItems, itemKey],
+      );
+      notifyListeners();
+      return true;
+    }
+    final updated = await economyRepo.purchaseShopItem(itemKey, cost);
+    if (updated == null) return false;
+    _currentUser = updated;
     notifyListeners();
     return true;
   }
@@ -214,17 +230,23 @@ class AuthProvider extends ChangeNotifier {
     RoleGuard.requirePermission(_currentUser, AppPermission.interactAndGamify);
     if (_currentUser.hasStreakShield) return true;
     if (_currentUser.linhThach < 20) return false;
-    _currentUser = await _repo.updateUser(
-      _currentUser.copyWith(
+    final economyRepo = _repo is AtomicEconomyRepository ? _repo as AtomicEconomyRepository : null;
+    if (economyRepo == null) {
+      _currentUser = _currentUser.copyWith(
         linhThach: _currentUser.linhThach - 20,
         hasStreakShield: true,
-      ),
-    );
+      );
+      notifyListeners();
+      return true;
+    }
+    final updated = await economyRepo.buyStreakShield();
+    if (updated == null) return false;
+    _currentUser = updated;
     notifyListeners();
     return true;
   }
 
-  /// Làm mới dữ liệu tài khoản hiện tại từ bảng profiles.
+  /// Làm mới dữ liệu tài khoản hiện tại từ bảng ho_so.
   Future<void> refreshCurrentUser() async {
     if (_currentUser.isGuest) return;
     final fresh = await _repo.getUserById(_currentUser.id);

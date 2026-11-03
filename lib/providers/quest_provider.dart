@@ -91,19 +91,19 @@ class QuestProvider extends ChangeNotifier {
       return 0;
     }
     final db = await _appDb.database;
-    await db.update(
-      'user_quests',
-      {'claimed': 1},
-      where: 'user_id = ? AND quest_id = ?',
-      whereArgs: [user.id, quest.id],
+    final reward = await auth.claimQuestReward(quest.id, quest.reward);
+    if (reward == null) return 0;
+    await V2DatabaseStore.cacheQuestClaim(
+      db,
+      userId: user.id,
+      questId: quest.id,
     );
-    await auth.adjustLinhThach(quest.reward);
     await V2DatabaseStore.createNotification(
       db,
       NotificationItem(
         userId: user.id,
         title: '🎁 Nhận thưởng nhiệm vụ thành công!',
-        body: 'Bạn nhận được +${quest.reward} Linh Thạch từ "${quest.title}".',
+        body: 'Bạn nhận được +$reward Linh Thạch từ "${quest.title}".',
         kind: 'quest_reward',
         createdAt: DateTime.now(),
       ),
@@ -113,7 +113,7 @@ class QuestProvider extends ChangeNotifier {
     }
     _userQuests = await V2DatabaseStore.getUserQuests(db, user.id);
     notifyListeners();
-    return quest.reward;
+    return reward;
   }
 
   /// Mở khóa một huy hiệu cho người dùng nếu chưa có.

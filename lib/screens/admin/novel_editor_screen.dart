@@ -138,8 +138,8 @@ class _NovelEditorScreenState extends State<NovelEditorScreen> {
             type: _type,
             genres: _selectedGenres.toList(),
             totalChapters: 0,
-            rating: 5.0,
-            views: 1,
+            rating: 0.0,
+            views: 0,
             updatedAt: DateTime.now(),
           );
       await adminNovels.saveNovel(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../database/app_database.dart';
 import '../models/chapter.dart';
 import '../providers/reader_provider.dart';
 import '../utils/constants.dart';
@@ -11,6 +12,7 @@ import '../widgets/error_view.dart';
 import '../widgets/loading_view.dart';
 import '../widgets/novel_card.dart';
 import 'novel_detail_screen.dart';
+import 'reader_screen.dart';
 
 /// Màn hình Tải xuống: hiển thị các chương đã tải gom theo từng truyện,
 /// tổng dung lượng, cho phép xóa từng chương / từng truyện / toàn bộ.
@@ -51,6 +53,36 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     );
     if (ok == true) {
       await rp.deleteDownloads();
+    }
+  }
+
+  Future<void> _openDownloadedChapter(DownloadedChapter downloaded) async {
+    try {
+      final novel = await AppDatabase.instance.getNovel(
+        downloaded.chapter.novelId,
+      );
+      if (!mounted) return;
+      if (novel == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Không tìm thấy thông tin truyện đã tải.'),
+          ),
+        );
+        return;
+      }
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => ReaderScreen(
+            novel: novel,
+            initialChapterId: downloaded.chapter.id,
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Không thể mở chương đã tải: $error')),
+      );
     }
   }
 
@@ -175,6 +207,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
             for (final d in items)
               ListTile(
                 dense: true,
+                onTap: () => _openDownloadedChapter(d),
                 title: Text(
                   d.chapter.title,
                   maxLines: 1,

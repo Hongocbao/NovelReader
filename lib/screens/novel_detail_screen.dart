@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/app_user.dart';
 import '../models/chapter.dart';
 import '../models/novel.dart';
+import '../providers/auth_provider.dart';
 import '../providers/library_provider.dart';
 import '../providers/novel_provider.dart';
 import '../providers/reader_provider.dart';
@@ -34,6 +36,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
   bool _loading = true;
   String? _error;
   bool _expandedDesc = false;
+  bool _viewRecorded = false;
 
   @override
   void initState() {
@@ -57,10 +60,22 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
         });
         return;
       }
-      await rp.loadChapters(novel.id, force: true);
+      await rp.loadChapters(novel.id, force: true, novel: novel);
+      if (!mounted) return;
+      var loadedNovel = novel;
+      if (!_viewRecorded) {
+        _viewRecorded = true;
+        try {
+          final views = await np.recordNovelView(novel.id);
+          if (views != null) loadedNovel = novel.copyWith(views: views);
+        } catch (e) {
+          // A statistics write must not prevent opening the novel detail page.
+          debugPrint('Could not record novel view: $e');
+        }
+      }
       if (!mounted) return;
       setState(() {
-        _novel = novel;
+        _novel = loadedNovel;
         _loading = false;
       });
     } catch (e) {
@@ -86,6 +101,17 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
     );
   }
 
+  Future<void> _saveLibraryChange(Future<void> Function() action) async {
+    try {
+      await action();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Không thể cập nhật tủ sách: $error')),
+      );
+    }
+  }
+
   Future<void> _showLibrarySheet(String? currentCategory) async {
     final novel = _novel;
     if (novel == null) return;
@@ -107,20 +133,22 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                 title: Text(Format.category(cat)),
                 onTap: () {
                   Navigator.pop(ctx);
-                  lp.setCategory(novel.id, cat);
+                  _saveLibraryChange(() => lp.setCategory(novel.id, cat));
                 },
               ),
             if (currentCategory != null)
               ListTile(
-                leading: Icon(Icons.delete_outline,
-                    color: Theme.of(ctx).colorScheme.error),
+                leading: Icon(
+                  Icons.delete_outline,
+                  color: Theme.of(ctx).colorScheme.error,
+                ),
                 title: Text(
                   AppStrings.removeFromLibrary,
                   style: TextStyle(color: Theme.of(ctx).colorScheme.error),
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
-                  lp.remove(novel.id);
+                  _saveLibraryChange(() => lp.remove(novel.id));
                 },
               ),
             const SizedBox(height: 8),
@@ -166,8 +194,10 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
             ),
             if (hasDownloaded)
               ListTile(
-                leading: Icon(Icons.delete_sweep_outlined,
-                    color: Theme.of(ctx).colorScheme.error),
+                leading: Icon(
+                  Icons.delete_sweep_outlined,
+                  color: Theme.of(ctx).colorScheme.error,
+                ),
                 title: Text(
                   AppStrings.deleteNovelDownloads,
                   style: TextStyle(color: Theme.of(ctx).colorScheme.error),
@@ -232,11 +262,9 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
               onPressed: selected.isEmpty
                   ? null
                   : () => Navigator.pop(
-                        ctx,
-                        candidates
-                            .where((c) => selected.contains(c.id))
-                            .toList(),
-                      ),
+                      ctx,
+                      candidates.where((c) => selected.contains(c.id)).toList(),
+                    ),
               child: Text('${AppStrings.download} (${selected.length})'),
             ),
           ],
@@ -254,7 +282,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
     final rp = context.read<ReaderProvider>();
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final count = await rp.downloadChapters(novel.id, list);
+      final count = await rp.downloadChapters(novel.id, list, novel: novel);
       if (count > 0) {
         messenger.showSnackBar(
           SnackBar(content: Text('${AppStrings.downloadDone}: $count chương')),
@@ -263,9 +291,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
     } catch (e) {
       messenger.showSnackBar(
         SnackBar(
-          content: Text(
-            e is OfflineException ? AppStrings.needOnline : '$e',
-          ),
+          content: Text(e is OfflineException ? AppStrings.needOnline : '$e'),
         ),
       );
     }
@@ -274,6 +300,17 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
   Future<void> _showAddChapterDialog() async {
     final novel = _novel;
     if (novel == null) return;
+    final user = context.read<AuthProvider>().currentUser;
+    final canAdd =
+        novel.id < 0 ||
+        user.isAdmin ||
+        (!user.isGuest && !user.isBanned && user.id == novel.ownerId);
+    if (!canAdd) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Chỉ chủ truyện mới có thể thêm chương.')),
+      );
+      return;
+    }
     final titleCtrl = TextEditingController();
     final contentCtrl = TextEditingController();
 
@@ -318,21 +355,45 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
         ],
       ),
     );
-    if (ok == true && mounted && contentCtrl.text.trim().isNotEmpty) {
+    if (ok == true && mounted) {
       final np = context.read<NovelProvider>();
       final messenger = ScaffoldMessenger.of(context);
-      await np.addChapterToNovel(
-        novelId: novel.id,
-        title: titleCtrl.text.trim().isEmpty
-            ? 'Chương mới'
-            : titleCtrl.text.trim(),
-        content: contentCtrl.text,
-      );
-      await _load();
-      messenger.showSnackBar(
-        const SnackBar(content: Text(AppStrings.chapterAddedSuccess)),
-      );
+      if (contentCtrl.text.trim().isEmpty) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Vui lòng nhập nội dung chương.')),
+        );
+      } else {
+        try {
+          await np.addChapterToNovel(
+            novelId: novel.id,
+            title: titleCtrl.text.trim().isEmpty
+                ? 'Chương mới'
+                : titleCtrl.text.trim(),
+            content: contentCtrl.text,
+          );
+          await _load();
+          if (mounted) {
+            messenger.showSnackBar(
+              const SnackBar(content: Text(AppStrings.chapterAddedSuccess)),
+            );
+          }
+        } catch (e) {
+          if (mounted) {
+            messenger.showSnackBar(
+              SnackBar(content: Text('Không lưu được chương: $e')),
+            );
+          }
+        }
+      }
     }
+    titleCtrl.dispose();
+    contentCtrl.dispose();
+  }
+
+  bool _canAddChapter(Novel novel, AppUser user) {
+    if (novel.id < 0) return true;
+    return user.isAdmin ||
+        (!user.isGuest && !user.isBanned && user.id == novel.ownerId);
   }
 
   Future<void> _showRateDialog() async {
@@ -351,9 +412,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                 IconButton(
                   iconSize: 34,
                   icon: Icon(
-                    i <= stars
-                        ? Icons.star_rounded
-                        : Icons.star_border_rounded,
+                    i <= stars ? Icons.star_rounded : Icons.star_border_rounded,
                     color: AppColors.rating,
                   ),
                   onPressed: () => setDialogState(() => stars = i),
@@ -375,9 +434,20 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
     );
     if (chosen != null && mounted) {
       final messenger = ScaffoldMessenger.of(context);
-      final newRating = await context
-          .read<NovelProvider>()
-          .rateNovel(novel.id, chosen.toDouble());
+      late final double newRating;
+      try {
+        newRating = await context.read<NovelProvider>().rateNovel(
+          novel.id,
+          chosen.toDouble(),
+        );
+      } catch (_) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Không gửi được đánh giá. Hãy đăng nhập và thử lại.'),
+          ),
+        );
+        return;
+      }
       if (!mounted) return;
       setState(() => _novel = novel.copyWith(rating: newRating));
       messenger.showSnackBar(
@@ -390,6 +460,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
   Widget build(BuildContext context) {
     final rp = context.watch<ReaderProvider>();
     final lp = context.watch<LibraryProvider>();
+    final user = context.watch<AuthProvider>().currentUser;
 
     if (_loading) {
       return Scaffold(appBar: AppBar(), body: const LoadingView());
@@ -397,7 +468,10 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
     if (_error != null || _novel == null) {
       return Scaffold(
         appBar: AppBar(),
-        body: ErrorView(message: _error ?? AppStrings.errorGeneric, onRetry: _load),
+        body: ErrorView(
+          message: _error ?? AppStrings.errorGeneric,
+          onRetry: _load,
+        ),
       );
     }
 
@@ -413,11 +487,12 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
       appBar: AppBar(
         title: Text(novel.title),
         actions: [
-          IconButton(
-            tooltip: AppStrings.addChapter,
-            icon: const Icon(Icons.note_add_outlined),
-            onPressed: _showAddChapterDialog,
-          ),
+          if (_canAddChapter(novel, user))
+            IconButton(
+              tooltip: AppStrings.addChapter,
+              icon: const Icon(Icons.note_add_outlined),
+              onPressed: _showAddChapterDialog,
+            ),
         ],
       ),
       body: RefreshIndicator(
@@ -429,8 +504,10 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
             _buildActions(novel, history, category, chapters, task),
             if (task != null && task.running)
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: AppTheme.gap, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppTheme.gap,
+                  vertical: 6,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -452,9 +529,8 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                 children: [
                   Text(
                     '${AppStrings.chapterList} (${chapters.length})',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                    style: Theme.of(context).textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.bold),
                   ),
                   const Spacer(),
                   if (downloadedCount > 0)
@@ -469,7 +545,8 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
             if (chaptersError != null && chapters.isEmpty)
               ErrorView(
                 message: chaptersError,
-                onRetry: () => rp.loadChapters(novel.id, force: true),
+                onRetry: () =>
+                    rp.loadChapters(novel.id, force: true, novel: novel),
               )
             else if (chapters.isEmpty)
               const EmptyView(message: AppStrings.noChapters)
@@ -543,8 +620,11 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Icon(Icons.star_rounded,
-                        color: AppColors.rating, size: 20),
+                    const Icon(
+                      Icons.star_rounded,
+                      color: AppColors.rating,
+                      size: 20,
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       Format.rating(novel.rating),
@@ -570,8 +650,11 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Icon(Icons.visibility_outlined,
-                        size: 18, color: scheme.onSurfaceVariant),
+                    Icon(
+                      Icons.visibility_outlined,
+                      size: 18,
+                      color: scheme.onSurfaceVariant,
+                    ),
                     const SizedBox(width: 4),
                     Text(Format.views(novel.views)),
                   ],
@@ -609,9 +692,9 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
             onPressed: chapters.isEmpty
                 ? null
                 : () => _openReader(
-                      chapterId: history?.lastChapterId,
-                      offset: history?.scrollOffset ?? 0,
-                    ),
+                    chapterId: history?.lastChapterId,
+                    offset: history?.scrollOffset ?? 0,
+                  ),
             icon: const Icon(Icons.menu_book_rounded),
             label: Text(
               hasHistory
@@ -621,9 +704,11 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
           ),
           OutlinedButton.icon(
             onPressed: () => _showLibrarySheet(category),
-            icon: Icon(category == null
-                ? Icons.bookmark_add_outlined
-                : Icons.bookmark_added_rounded),
+            icon: Icon(
+              category == null
+                  ? Icons.bookmark_add_outlined
+                  : Icons.bookmark_added_rounded,
+            ),
             label: Text(
               category == null
                   ? AppStrings.addToLibrary
@@ -651,11 +736,11 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
           Text(
             novel.description,
             maxLines: _expandedDesc ? null : 3,
-            overflow:
-                _expandedDesc ? TextOverflow.visible : TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  height: 1.45,
-                ),
+            overflow: _expandedDesc
+                ? TextOverflow.visible
+                : TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(height: 1.45),
           ),
           Align(
             alignment: Alignment.centerRight,

@@ -38,6 +38,7 @@ class SettingsProvider extends ChangeNotifier {
       'brightness': _prefs.getDouble(PrefKeys.brightness),
       'keep_screen_on': _prefs.getBool(PrefKeys.keepScreenOn),
       'horizontal_page_mode': _prefs.getBool(PrefKeys.pageMode),
+      'show_ai_bubble': _prefs.getBool(PrefKeys.showAiBubble),
     });
     _forceOffline = _prefs.getBool(PrefKeys.forceOffline) ?? false;
   }
@@ -64,6 +65,7 @@ class SettingsProvider extends ChangeNotifier {
       _prefs.setDouble(PrefKeys.brightness, settings.brightness),
       _prefs.setBool(PrefKeys.keepScreenOn, settings.keepScreenOn),
       _prefs.setBool(PrefKeys.pageMode, settings.horizontalPageMode),
+      _prefs.setBool(PrefKeys.showAiBubble, settings.showAiBubble),
     ]);
   }
 
@@ -88,6 +90,8 @@ class SettingsProvider extends ChangeNotifier {
       updateReader(_reader.copyWith(keepScreenOn: v));
   Future<void> setHorizontalPageMode(bool v) =>
       updateReader(_reader.copyWith(horizontalPageMode: v));
+  Future<void> setShowAiBubble(bool v) =>
+      updateReader(_reader.copyWith(showAiBubble: v));
 
   /// Khôi phục cài đặt đọc mặc định.
   Future<void> resetReader() => updateReader(const ReaderSettings());

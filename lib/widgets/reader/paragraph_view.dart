@@ -1,5 +1,8 @@
 import 'dart:io';
+import 'dart:convert';
+
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/chapter.dart';
@@ -8,6 +11,21 @@ import '../../utils/constants.dart';
 
 /// Biểu thức chính quy nhận diện ảnh minh họa Light Novel `[img]url[/img]`.
 final RegExp readerInlineImgPattern = RegExp(r'^\[img\](.+)\[/img\]$');
+
+/// Decode embedded pages defensively. A malformed base64 image must show the
+/// reader's broken-image state instead of throwing during widget build.
+Uint8List? decodeReaderImageDataUri(String dataUri) {
+  final separator = dataUri.indexOf(',');
+  if (separator < 0 ||
+      !dataUri.substring(0, separator).toLowerCase().contains(';base64')) {
+    return null;
+  }
+  try {
+    return base64Decode(dataUri.substring(separator + 1));
+  } on FormatException {
+    return null;
+  }
+}
 
 /// Hiển thị một đoạn văn hoặc ảnh minh họa trong chương truyện:
 /// - Tự co giãn theo `MediaQuery.textScalerOf(context)` (hỗ trợ cỡ chữ hệ thống).
@@ -23,6 +41,9 @@ class ReaderParagraphView extends StatelessWidget {
   final VoidCallback onLongPressQuote;
   final ValueChanged<String> onTapImage;
 
+  /// Chế độ đọc truyện tranh: ảnh tràn viền, nối tiếp nhau như webtoon.
+  final bool comicMode;
+
   const ReaderParagraphView({
     super.key,
     required this.chapter,
@@ -32,6 +53,7 @@ class ReaderParagraphView extends StatelessWidget {
     this.searchKeyword = '',
     required this.onLongPressQuote,
     required this.onTapImage,
+    this.comicMode = false,
   });
 
   @override
@@ -39,15 +61,46 @@ class ReaderParagraphView extends StatelessWidget {
     final match = readerInlineImgPattern.firstMatch(paragraph);
     if (match != null) {
       final url = match.group(1)!.trim();
+      final isEmbedded = url.startsWith('data:image/');
       final isLocal = url.startsWith('file://') || !url.startsWith('http');
       Widget imageWidget;
-      if (isLocal) {
+      if (isEmbedded) {
+        final bytes = decodeReaderImageDataUri(url);
+        imageWidget = bytes == null
+            ? const Icon(Icons.broken_image_outlined)
+            : Image.memory(
+                bytes,
+                fit: comicMode ? BoxFit.fitWidth : BoxFit.contain,
+                width: comicMode ? double.infinity : null,
+                cacheWidth:
+                    (MediaQuery.sizeOf(context).width *
+                            MediaQuery.devicePixelRatioOf(context))
+                        .round(),
+                gaplessPlayback: true,
+                errorBuilder: (_, _, _) =>
+                    const Icon(Icons.broken_image_outlined),
+              );
+      } else if (isLocal && kIsWeb) {
+        imageWidget = Container(
+          height: 180,
+          alignment: Alignment.center,
+          padding: const EdgeInsets.all(16),
+          color: Colors.black12,
+          child: Text(
+            'Ảnh này nằm trên máy đã nhập truyện. Trên web, hãy nhập bằng ZIP để lưu ảnh cùng truyện.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: settings.background.textColor),
+          ),
+        );
+      } else if (isLocal) {
         final filePath = url.startsWith('file:///')
             ? url.substring(8)
             : (url.startsWith('file://') ? url.substring(7) : url);
         imageWidget = Image.file(
           File(filePath),
-          fit: BoxFit.contain,
+          fit: comicMode ? BoxFit.fitWidth : BoxFit.contain,
+          width: comicMode ? double.infinity : null,
+          gaplessPlayback: true,
           errorBuilder: (_, _, _) => Container(
             height: 160,
             alignment: Alignment.center,
@@ -64,7 +117,8 @@ class ReaderParagraphView extends StatelessWidget {
       } else {
         imageWidget = CachedNetworkImage(
           imageUrl: url,
-          fit: BoxFit.cover,
+          fit: comicMode ? BoxFit.fitWidth : BoxFit.cover,
+          width: comicMode ? double.infinity : null,
           placeholder: (_, _) => Container(
             height: 200,
             alignment: Alignment.center,
@@ -102,10 +156,26 @@ class ReaderParagraphView extends StatelessWidget {
         );
       }
 
+      if (comicMode) {
+        return Semantics(
+          image: true,
+          label:
+              'Trang truyện tranh trong ${chapter.title}, nhấn giữ để phóng to',
+          child: GestureDetector(
+            onLongPress: () => onTapImage(url),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(0),
+              child: imageWidget,
+            ),
+          ),
+        );
+      }
+
       return Semantics(
         image: true,
         button: true,
-        label: 'Ảnh minh họa Manga/Light Novel trong ${chapter.title}, chạm để phóng to',
+        label:
+            'Ảnh minh họa Manga/Light Novel trong ${chapter.title}, chạm để phóng to',
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: GestureDetector(

@@ -53,7 +53,25 @@ class _HistoryScreenState extends State<HistoryScreen> {
       ),
     );
     if (ok == true) {
-      await lp.clearHistory();
+      try {
+        await lp.clearHistory();
+      } catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Không thể xóa lịch sử đọc: $error')),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteHistoryItem(int novelId) async {
+    try {
+      await context.read<LibraryProvider>().deleteHistory(novelId);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Không thể xóa lịch sử đọc: $error')),
+      );
     }
   }
 
@@ -98,7 +116,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 final h = list[i];
                 final novel = h.novel;
                 if (novel == null) return const SizedBox.shrink();
-                final chText = h.chapterTitle ??
+                final chText =
+                    h.chapterTitle ??
                     'Chương ${h.chapterIndex ?? 1}/${novel.totalChapters}';
                 return Card(
                   child: ListTile(
@@ -138,7 +157,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         IconButton(
                           tooltip: AppStrings.delete,
                           icon: const Icon(Icons.close),
-                          onPressed: () => lp.deleteHistory(novel.id),
+                          onPressed: () => _deleteHistoryItem(novel.id),
                         ),
                       ],
                     ),

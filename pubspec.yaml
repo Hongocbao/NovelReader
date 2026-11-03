@@ -31,6 +31,12 @@ dependencies:
   wakelock_plus: ^1.8.2
   # Theo dõi trạng thái mạng
   connectivity_plus: ^7.3.2
+  # HTTP đa nền tảng cho Gemini và các API ngoài.
+  http: ^1.6.0
+  # Chọn file truyện trên Web, mobile và desktop.
+  file_picker: ^13.3.2
+  # Đọc cấu trúc ZIP truyện tranh trên cả Web và desktop.
+  archive: ^4.6.0
   # Hỗ trợ Web Speech API trên trình duyệt
   web: ^1.1.1
   flutter_tts: ^4.2.5

@@ -13,7 +13,7 @@ class UserStatus {
   static const String banned = 'banned';
 }
 
-/// Mô hình hồ sơ người dùng trong NovelReader v2 (đồng bộ với bảng `profiles` trên Supabase).
+/// Mô hình hồ sơ người dùng trong NovelReader v2 (đồng bộ với bảng `ho_so` trên Supabase).
 class AppUser {
   /// UUID từ Supabase Auth (auth.users.id)
   final String id;

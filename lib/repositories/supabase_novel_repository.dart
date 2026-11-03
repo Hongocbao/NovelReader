@@ -16,7 +16,7 @@ class SupabaseNovelRepository implements NovelRepository {
 
   @override
   Future<List<Novel>> getAllNovels({bool includeDeleted = false}) async {
-    var query = _client.from('novels').select();
+    var query = _client.from('truyen').select();
     if (!includeDeleted) {
       query = query.filter('deleted_at', 'is', null);
     }
@@ -27,7 +27,7 @@ class SupabaseNovelRepository implements NovelRepository {
   @override
   Future<List<Novel>> getNovelsByOwner(String ownerId) async {
     final res = await _client
-        .from('novels')
+        .from('truyen')
         .select()
         .eq('owner_id', ownerId)
         .filter('deleted_at', 'is', null)
@@ -39,7 +39,7 @@ class SupabaseNovelRepository implements NovelRepository {
   @override
   Future<List<Novel>> getPendingNovels() async {
     final res = await _client
-        .from('novels')
+        .from('truyen')
         .select()
         .eq('moderation_status', ModerationStatus.pending)
         .filter('deleted_at', 'is', null)
@@ -50,7 +50,7 @@ class SupabaseNovelRepository implements NovelRepository {
 
   @override
   Future<Novel?> getNovelById(int novelId) async {
-    final res = await _client.from('novels').select().eq('id', novelId).maybeSingle();
+    final res = await _client.from('truyen').select().eq('id', novelId).maybeSingle();
     if (res == null) return null;
     return Novel.fromMap(res);
   }
@@ -63,22 +63,22 @@ class SupabaseNovelRepository implements NovelRepository {
     };
 
     if (novel.id > 0) {
-      final existing = await _client.from('novels').select('id').eq('id', novel.id).maybeSingle();
+      final existing = await _client.from('truyen').select('id').eq('id', novel.id).maybeSingle();
       if (existing != null) {
-        await _client.from('novels').update(map).eq('id', novel.id);
+        await _client.from('truyen').update(map).eq('id', novel.id);
         return novel;
       }
     }
 
     // Step 3: id do Postgres tự sinh, không tính MAX(id)+1 ở client
     map.remove('id');
-    final inserted = await _client.from('novels').insert(map).select().single();
+    final inserted = await _client.from('truyen').insert(map).select().single();
     return Novel.fromMap(inserted);
   }
 
   @override
   Future<void> softDeleteNovel(int novelId, {AppUser? admin}) async {
-    await _client.from('novels').update({
+    await _client.from('truyen').update({
       'deleted_at': DateTime.now().millisecondsSinceEpoch,
     }).eq('id', novelId);
 
@@ -94,7 +94,7 @@ class SupabaseNovelRepository implements NovelRepository {
 
   @override
   Future<void> restoreNovel(int novelId, {AppUser? admin}) async {
-    await _client.from('novels').update({
+    await _client.from('truyen').update({
       'deleted_at': null,
     }).eq('id', novelId);
 
@@ -117,7 +117,7 @@ class SupabaseNovelRepository implements NovelRepository {
     final novel = await getNovelById(novelId);
     if (novel == null) return;
 
-    await _client.from('novels').update({
+    await _client.from('truyen').update({
       'moderation_status': ModerationStatus.approved,
       'rejection_reason': null,
       'updated_at': DateTime.now().millisecondsSinceEpoch,
@@ -151,7 +151,7 @@ class SupabaseNovelRepository implements NovelRepository {
   }) async {
     final novel = await getNovelById(novelId);
 
-    await _client.from('novels').update({
+    await _client.from('truyen').update({
       'moderation_status': ModerationStatus.rejected,
       'rejection_reason': reason.trim(),
     }).eq('id', novelId);
@@ -184,7 +184,7 @@ class SupabaseNovelRepository implements NovelRepository {
   }) async {
     for (var i = 0; i < novelIds.length; i++) {
       final id = novelIds[i];
-      await _client.from('novels').update({
+      await _client.from('truyen').update({
         'is_featured': featured ? 1 : 0,
         'featured_order': featured ? i + 1 : 0,
       }).eq('id', id);
@@ -201,7 +201,7 @@ class SupabaseNovelRepository implements NovelRepository {
   @override
   Future<List<Chapter>> getChapters(int novelId) async {
     final res = await _client
-        .from('chapters')
+        .from('chuong')
         .select()
         .eq('novel_id', novelId)
         .order('chapter_index', ascending: true);
@@ -212,12 +212,12 @@ class SupabaseNovelRepository implements NovelRepository {
   @override
   Future<void> saveChaptersOrder(int novelId, List<Chapter> orderedChapters) async {
     for (var i = 0; i < orderedChapters.length; i++) {
-      await _client.from('chapters').update({
+      await _client.from('chuong').update({
         'chapter_index': -(i + 1),
       }).eq('id', orderedChapters[i].id);
     }
     for (var i = 0; i < orderedChapters.length; i++) {
-      await _client.from('chapters').update({
+      await _client.from('chuong').update({
         'chapter_index': i + 1,
       }).eq('id', orderedChapters[i].id);
     }
@@ -226,19 +226,19 @@ class SupabaseNovelRepository implements NovelRepository {
   @override
   Future<Chapter> saveChapter(Chapter chapter) async {
     final map = chapter.toMap();
-    final existing = await _client.from('chapters').select('id').eq('id', chapter.id).maybeSingle();
+    final existing = await _client.from('chuong').select('id').eq('id', chapter.id).maybeSingle();
 
     if (existing == null) {
-      await _client.from('chapters').insert(map);
+      await _client.from('chuong').insert(map);
     } else {
-      await _client.from('chapters').update(map).eq('id', chapter.id);
+      await _client.from('chuong').update(map).eq('id', chapter.id);
     }
 
     // Cập nhật total_chapters
-    final countRes = await _client.from('chapters').select('id').eq('novel_id', chapter.novelId);
+    final countRes = await _client.from('chuong').select('id').eq('novel_id', chapter.novelId);
     final total = (countRes as List).length;
 
-    await _client.from('novels').update({
+    await _client.from('truyen').update({
       'total_chapters': total,
       'updated_at': DateTime.now().millisecondsSinceEpoch,
     }).eq('id', chapter.novelId);
@@ -249,7 +249,7 @@ class SupabaseNovelRepository implements NovelRepository {
   @override
   Future<List<GlossaryTerm>> getGlossaryTerms(int novelId) async {
     final res = await _client
-        .from('glossary_terms')
+        .from('thuat_ngu')
         .select()
         .eq('novel_id', novelId)
         .order('first_chapter_index', ascending: true);
@@ -263,18 +263,18 @@ class SupabaseNovelRepository implements NovelRepository {
     if (term.id == null || term.id! <= 0) {
       map.remove('id');
     }
-    await _client.from('glossary_terms').insert(map);
+    await _client.from('thuat_ngu').insert(map);
   }
 
   @override
   Future<void> deleteGlossaryTerm(int termId) async {
-    await _client.from('glossary_terms').delete().eq('id', termId);
+    await _client.from('thuat_ngu').delete().eq('id', termId);
   }
 
   @override
   Future<List<ChapterSummary>> getChapterSummaries(int novelId) async {
     final res = await _client
-        .from('chapter_summaries')
+        .from('tom_tat_chuong')
         .select()
         .eq('novel_id', novelId)
         .order('chapter_index', ascending: true);
@@ -284,7 +284,7 @@ class SupabaseNovelRepository implements NovelRepository {
 
   @override
   Future<void> saveChapterSummary(ChapterSummary summary) async {
-    await _client.from('chapter_summaries').upsert(summary.toMap());
+    await _client.from('tom_tat_chuong').upsert(summary.toMap());
   }
 
   @override
@@ -303,13 +303,13 @@ class SupabaseNovelRepository implements NovelRepository {
       createdAt: DateTime.now(),
     ).toMap();
     map.remove('id');
-    await _client.from('audit_logs').insert(map);
+    await _client.from('nhat_ky_quan_tri').insert(map);
   }
 
   @override
   Future<void> createNotification(NotificationItem item) async {
     final map = item.toMap();
     map.remove('id');
-    await _client.from('notifications').insert(map);
+    await _client.from('thong_bao').insert(map);
   }
 }

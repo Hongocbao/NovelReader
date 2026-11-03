@@ -303,7 +303,7 @@ void main() {
 
     // 2. Cuộn xuống -> lưu vị trí cuộn vào LibraryProvider khi đóng màn hình đọc
     await tester.drag(
-      find.byType(SingleChildScrollView).first,
+      find.byType(Scrollable).first,
       const Offset(0, -300),
     );
     await tester.pump();

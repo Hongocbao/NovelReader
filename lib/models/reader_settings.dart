@@ -22,6 +22,9 @@ class ReaderSettings {
   /// true = lật trang ngang (PageView), false = cuộn dọc truyền thống.
   final bool horizontalPageMode;
 
+  /// true = hiển thị bong bóng Trợ lý AI khi đọc truyện.
+  final bool showAiBubble;
+
   const ReaderSettings({
     this.fontSize = ReaderLimits.defaultFontSize,
     this.fontFamily = '',
@@ -31,6 +34,7 @@ class ReaderSettings {
     this.brightness = 1.0,
     this.keepScreenOn = true,
     this.horizontalPageMode = false,
+    this.showAiBubble = true,
   });
 
   TextAlign get textAlign => justify ? TextAlign.justify : TextAlign.left;
@@ -52,6 +56,7 @@ class ReaderSettings {
         'brightness': brightness,
         'keep_screen_on': keepScreenOn,
         'horizontal_page_mode': horizontalPageMode,
+        'show_ai_bubble': showAiBubble,
       };
 
   /// Đọc từ Map, giá trị lỗi/ngoài giới hạn sẽ được đưa về hợp lệ.
@@ -73,6 +78,7 @@ class ReaderSettings {
       keepScreenOn: (map['keep_screen_on'] as bool?) ?? d.keepScreenOn,
       horizontalPageMode:
           (map['horizontal_page_mode'] as bool?) ?? d.horizontalPageMode,
+      showAiBubble: (map['show_ai_bubble'] as bool?) ?? d.showAiBubble,
     );
   }
 
@@ -85,6 +91,7 @@ class ReaderSettings {
     double? brightness,
     bool? keepScreenOn,
     bool? horizontalPageMode,
+    bool? showAiBubble,
   }) {
     return ReaderSettings(
       fontSize: fontSize ?? this.fontSize,
@@ -95,6 +102,7 @@ class ReaderSettings {
       brightness: brightness ?? this.brightness,
       keepScreenOn: keepScreenOn ?? this.keepScreenOn,
       horizontalPageMode: horizontalPageMode ?? this.horizontalPageMode,
+      showAiBubble: showAiBubble ?? this.showAiBubble,
     );
   }
 
@@ -108,7 +116,8 @@ class ReaderSettings {
       other.background == background &&
       other.brightness == brightness &&
       other.keepScreenOn == keepScreenOn &&
-      other.horizontalPageMode == horizontalPageMode;
+      other.horizontalPageMode == horizontalPageMode &&
+      other.showAiBubble == showAiBubble;
 
   @override
   int get hashCode => Object.hash(
@@ -120,5 +129,6 @@ class ReaderSettings {
         brightness,
         keepScreenOn,
         horizontalPageMode,
+        showAiBubble,
       );
 }

@@ -371,15 +371,16 @@ class _AmbientAndCapsuleSheetState extends State<AmbientAndCapsuleSheet> {
 
   Future<void> _loadCapsules() async {
     final db = await AppDatabase.instance.database;
-    final rows = await db.query(
-      'time_capsules',
-      where: 'chapter_id = ?',
-      whereArgs: [widget.chapterId],
-      orderBy: 'created_at DESC',
+    if (!mounted) return;
+    final userId = context.read<AuthProvider>().currentUser.id;
+    final capsules = await V2DatabaseStore.getTimeCapsules(
+      db,
+      chapterId: widget.chapterId,
+      userId: userId,
     );
     if (mounted) {
       setState(() {
-        _capsules = rows.map(TimeCapsuleNote.fromMap).toList();
+        _capsules = capsules;
       });
     }
   }
@@ -483,8 +484,8 @@ class _AmbientAndCapsuleSheetState extends State<AmbientAndCapsuleSheet> {
                 onPressed: () async {
                   if (_capsuleCtrl.text.trim().isEmpty) return;
                   final db = await AppDatabase.instance.database;
-                  await db.insert(
-                    'time_capsules',
+                  await V2DatabaseStore.createTimeCapsule(
+                    db,
                     TimeCapsuleNote(
                       userId: user.id,
                       novelId: widget.novelId,
@@ -492,7 +493,7 @@ class _AmbientAndCapsuleSheetState extends State<AmbientAndCapsuleSheet> {
                       note: _capsuleCtrl.text.trim(),
                       unlockAfterDays: _unlockDays,
                       createdAt: DateTime.now(),
-                    ).toMap(),
+                    ),
                   );
                   _capsuleCtrl.clear();
                   if (context.mounted) {

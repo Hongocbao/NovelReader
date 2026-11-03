@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -11,6 +12,8 @@ import '../models/bookmark.dart';
 import '../models/chapter.dart';
 import '../models/novel.dart';
 import '../models/reader_settings.dart';
+import '../providers/auth_provider.dart';
+import '../providers/quest_provider.dart';
 import '../providers/library_provider.dart';
 import '../providers/reader_provider.dart';
 import '../providers/settings_provider.dart';
@@ -21,6 +24,7 @@ import '../widgets/chapter_tile.dart';
 import '../widgets/empty_view.dart';
 import '../widgets/error_view.dart';
 import '../widgets/loading_view.dart';
+import '../widgets/reader/ai_chat_bubble.dart';
 import '../widgets/reader/comment_section.dart';
 import '../widgets/reader/paragraph_view.dart';
 import '../widgets/reader/xray_and_quote_sheets.dart';
@@ -83,8 +87,16 @@ class _ReaderScreenState extends State<ReaderScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       _applyWakelock(context.read<SettingsProvider>().reader.keepScreenOn);
-      await _libraryProvider.loadBookmarks(widget.novel.id);
-      if ( _readerProvider.currentChapter?.id != widget.initialChapterId ||
+      try {
+        await _libraryProvider.loadBookmarks(widget.novel.id);
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Không tải được dấu trang: $error')),
+          );
+        }
+      }
+      if (_readerProvider.currentChapter?.id != widget.initialChapterId ||
           _readerProvider.content == null) {
         await _readerProvider.openNovel(
           widget.novel,
@@ -108,16 +120,15 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   void _applyWakelock(bool enable) {
     _lastKeepOn = enable;
-    unawaited(
-      WakelockPlus.toggle(enable: enable).catchError((_) {}),
-    );
+    unawaited(WakelockPlus.toggle(enable: enable).catchError((_) {}));
   }
 
   void _onScroll() {
     if (!_scrollCtrl.hasClients) return;
     final max = _scrollCtrl.position.maxScrollExtent;
-    final nextRatio =
-        max <= 0 ? 0.0 : (_scrollCtrl.offset / max).clamp(0.0, 1.0);
+    final nextRatio = max <= 0
+        ? 0.0
+        : (_scrollCtrl.offset / max).clamp(0.0, 1.0);
     if ((nextRatio - _currentRatio).abs() >= 0.01) {
       setState(() => _currentRatio = nextRatio);
     } else {
@@ -125,6 +136,17 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
     _saveDebounce?.cancel();
     _saveDebounce = Timer(const Duration(milliseconds: 400), _persistNow);
+  }
+
+  Future<void> _loadCommentsForChapter(int chapterId) async {
+    try {
+      await _libraryProvider.loadComments(chapterId);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Không tải được bình luận: $error')),
+      );
+    }
   }
 
   void _toggleAutoScroll() {
@@ -144,8 +166,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
         _stopAutoScroll();
         return;
       }
-      final nextOffset =
-          (pos.pixels + _autoScrollSpeed * 1.4).clamp(0.0, pos.maxScrollExtent);
+      final nextOffset = (pos.pixels + _autoScrollSpeed * 1.4).clamp(
+        0.0,
+        pos.maxScrollExtent,
+      );
       _scrollCtrl.jumpTo(nextOffset);
     });
   }
@@ -299,7 +323,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
     _libraryProvider.saveProgress(widget.novel, ch, _currentRatio);
   }
 
-  void _scheduleRestoreIfNeeded(Chapter chapter, bool horizontalMode, int pageCount) {
+  void _scheduleRestoreIfNeeded(
+    Chapter chapter,
+    bool horizontalMode,
+    int pageCount,
+  ) {
     if (_restoredForChapterId == chapter.id && _pendingRestoreRatio == null) {
       return;
     }
@@ -310,8 +338,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (horizontalMode && _pageCtrl.hasClients && pageCount > 1) {
-        final targetPage =
-            (targetRatio * (pageCount - 1)).round().clamp(0, pageCount - 1);
+        final targetPage = (targetRatio * (pageCount - 1)).round().clamp(
+          0,
+          pageCount - 1,
+        );
         _pageCtrl.jumpToPage(targetPage);
       } else if (_scrollCtrl.hasClients) {
         final max = _scrollCtrl.position.maxScrollExtent;
@@ -361,11 +391,21 @@ class _ReaderScreenState extends State<ReaderScreen> {
       ),
     );
     if (ok == true && mounted) {
-      await _libraryProvider.addBookmark(ch, _currentRatio, note: ctrl.text);
+      try {
+        await _libraryProvider.addBookmark(ch, _currentRatio, note: ctrl.text);
+      } catch (_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Không lưu được dấu trang. Hãy kiểm tra kết nối.'),
+          ),
+        );
+        return;
+      }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(AppStrings.bookmarkAdded)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text(AppStrings.bookmarkAdded)));
     }
   }
 
@@ -406,7 +446,20 @@ class _ReaderScreenState extends State<ReaderScreen> {
                   trailing: IconButton(
                     tooltip: AppStrings.delete,
                     icon: const Icon(Icons.delete_outline),
-                    onPressed: () => lp.deleteBookmark(b),
+                    onPressed: () async {
+                      try {
+                        await lp.deleteBookmark(b);
+                      } catch (_) {
+                        if (!ctx.mounted) return;
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Không xóa được dấu trang. Hãy thử lại.',
+                            ),
+                          ),
+                        );
+                      }
+                    },
                   ),
                   onTap: () {
                     Navigator.pop(ctx);
@@ -442,9 +495,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
               padding: const EdgeInsets.all(14),
               child: Text(
                 '${AppStrings.tableOfContents} (${chapters.length})',
-                style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                style: Theme.of(ctx).textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold),
               ),
             ),
             const Divider(height: 1),
@@ -475,7 +527,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => const ReaderSettingsSheet(),
+      builder: (_) => ReaderSettingsSheet(isComic: widget.novel.isComic),
     );
   }
 
@@ -484,7 +536,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
     if (ch == null) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await _readerProvider.downloadChapters(widget.novel.id, [ch]);
+      await _readerProvider.downloadChapters(widget.novel.id, [
+        ch,
+      ], novel: widget.novel);
       messenger.showSnackBar(
         const SnackBar(content: Text(AppStrings.downloadDone)),
       );
@@ -531,8 +585,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
         final contentSnapshot = rp.content!;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
-          _libraryProvider.loadComments(chapter.id);
-          _libraryProvider.recordChapterReadSession(chapter.id, contentSnapshot);
+          _loadCommentsForChapter(chapter.id);
+          _libraryProvider.recordChapterReadSession(
+            chapter.id,
+            contentSnapshot,
+          );
         });
       }
     }
@@ -593,16 +650,16 @@ class _ReaderScreenState extends State<ReaderScreen> {
                         button: true,
                         label: 'Quay lại màn hình trước',
                         child: Material(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .surface
+                          color: Theme.of(context).colorScheme.surface
                               .withValues(alpha: 0.72),
                           shape: const CircleBorder(),
                           elevation: 2,
                           child: IconButton(
                             tooltip: 'Quay lại (Esc)',
-                            icon:
-                                const Icon(Icons.arrow_back_rounded, size: 20),
+                            icon: const Icon(
+                              Icons.arrow_back_rounded,
+                              size: 20,
+                            ),
                             onPressed: () => Navigator.of(context).pop(),
                           ),
                         ),
@@ -629,9 +686,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                     child: Material(
                       elevation: 6,
                       borderRadius: BorderRadius.circular(28),
-                      color: Theme.of(context)
-                          .colorScheme
-                          .surface
+                      color: Theme.of(context).colorScheme.surface
                           .withValues(alpha: 0.94),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
@@ -733,6 +788,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
                       onOpenSettings: _showSettingsSheet,
                     ),
                   ),
+                // Bong bóng Trợ lý AI Đọc Truyện (Draggable Chat Bubble)
+                if (settings.showAiBubble && chapter != null)
+                  AiChatBubble(
+                    novel: widget.novel,
+                    chapter: chapter,
+                    chapterContent: rp.content,
+                  ),
               ],
             );
           },
@@ -798,6 +860,56 @@ class _ReaderScreenState extends State<ReaderScreen> {
       );
     }
 
+    // Khi ở chế độ cuộn dọc, truyện tranh hiển thị liên tục kiểu webtoon.
+    // Dùng SliverList để chỉ dựng các trang đang hiển thị, tránh nạp cả chương
+    // ảnh (có thể vài chục trang base64) vào bộ nhớ cùng lúc.
+    if (widget.novel.isComic) {
+      final imageCount = paragraphs
+          .where(readerInlineImgPattern.hasMatch)
+          .length;
+      final textColor = settings.background.textColor;
+      return CustomScrollView(
+        controller: _scrollCtrl,
+        slivers: [
+          SliverList.builder(
+            itemCount: paragraphs.length,
+            itemBuilder: (context, index) {
+              final p = paragraphs[index];
+              return ReaderParagraphView(
+                chapter: chapter,
+                paragraph: p,
+                settings: settings,
+                comicMode: readerInlineImgPattern.hasMatch(p),
+                onLongPressQuote: () {},
+                onTapImage: _openImageViewer,
+              );
+            },
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (imageCount > 0)
+                    Text(
+                      'Hết chương • $imageCount trang',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: textColor.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  const SizedBox(height: 12),
+                  _buildChapterNavButtons(rp),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     var textParagraphIdx = -1;
     return SingleChildScrollView(
       controller: _scrollCtrl,
@@ -833,7 +945,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 final key = currentTextIdx == null
                     ? null
                     : (_paragraphKeys[currentTextIdx] ??= GlobalKey());
-                final isSpeakingThis = _isListening &&
+                final isSpeakingThis =
+                    _isListening &&
                     currentTextIdx != null &&
                     currentTextIdx == _speakingParagraphIndex;
                 return ReaderParagraphView(
@@ -860,7 +973,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
     String text,
     ReaderSettings settings,
   ) {
-    final wordCount = text.split(RegExp(r'\s+')).length;
+    final isComic = widget.novel.isComic;
+    final imageCount = isComic ? RegExp(r'\[img\]').allMatches(text).length : 0;
+    final currentPage = imageCount == 0
+        ? 0
+        : (_currentRatio * imageCount).ceil().clamp(1, imageCount);
+    final wordCount = isComic ? 0 : text.split(RegExp(r'\s+')).length;
     final remainingWords = (wordCount * (1.0 - _currentRatio)).round();
     final remainingMinutes = (remainingWords / 220).ceil().clamp(1, 99);
     final textColor = settings.background.textColor.withValues(alpha: 0.65);
@@ -881,14 +999,18 @@ class _ReaderScreenState extends State<ReaderScreen> {
             children: [
               Expanded(
                 child: Text(
-                  'Ch.${chapter.chapterIndex}/${widget.novel.totalChapters} • $wordCount từ',
+                  isComic
+                      ? 'Ch.${chapter.chapterIndex}/${widget.novel.totalChapters} • $imageCount trang'
+                      : 'Ch.${chapter.chapterIndex}/${widget.novel.totalChapters} • $wordCount từ',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 11, color: textColor),
                 ),
               ),
               Text(
-                '${Format.percent(_currentRatio)} • còn ~$remainingMinutes phút đọc',
+                isComic
+                    ? '${Format.percent(_currentRatio)} • $currentPage/$imageCount trang'
+                    : '${Format.percent(_currentRatio)} • còn ~$remainingMinutes phút đọc',
                 style: TextStyle(fontSize: 11, color: textColor),
               ),
             ],
@@ -899,9 +1021,28 @@ class _ReaderScreenState extends State<ReaderScreen> {
   }
 
   void _openImageViewer(String url) {
+    final isEmbedded = url.startsWith('data:image/');
     final isLocal = url.startsWith('file://') || !url.startsWith('http');
     Widget img;
-    if (isLocal) {
+    if (isEmbedded) {
+      final bytes = decodeReaderImageDataUri(url);
+      img = bytes == null
+          ? const Icon(
+              Icons.broken_image_outlined,
+              color: Colors.white70,
+              size: 64,
+            )
+          : Image.memory(bytes);
+    } else if (isLocal && kIsWeb) {
+      img = const Padding(
+        padding: EdgeInsets.all(24),
+        child: Text(
+          'Ảnh này chỉ có trên máy đã nhập truyện. Trên web, hãy nhập bằng ZIP.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.white70),
+        ),
+      );
+    } else if (isLocal) {
       final path = url.startsWith('file:///')
           ? url.substring(8)
           : (url.startsWith('file://') ? url.substring(7) : url);
@@ -934,11 +1075,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
             foregroundColor: Colors.white,
           ),
           body: Center(
-            child: InteractiveViewer(
-              minScale: 0.8,
-              maxScale: 4.0,
-              child: img,
-            ),
+            child: InteractiveViewer(minScale: 0.8, maxScale: 4.0, child: img),
           ),
         ),
       ),
@@ -1063,20 +1200,34 @@ class _ReaderScreenState extends State<ReaderScreen> {
                   label: const Text(AppStrings.nextChapter),
                 )
               : OutlinedButton.icon(
-                  onPressed: () {
-                    _libraryProvider.setCategory(
-                      widget.novel.id,
-                      LibraryCategory.finished,
-                    );
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text(AppStrings.lastChapter)),
-                    );
-                  },
+                  onPressed: _markNovelFinished,
                   icon: const Icon(Icons.check_circle_outline),
                   label: const Text(AppStrings.finishedNovel),
                 ),
         ),
       ],
     );
+  }
+
+  Future<void> _markNovelFinished() async {
+    try {
+      final user = context.read<AuthProvider>().currentUser;
+      await _libraryProvider.setCategory(
+        widget.novel.id,
+        LibraryCategory.finished,
+      );
+      if (!mounted) return;
+      if (!user.isGuest) {
+        await context.read<QuestProvider>().loadForUser(user.id);
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text(AppStrings.lastChapter)));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Không thể cập nhật tủ sách: $error')),
+      );
+    }
   }
 }

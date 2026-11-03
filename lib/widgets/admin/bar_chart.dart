@@ -59,6 +59,18 @@ class AdminBarChart extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 12),
+            if (entries.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Center(
+                  child: Text(
+                    'Chưa có dữ liệu để hiển thị.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                  ),
+                ),
+              ),
             for (final item in entries)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 5),

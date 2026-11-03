@@ -51,7 +51,7 @@ class NovelQuery {
 /// Mỗi màn hình danh sách tạo một [NovelPager] riêng.
 class NovelPager extends ChangeNotifier {
   NovelPager(this._db, [NovelQuery query = const NovelQuery()])
-      : _query = query;
+    : _query = query;
 
   final AppDatabase _db;
   NovelQuery _query;
@@ -128,14 +128,21 @@ class NovelPager extends ChangeNotifier {
     }
   }
 
+  /// Thử tải lại trang kế tiếp sau khi phân trang gặp lỗi.
+  Future<void> retryLoadMore() async {
+    if (_items.isEmpty || _loading || _loadingMore || !_hasMore) return;
+    _error = null;
+    await loadMore();
+  }
+
   Future<List<Novel>> _fetch(int offset) => _db.queryNovels(
-        keyword: _query.keyword,
-        genres: _query.genres,
-        status: _query.status,
-        type: _query.type,
-        sort: _query.sort,
-        offset: offset,
-      );
+    keyword: _query.keyword,
+    genres: _query.genres,
+    status: _query.status,
+    type: _query.type,
+    sort: _query.sort,
+    offset: offset,
+  );
 
   void _notify() {
     if (!_disposed) notifyListeners();
@@ -151,7 +158,7 @@ class NovelPager extends ChangeNotifier {
 /// Dữ liệu khám phá: trang chủ, thể loại, tìm kiếm và chi tiết truyện.
 class NovelProvider extends ChangeNotifier {
   NovelProvider(this._db, this._prefs)
-      : searchPager = NovelPager(_db, const NovelQuery(sort: NovelSort.views)) {
+    : searchPager = NovelPager(_db, const NovelQuery(sort: NovelSort.views)) {
     _searchHistory = _prefs.getStringList(PrefKeys.searchHistory) ?? [];
   }
 
@@ -188,9 +195,15 @@ class NovelProvider extends ChangeNotifier {
         _db.queryNovels(sort: NovelSort.updated, limit: 12),
         _db.queryNovels(sort: NovelSort.views, limit: 12),
         _db.queryNovels(
-            status: NovelStatus.completed, sort: NovelSort.rating, limit: 12),
+          status: NovelStatus.completed,
+          sort: NovelSort.rating,
+          limit: 12,
+        ),
         _db.queryNovels(
-            type: NovelType.comic, sort: NovelSort.views, limit: 12),
+          type: NovelType.comic,
+          sort: NovelSort.views,
+          limit: 12,
+        ),
       ]);
       _featured = results[0];
       _newest = results[1];
@@ -265,22 +278,28 @@ class NovelProvider extends ChangeNotifier {
 
   /// Lọc trạng thái (null = tất cả).
   void setStatusFilter(String? status) {
-    searchPager.setQuery(searchPager.query
-        .copyWith(status: status, clearStatus: status == null));
+    searchPager.setQuery(
+      searchPager.query.copyWith(status: status, clearStatus: status == null),
+    );
     notifyListeners();
   }
 
   /// Lọc loại truyện (null = tất cả).
   void setTypeFilter(String? type) {
     searchPager.setQuery(
-        searchPager.query.copyWith(type: type, clearType: type == null));
+      searchPager.query.copyWith(type: type, clearType: type == null),
+    );
     notifyListeners();
   }
 
   /// Bỏ toàn bộ bộ lọc (giữ từ khóa).
   void clearFilters() {
-    searchPager.setQuery(NovelQuery(
-        keyword: searchPager.query.keyword, sort: searchPager.query.sort));
+    searchPager.setQuery(
+      NovelQuery(
+        keyword: searchPager.query.keyword,
+        sort: searchPager.query.sort,
+      ),
+    );
     notifyListeners();
   }
 
@@ -316,6 +335,8 @@ class NovelProvider extends ChangeNotifier {
   /// Lấy thông tin 1 truyện.
   Future<Novel?> getNovel(int id) => _db.getNovel(id);
 
+  Future<int?> recordNovelView(int id) => _db.recordNovelView(id);
+
   /// Chấm điểm sao cho bộ truyện và làm mới danh sách Trang chủ / Tìm kiếm.
   Future<double> rateNovel(int novelId, double stars) async {
     final newRating = await _db.updateNovelRating(novelId, stars);
@@ -345,11 +366,7 @@ class NovelProvider extends ChangeNotifier {
       chapters: parsed,
       coverUrl: coverUrl,
     );
-    await Future.wait([
-      loadHome(),
-      loadGenres(),
-      searchPager.refresh(),
-    ]);
+    await Future.wait([loadHome(), loadGenres(), searchPager.refresh()]);
     return novel;
   }
 
@@ -360,10 +377,7 @@ class NovelProvider extends ChangeNotifier {
     required String content,
   }) async {
     await _db.appendChapter(novelId: novelId, title: title, content: content);
-    await Future.wait([
-      loadHome(),
-      searchPager.refresh(),
-    ]);
+    await Future.wait([loadHome(), searchPager.refresh()]);
   }
 
   /// Tự động tách văn bản dài thành nhiều chương nếu có dòng tiêu đề dạng
@@ -394,10 +408,7 @@ class NovelProvider extends ChangeNotifier {
       final start = m.end;
       final end = (i + 1 < matches.length) ? matches[i + 1].start : raw.length;
       final body = raw.substring(start, end).trim();
-      result.add((
-        title: title,
-        content: body.isEmpty ? title : body,
-      ));
+      result.add((title: title, content: body.isEmpty ? title : body));
     }
     return result;
   }

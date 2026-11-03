@@ -2,9 +2,9 @@
 -- SEED 36 TÁC PHẨM & CÁC CHƯƠNG (36 NOVELS)
 -- =============================================================================
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (1, 'Kiếm Đạo Vấn Thiên', 'Lâm Phong Vũ', 'https://picsum.photos/seed/novelreader-v2-1/300/450', 'Lục Trần vốn chỉ là một đệ tử tạp dịch bị coi thường của Thanh Vân Tông. Một đêm mưa gió, cậu tình cờ nhặt được thanh kiếm gãy chứa đựng tàn hồn của một kiếm tiên thượng cổ. Từ đó, con đường hỏi kiếm trời xanh chính thức mở ra.', 'ongoing', 'novel', 'Tiên hiệp,Hành động', 10, 4.7, 1250000, 1793400000000, 'kiếm đạo vấn thiên lâm phong vũ', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (1, 'Kiếm Đạo Vấn Thiên', 'Lâm Phong Vũ', 'https://picsum.photos/seed/novelreader-v2-1/300/450', 'Lục Trần vốn chỉ là một đệ tử tạp dịch bị coi thường của Thanh Vân Tông. Một đêm mưa gió, cậu tình cờ nhặt được thanh kiếm gãy chứa đựng tàn hồn của một kiếm tiên thượng cổ. Từ đó, con đường hỏi kiếm trời xanh chính thức mở ra.', 'ongoing', 'novel', 'Tiên hiệp,Hành động', 10, 4.7, 1250000, 1793400000000, 'kiếm đạo vấn thiên lâm phong vũ', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (10001, 1, 1, 'Chương 1: Đệ tử tạp dịch', '【Chương 1 — Đệ tử tạp dịch】 Câu chuyện của "Kiếm Đạo Vấn Thiên" bước sang một diễn biến mới khi những sự kiện tưởng như tình cờ bắt đầu đan cài vào nhau.
 Lưỡi kiếm xé gió lao tới. Hắn nghiêng người né tránh trong gang tấc, đồng thời tung một cú phản đòn dứt khoát như sấm rền.
 Bầu trời phía đông dần ửng sáng, những tia nắng đầu tiên xuyên qua tầng mây mỏng chiếu xuống mặt đất còn đẫm sương đêm. Một ngày mới bắt đầu, mang theo cả những hy vọng lẫn thử thách chưa biết trước.
@@ -407,9 +407,9 @@ Trước mắt là ngã ba đường: một bên bằng phẳng nhưng vòng vè
 — Hết chương 10: Bước vào nội môn —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (2, 'Mùa Hạ Năm Ấy Có Anh', 'Diệp An Nhiên', 'https://picsum.photos/seed/novelreader-v2-2/300/450', 'Tô Vãn trở về thị trấn ven biển sau mười năm xa cách và gặp lại Hứa Dương – cậu bạn thanh mai trúc mã từng hứa sẽ đợi cô. Những ký ức mùa hạ dần sống lại cùng những bí mật chưa từng được nói ra.', 'completed', 'novel', 'Ngôn tình,Đô thị', 8, 4.5, 860000, 1793400000000, 'mùa hạ năm ấy có anh diệp an nhiên', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (2, 'Mùa Hạ Năm Ấy Có Anh', 'Diệp An Nhiên', 'https://picsum.photos/seed/novelreader-v2-2/300/450', 'Tô Vãn trở về thị trấn ven biển sau mười năm xa cách và gặp lại Hứa Dương – cậu bạn thanh mai trúc mã từng hứa sẽ đợi cô. Những ký ức mùa hạ dần sống lại cùng những bí mật chưa từng được nói ra.', 'completed', 'novel', 'Ngôn tình,Đô thị', 8, 4.5, 860000, 1793400000000, 'mùa hạ năm ấy có anh diệp an nhiên', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (20001, 2, 1, 'Chương 1: Chuyến xe trở về thị trấn biển', '【Chương 1 — Chuyến xe trở về thị trấn biển】 Câu chuyện của "Mùa Hạ Năm Ấy Có Anh" bước sang một diễn biến mới khi những sự kiện tưởng như tình cờ bắt đầu đan cài vào nhau.
 Cuộc trò chuyện kéo dài đến tận khuya. Bên ánh đèn dầu leo lét, từng bí mật tưởng chừng đã chôn vùi theo năm tháng dần được hé mở, khiến ai nấy đều trầm ngâm.
 Đôi khi chỉ một chi tiết nhỏ bị bỏ quên cũng đủ làm thay đổi toàn bộ cục diện. Chính vì vậy, từng bước đi lúc này đều phải cẩn trọng gấp mười lần bình thường.
@@ -732,9 +732,9 @@ Cơn mưa đầu mùa rơi lất phất trên con phố quen thuộc. Cô đứn
 — Hết chương 8: Mùa hạ không còn dang dở —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (3, 'Thám Tử Phố Cổ', 'Trần Minh Khuê', 'https://picsum.photos/seed/novelreader-v2-3/300/450', 'Giữa lòng phố cổ, văn phòng thám tử nhỏ của Đặng Khải luôn vắng khách – cho đến khi một chuỗi vụ án kỳ lạ liên quan đến những món đồ cổ bị đánh tráo xảy ra. Mỗi manh mối dẫn anh đến gần hơn một bí mật đã bị chôn vùi hàng chục năm.', 'ongoing', 'novel', 'Trinh thám,Đô thị', 9, 4.6, 540000, 1793400000000, 'thám tử phố cổ trần minh khuê', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (3, 'Thám Tử Phố Cổ', 'Trần Minh Khuê', 'https://picsum.photos/seed/novelreader-v2-3/300/450', 'Giữa lòng phố cổ, văn phòng thám tử nhỏ của Đặng Khải luôn vắng khách – cho đến khi một chuỗi vụ án kỳ lạ liên quan đến những món đồ cổ bị đánh tráo xảy ra. Mỗi manh mối dẫn anh đến gần hơn một bí mật đã bị chôn vùi hàng chục năm.', 'ongoing', 'novel', 'Trinh thám,Đô thị', 9, 4.6, 540000, 1793400000000, 'thám tử phố cổ trần minh khuê', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (30001, 3, 1, 'Chương 1: Vị khách lúc nửa đêm', '【Chương 1 — Vị khách lúc nửa đêm】 Câu chuyện của "Thám Tử Phố Cổ" bước sang một diễn biến mới khi những sự kiện tưởng như tình cờ bắt đầu đan cài vào nhau.
 Chiếc bình men lam trông hoàn hảo dưới ánh đèn phòng khách, nhưng khi soi kính lúp vào phần chân đế, lớp men rạn lại quá đều – dấu hiệu của một bản sao tinh vi.
 Con ngõ nhỏ sau chợ đêm vắng lặng sau cơn mưa. Một mẩu sáp niêm phong màu đỏ sẫm nằm lẫn giữa khe gạch cổ, trở thành mảnh ghép cuối cùng của vụ án.
@@ -1096,9 +1096,9 @@ Anh ngồi xuống, lặng lẽ quan sát từng chi tiết nhỏ: vết bùn kh
 — Hết chương 9: Kẻ đứng trong bóng tối —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (4, 'Đô Thị Chí Tôn Y Thánh', 'Hàn Thiên Lâm', 'https://picsum.photos/seed/novelreader-v2-4/300/450', 'Sau bảy năm học cổ y thuật nơi thâm sơn, Diệp Thần xuống núi với lời dặn của sư phụ: cứu người hành thiện, nhưng tuyệt đối không để kẻ xấu ức hiếp. Giữa đô thị phồn hoa, bộ ngân châm của anh tạo nên bao sóng gió.', 'ongoing', 'novel', 'Đô thị,Hành động,Hài hước', 8, 4.3, 2100000, 1793400000000, 'đô thị chí tôn y thánh hàn thiên lâm', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (4, 'Đô Thị Chí Tôn Y Thánh', 'Hàn Thiên Lâm', 'https://picsum.photos/seed/novelreader-v2-4/300/450', 'Sau bảy năm học cổ y thuật nơi thâm sơn, Diệp Thần xuống núi với lời dặn của sư phụ: cứu người hành thiện, nhưng tuyệt đối không để kẻ xấu ức hiếp. Giữa đô thị phồn hoa, bộ ngân châm của anh tạo nên bao sóng gió.', 'ongoing', 'novel', 'Đô thị,Hành động,Hài hước', 8, 4.3, 2100000, 1793400000000, 'đô thị chí tôn y thánh hàn thiên lâm', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (40001, 4, 1, 'Chương 1: Xuống núi vào thành phố', '【Chương 1 — Xuống núi vào thành phố】 Câu chuyện của "Đô Thị Chí Tôn Y Thánh" bước sang một diễn biến mới khi những sự kiện tưởng như tình cờ bắt đầu đan cài vào nhau.
 Con hẻm nhỏ bán đồ ăn đêm vẫn tấp nập khách quen, mùi phở nóng và tiếng trò chuyện rôm rả xua tan cái mệt mỏi của một ngày dài.
 Hai bóng người giao đấu nhanh đến mức mắt thường chỉ còn thấy những tia lửa lóe lên giữa không trung kèm theo tiếng kim loại va chạm chát chúa.
@@ -1421,9 +1421,9 @@ Một cụ già đột ngột ngất xỉu trên toa tàu số bốn. Giữa lú
 — Hết chương 8: Danh chấn Giang Thành —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (5, 'Phàm Nhân Tu Tiên Lộ', 'Mộc Thanh Sơn', 'https://picsum.photos/seed/novelreader-v2-5/300/450', 'Không linh căn xuất chúng, không bối cảnh hiển hách, Vương Bình chỉ có sự kiên nhẫn và cẩn trọng hơn người. Trên con đường tu tiên đầy rẫy hiểm nguy, kẻ sống sót đến cuối cùng mới là người bước lên đỉnh cao.', 'completed', 'novel', 'Tiên hiệp,Fantasy', 9, 4.9, 3400000, 1793400000000, 'phàm nhân tu tiên lộ mộc thanh sơn', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (5, 'Phàm Nhân Tu Tiên Lộ', 'Mộc Thanh Sơn', 'https://picsum.photos/seed/novelreader-v2-5/300/450', 'Không linh căn xuất chúng, không bối cảnh hiển hách, Vương Bình chỉ có sự kiên nhẫn và cẩn trọng hơn người. Trên con đường tu tiên đầy rẫy hiểm nguy, kẻ sống sót đến cuối cùng mới là người bước lên đỉnh cao.', 'completed', 'novel', 'Tiên hiệp,Fantasy', 9, 4.9, 3400000, 1793400000000, 'phàm nhân tu tiên lộ mộc thanh sơn', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (50001, 5, 1, 'Chương 1: Thôn nhỏ dưới chân núi Ngu', '【Chương 1 — Thôn nhỏ dưới chân núi Ngu】 Câu chuyện của "Phàm Nhân Tu Tiên Lộ" bước sang một diễn biến mới khi những sự kiện tưởng như tình cờ bắt đầu đan cài vào nhau.
 Tu tiên không chỉ là tu luyện thân thể, mà còn là tu tâm. Một niệm sai lầm có thể khiến trăm năm khổ công tan thành mây khói, vạn kiếp bất phục.
 Một đạo kiếm quang xé toạc màn đêm, chỉ để lại vệt sáng bạc kéo dài trên bầu trời rồi lặng lẽ biến mất nơi chân núi phía xa.
@@ -1785,9 +1785,9 @@ Tiếng rồng gầm vọng lại từ dãy núi phía bắc. Đám lính gác t
 — Hết chương 9: Rời quê hương đi về phương Nam —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (6, 'Bí Ẩn Biệt Thự Hoa Hồng', 'Nguyễn Hạ Vy', 'https://picsum.photos/seed/novelreader-v2-6/300/450', 'Một nhóm bạn đại học nhận lời mời nghỉ dưỡng tại biệt thự Hoa Hồng trên đồi sương mù. Khi cơn bão lớn làm sạt lở con đường độc đạo xuống núi, những bức thư nặc danh bắt đầu xuất hiện mỗi sáng.', 'completed', 'novel', 'Trinh thám,Kinh dị', 8, 4.4, 720000, 1793400000000, 'bí ẩn biệt thự hoa hồng nguyễn hạ vy', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (6, 'Bí Ẩn Biệt Thự Hoa Hồng', 'Nguyễn Hạ Vy', 'https://picsum.photos/seed/novelreader-v2-6/300/450', 'Một nhóm bạn đại học nhận lời mời nghỉ dưỡng tại biệt thự Hoa Hồng trên đồi sương mù. Khi cơn bão lớn làm sạt lở con đường độc đạo xuống núi, những bức thư nặc danh bắt đầu xuất hiện mỗi sáng.', 'completed', 'novel', 'Trinh thám,Kinh dị', 8, 4.4, 720000, 1793400000000, 'bí ẩn biệt thự hoa hồng nguyễn hạ vy', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (60001, 6, 1, 'Chương 1: Tấm thiệp mời không tên', '【Chương 1 — Tấm thiệp mời không tên】 Câu chuyện của "Bí Ẩn Biệt Thự Hoa Hồng" bước sang một diễn biến mới khi những sự kiện tưởng như tình cờ bắt đầu đan cài vào nhau.
 Buổi chiều hôm ấy trôi qua nhanh hơn tưởng tượng. Khi ngẩng đầu lên khỏi đống tài liệu và ghi chép, hoàng hôn đã nhuộm đỏ cả một góc trời phía tây.
 Tấm thiệp mời bằng giấy mỹ thuật dày in hình một bông hồng đỏ thẫm, không ký tên người gửi, chỉ vỏn vẹn dòng chữ: “Hẹn gặp lại bảy người vào đêm trăng tròn.”
@@ -2110,9 +2110,9 @@ Từ phía xa vọng lại tiếng chuông báo hiệu. Mọi người thu dọn
 — Hết chương 8: Khi sương mù tan biến —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (7, 'Truyện Kiều (Đoạn Trường Tân Thanh)', 'Nguyễn Du (Kinh điển)', 'https://picsum.photos/seed/novelreader-v2-7/300/450', 'Tác phẩm văn học kinh điển kiệt xuất của đại thi hào Nguyễn Du (1765–1820), kể về cuộc đời mười lăm năm lưu lạc đầy bi kịch nhưng sáng ngời phẩm hạnh và tài sắc của Thúy Kiều. Tác phẩm thuộc phạm vi công cộng (Public Domain).', 'completed', 'novel', 'Ngôn tình,Học đường', 9, 5.0, 5200000, 1793400000000, 'truyện kiều (đoạn trường tân thanh) nguyễn du (kinh điển)', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (7, 'Truyện Kiều (Đoạn Trường Tân Thanh)', 'Nguyễn Du (Kinh điển)', 'https://picsum.photos/seed/novelreader-v2-7/300/450', 'Tác phẩm văn học kinh điển kiệt xuất của đại thi hào Nguyễn Du (1765–1820), kể về cuộc đời mười lăm năm lưu lạc đầy bi kịch nhưng sáng ngời phẩm hạnh và tài sắc của Thúy Kiều. Tác phẩm thuộc phạm vi công cộng (Public Domain).', 'completed', 'novel', 'Ngôn tình,Học đường', 9, 5.0, 5200000, 1793400000000, 'truyện kiều (đoạn trường tân thanh) nguyễn du (kinh điển)', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (70001, 7, 1, 'Hồi 1: Trăm năm trong cõi người ta – Gia cảnh Vương viên ngoại', '【Chương 1 — Hồi 1: Trăm năm trong cõi người ta – Gia cảnh Vương viên ngoại】 Câu chuyện của "Truyện Kiều (Đoạn Trường Tân Thanh)" bước sang một diễn biến mới khi những sự kiện tưởng như tình cờ bắt đầu đan cài vào nhau.
 Thì ra trong suốt những năm tháng cô tưởng rằng mình đơn độc, vẫn luôn có một ánh mắt âm thầm dõi theo từ phía sau.
 Lễ hội văn hóa sắp đến gần. Lớp học biến thành xưởng thủ công với giấy màu, sơn nước, keo dán và những tràng cười không dứt.
@@ -2474,9 +2474,9 @@ Rằng năm Gia Tĩnh triều Minh, bốn phương phẳng lặng hai kinh vữn
 — Hết chương 9: Hồi 9: Đoàn tụ kim cải – Chữ tâm kia mới bằng ba chữ tài —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (8, 'Tuyển Tập Hiện Thực Nam Cao: Lão Hạc & Chí Phèo', 'Nam Cao (Kinh điển)', 'https://picsum.photos/seed/novelreader-v2-8/300/450', 'Tuyển tập những trang viết hiện thực xuất sắc và giàu giá trị nhân đạo của nhà văn Nam Cao (1915–1951): từ giọt nước mắt của Lão Hạc bên cậu Vàng đến tiếng kêu khát khao lương thiện ở làng Vũ Đại.', 'completed', 'novel', 'Đô thị,Học đường', 8, 4.9, 4100000, 1793400000000, 'tuyển tập hiện thực nam cao: lão hạc & chí phèo nam cao (kinh điển)', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (8, 'Tuyển Tập Hiện Thực Nam Cao: Lão Hạc & Chí Phèo', 'Nam Cao (Kinh điển)', 'https://picsum.photos/seed/novelreader-v2-8/300/450', 'Tuyển tập những trang viết hiện thực xuất sắc và giàu giá trị nhân đạo của nhà văn Nam Cao (1915–1951): từ giọt nước mắt của Lão Hạc bên cậu Vàng đến tiếng kêu khát khao lương thiện ở làng Vũ Đại.', 'completed', 'novel', 'Đô thị,Học đường', 8, 4.9, 4100000, 1793400000000, 'tuyển tập hiện thực nam cao: lão hạc & chí phèo nam cao (kinh điển)', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (80001, 8, 1, 'Phần 1: Lão Hạc và mảnh vườn để dành cho con trai', '【Chương 1 — Phần 1: Lão Hạc và mảnh vườn để dành cho con trai】 Câu chuyện của "Tuyển Tập Hiện Thực Nam Cao: Lão Hạc & Chí Phèo" bước sang một diễn biến mới khi những sự kiện tưởng như tình cờ bắt đầu đan cài vào nhau.
 Con chó là của cháu nó mua đấy chứ! Nó mua về nuôi, định đến lúc cưới vợ thì giết thịt. Ấy thế mà chưa kịp cưới thì nó đã phải đi xa. Lão Hạc vừa kể vừa vuốt nhẹ lên đầu cậu Vàng như vuốt ve một đứa cháu nhỏ.
 Chao ôi! Đối với những người ở quanh ta, nếu ta không cố tìm mà hiểu họ, thì ta chỉ thấy họ gàn dở, ngu ngốc, bần tiện, xấu xa, bỉ ổi… toàn những cớ để cho ta tàn nhẫn; không bao giờ ta thấy họ là những người đáng thương.
@@ -2799,9 +2799,9 @@ Buổi sáng hôm ấy, nắng ấm chiếu qua tàu lá chuối ngoài vườn.
 — Hết chương 8: Phần 8: Khát vọng làm hòa với mọi người —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (9, 'Hồ Sơ Thám Tử Số 221B: Tuyển Tập Trinh Thám Cổ Điển', 'Arthur Conan Doyle (Phóng tác Việt ngữ)', 'https://picsum.photos/seed/novelreader-v2-9/300/450', 'Lấy cảm hứng từ những vụ án suy luận kinh điển thời kỳ Victoria (Public Domain): vị thám tử tư tài ba cùng người bạn bác sĩ quân y giải mã những vụ án hóc búa nhất giữa màn sương mù thành phố.', 'completed', 'novel', 'Trinh thám,Hành động', 8, 4.9, 2950000, 1793400000000, 'hồ sơ thám tử số 221b: tuyển tập trinh thám cổ điển arthur conan doyle (phóng tác việt ngữ)', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (9, 'Hồ Sơ Thám Tử Số 221B: Tuyển Tập Trinh Thám Cổ Điển', 'Arthur Conan Doyle (Phóng tác Việt ngữ)', 'https://picsum.photos/seed/novelreader-v2-9/300/450', 'Lấy cảm hứng từ những vụ án suy luận kinh điển thời kỳ Victoria (Public Domain): vị thám tử tư tài ba cùng người bạn bác sĩ quân y giải mã những vụ án hóc búa nhất giữa màn sương mù thành phố.', 'completed', 'novel', 'Trinh thám,Hành động', 8, 4.9, 2950000, 1793400000000, 'hồ sơ thám tử số 221b: tuyển tập trinh thám cổ điển arthur conan doyle (phóng tác việt ngữ)', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (90001, 9, 1, 'Vụ án thứ nhất: Dấu giày bên bờ sông Thames', '【Chương 1 — Vụ án thứ nhất: Dấu giày bên bờ sông Thames】 Câu chuyện của "Hồ Sơ Thám Tử Số 221B: Tuyển Tập Trinh Thám Cổ Điển" bước sang một diễn biến mới khi những sự kiện tưởng như tình cờ bắt đầu đan cài vào nhau.
 Lưỡi kiếm xé gió lao tới. Hắn nghiêng người né tránh trong gang tấc, đồng thời tung một cú phản đòn dứt khoát như sấm rền.
 Bầu trời phía đông dần ửng sáng, những tia nắng đầu tiên xuyên qua tầng mây mỏng chiếu xuống mặt đất còn đẫm sương đêm. Một ngày mới bắt đầu, mang theo cả những hy vọng lẫn thử thách chưa biết trước.
@@ -3124,9 +3124,9 @@ Căn phòng bị khóa trái từ bên trong, cửa sổ cài then chắc chắn
 — Hết chương 8: Vụ án thứ tám: Sự trở lại trong căn nhà trống —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (10, 'Thương Trường Đại Chiến: Phố Wall Đông Nam', 'Lê Hoàng Bách', 'https://picsum.photos/seed/novelreader-v2-10/300/450', 'Từ một chuyên viên phân tích tài chính trẻ tuổi bị đổ oan và sa thải, Trần Gia Minh tự tay gây dựng quỹ đầu tư độc lập, từng bước đọc vị những thương vụ sáp nhập tỷ đô giữa lòng thành phố.', 'ongoing', 'novel', 'Đô thị,Trinh thám', 8, 4.5, 910000, 1793400000000, 'thương trường đại chiến: phố wall đông nam lê hoàng bách', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (10, 'Thương Trường Đại Chiến: Phố Wall Đông Nam', 'Lê Hoàng Bách', 'https://picsum.photos/seed/novelreader-v2-10/300/450', 'Từ một chuyên viên phân tích tài chính trẻ tuổi bị đổ oan và sa thải, Trần Gia Minh tự tay gây dựng quỹ đầu tư độc lập, từng bước đọc vị những thương vụ sáp nhập tỷ đô giữa lòng thành phố.', 'ongoing', 'novel', 'Đô thị,Trinh thám', 8, 4.5, 910000, 1793400000000, 'thương trường đại chiến: phố wall đông nam lê hoàng bách', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (100001, 10, 1, 'Chương 1: Bản báo cáo bị đánh cắp', '【Chương 1 — Bản báo cáo bị đánh cắp】 Câu chuyện của "Thương Trường Đại Chiến: Phố Wall Đông Nam" bước sang một diễn biến mới khi những sự kiện tưởng như tình cờ bắt đầu đan cài vào nhau.
 Màn hình điện tử hiển thị hàng trăm con số xanh đỏ nhảy múa liên tục. Trong khi cả thị trường đang hoảng loạn bán tháo, Trần Gia Minh lại bình tĩnh nhìn ra quy luật ẩn sau khối lượng giao dịch bất thường.
 Thành phố về đêm rực rỡ ánh đèn neon. Giữa dòng người hối hả ngược xuôi, chẳng ai để ý đến chàng trai trẻ với ánh mắt trầm tĩnh ấy.
@@ -3449,9 +3449,9 @@ Mưa đêm gõ đều trên mái tôn. Trong văn phòng nhỏ, tấm bảng tr�
 — Hết chương 8: Đứng trên đỉnh tháp tài chính —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (11, 'Cổ Mộ Kỳ Thư: Dấu Ấn Lạc Việt', 'Vũ Thành Nam', 'https://picsum.photos/seed/novelreader-v2-11/300/450', 'Nhà khảo cổ học trẻ tuổi Phong cùng nhóm nghiên cứu giải mã một tấm bản đồ khắc trên mảnh trống đồng cổ, dẫn họ vào hành trình xuyên rừng sâu tìm kiếm di tích thất truyền từ hàng nghìn năm trước.', 'ongoing', 'novel', 'Hành động,Trinh thám,Fantasy', 8, 4.6, 1180000, 1793400000000, 'cổ mộ kỳ thư: dấu ấn lạc việt vũ thành nam', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (11, 'Cổ Mộ Kỳ Thư: Dấu Ấn Lạc Việt', 'Vũ Thành Nam', 'https://picsum.photos/seed/novelreader-v2-11/300/450', 'Nhà khảo cổ học trẻ tuổi Phong cùng nhóm nghiên cứu giải mã một tấm bản đồ khắc trên mảnh trống đồng cổ, dẫn họ vào hành trình xuyên rừng sâu tìm kiếm di tích thất truyền từ hàng nghìn năm trước.', 'ongoing', 'novel', 'Hành động,Trinh thám,Fantasy', 8, 4.6, 1180000, 1793400000000, 'cổ mộ kỳ thư: dấu ấn lạc việt vũ thành nam', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (110001, 11, 1, 'Chương 1: Mảnh trống đồng dưới lòng sông', '【Chương 1 — Mảnh trống đồng dưới lòng sông】 Câu chuyện của "Cổ Mộ Kỳ Thư: Dấu Ấn Lạc Việt" bước sang một diễn biến mới khi những sự kiện tưởng như tình cờ bắt đầu đan cài vào nhau.
 Tiếng rồng gầm vọng lại từ dãy núi phía bắc. Đám lính gác trên tường thành nhìn nhau, bàn tay nắm chặt cán giáo không giấu nổi sự run rẩy.
 Tháp Ma Thuật Hoàng Gia cao vút chín tầng, mỗi tầng đại diện cho một cảnh giới nguyên tố mà các pháp sư cả đời theo đuổi.
@@ -3774,9 +3774,9 @@ Mặt đất rung chuyển dưới những bước chân nặng nề. Bụi đá
 — Hết chương 8: Ánh bình minh trên đỉnh núi —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (12, 'Tiệm Trà Đêm Cuối Phố', 'Lâm Thảo Nguyên', 'https://picsum.photos/seed/novelreader-v2-12/300/450', 'Ở cuối con hẻm nhỏ chỉ mở cửa từ mười giờ đêm đến bình minh, có một tiệm trà cổ nơi mỗi vị khách ghé qua có thể đổi một câu chuyện thật lòng để lấy một ấm trà giúp tháo gỡ khúc mắc trong tâm.', 'completed', 'novel', 'Fantasy,Ngôn tình,Kinh dị', 8, 4.7, 1040000, 1793400000000, 'tiệm trà đêm cuối phố lâm thảo nguyên', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (12, 'Tiệm Trà Đêm Cuối Phố', 'Lâm Thảo Nguyên', 'https://picsum.photos/seed/novelreader-v2-12/300/450', 'Ở cuối con hẻm nhỏ chỉ mở cửa từ mười giờ đêm đến bình minh, có một tiệm trà cổ nơi mỗi vị khách ghé qua có thể đổi một câu chuyện thật lòng để lấy một ấm trà giúp tháo gỡ khúc mắc trong tâm.', 'completed', 'novel', 'Fantasy,Ngôn tình,Kinh dị', 8, 4.7, 1040000, 1793400000000, 'tiệm trà đêm cuối phố lâm thảo nguyên', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (120001, 12, 1, 'Chương 1: Chiếc đèn lồng giấy lúc mười giờ đêm', '【Chương 1 — Chiếc đèn lồng giấy lúc mười giờ đêm】 Câu chuyện của "Tiệm Trà Đêm Cuối Phố" bước sang một diễn biến mới khi những sự kiện tưởng như tình cờ bắt đầu đan cài vào nhau.
 Ngọn đèn hành lang chập chờn rồi tắt hẳn. Trong bóng tối đặc quánh, có tiếng bước chân chậm rãi tiến lại gần từ phía cầu thang.
 Bầu trời phía đông dần ửng sáng, những tia nắng đầu tiên xuyên qua tầng mây mỏng chiếu xuống mặt đất còn đẫm sương đêm. Một ngày mới bắt đầu, mang theo cả những hy vọng lẫn thử thách chưa biết trước.
@@ -4099,9 +4099,9 @@ Nước sôi vừa tới độ, từng búp trà khô từ từ bung nở trong 
 — Hết chương 8: Chủ nhân mới của tiệm trà —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (13, 'Chuyển Sinh Thành Thợ Rèn Ở Dị Giới', 'Sakuraba Ren', 'https://picsum.photos/seed/novelreader-v2-13/300/450', 'Kỹ sư cơ khí Kaito sau khi qua đời vì làm việc quá sức đã chuyển sinh đến một thế giới kiếm và ma pháp. Lần này, anh quyết định sống chậm, mở một lò rèn nhỏ ở vùng biên giới – nhưng những món vũ khí anh làm ra lại quá mức phi thường.', 'ongoing', 'light_novel', 'Isekai,Fantasy,Hài hước', 9, 4.6, 980000, 1793400000000, 'chuyển sinh thành thợ rèn ở dị giới sakuraba ren', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (13, 'Chuyển Sinh Thành Thợ Rèn Ở Dị Giới', 'Sakuraba Ren', 'https://picsum.photos/seed/novelreader-v2-13/300/450', 'Kỹ sư cơ khí Kaito sau khi qua đời vì làm việc quá sức đã chuyển sinh đến một thế giới kiếm và ma pháp. Lần này, anh quyết định sống chậm, mở một lò rèn nhỏ ở vùng biên giới – nhưng những món vũ khí anh làm ra lại quá mức phi thường.', 'ongoing', 'light_novel', 'Isekai,Fantasy,Hài hước', 9, 4.6, 980000, 1793400000000, 'chuyển sinh thành thợ rèn ở dị giới sakuraba ren', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (130001, 13, 1, 'Chương 1: Cái chết vì tăng ca và lời xin lỗi của Nữ thần', '【Chương 1 — Cái chết vì tăng ca và lời xin lỗi của Nữ thần】 Câu chuyện của "Chuyển Sinh Thành Thợ Rèn Ở Dị Giới" bước sang một diễn biến mới khi những sự kiện tưởng như tình cờ bắt đầu đan cài vào nhau.
 Cuộc thương lượng căng thẳng bỗng chốc biến thành buổi tranh luận xem món mì ở quán nào ngon hơn.
 Nhớ lại lời dặn trước lúc lên đường, trong lòng bỗng dâng lên một cảm giác vừa ấm áp vừa nặng nề. Có những trách nhiệm một khi đã nhận lấy thì không thể quay đầu.
@@ -4477,9 +4477,9 @@ Tiếng rồng gầm vọng lại từ dãy núi phía bắc. Đám lính gác t
 — Hết chương 9: Lễ hội mùa thu ở biên giới —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (14, 'Câu Lạc Bộ Văn Học Sau Giờ Học', 'Mizuno Haru', 'https://picsum.photos/seed/novelreader-v2-14/300/450', 'Câu lạc bộ văn học của trường cao trung Seiran chỉ còn lại ba thành viên kỳ quặc. Để cứu câu lạc bộ khỏi bị giải tán, họ phải viết và xuất bản một tuyển tập truyện ngắn trước lễ hội văn hóa mùa thu.', 'completed', 'light_novel', 'Học đường,Hài hước,Ngôn tình', 8, 4.4, 450000, 1793400000000, 'câu lạc bộ văn học sau giờ học mizuno haru', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (14, 'Câu Lạc Bộ Văn Học Sau Giờ Học', 'Mizuno Haru', 'https://picsum.photos/seed/novelreader-v2-14/300/450', 'Câu lạc bộ văn học của trường cao trung Seiran chỉ còn lại ba thành viên kỳ quặc. Để cứu câu lạc bộ khỏi bị giải tán, họ phải viết và xuất bản một tuyển tập truyện ngắn trước lễ hội văn hóa mùa thu.', 'completed', 'light_novel', 'Học đường,Hài hước,Ngôn tình', 8, 4.4, 450000, 1793400000000, 'câu lạc bộ văn học sau giờ học mizuno haru', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (140001, 14, 1, 'Chương 1: Phòng câu lạc bộ cuối hành lang tầng ba', '【Chương 1 — Phòng câu lạc bộ cuối hành lang tầng ba】 Câu chuyện của "Câu Lạc Bộ Văn Học Sau Giờ Học" bước sang một diễn biến mới khi những sự kiện tưởng như tình cờ bắt đầu đan cài vào nhau.
 Từ phía xa vọng lại tiếng chuông báo hiệu. Mọi người thu dọn hành trang, kiểm tra lại lần cuối từng món đồ cần thiết trước khi bước vào chặng đường tiếp theo.
 Kenta gục đầu xuống mặt bàn gỗ. “Viết cả một tuyển tập truyện ngắn á? Bài luận văn tám trăm chữ tuần trước em còn suýt nộp muộn…”
@@ -4814,9 +4814,9 @@ Cuộc thương lượng căng thẳng bỗng chốc biến thành buổi tranh 
 — Hết chương 8: Tuyển tập mùa xuân dưới tán anh đào —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (15, 'Ma Vương Muốn Nghỉ Hưu Ở Quê', 'Kurogane Yuu', 'https://picsum.photos/seed/novelreader-v2-15/300/450', 'Sau năm trăm năm cai quản Ma giới đầy giấy tờ hành chính, Ma Vương Zeldris mệt mỏi nộp đơn xin nghỉ hưu. Nhưng Dũng giả mới được triệu hồi lại quá hậu đậu, khiến ngài đành phải ẩn danh đi theo chỉ dạy.', 'ongoing', 'light_novel', 'Fantasy,Hài hước,Isekai', 8, 4.7, 1560000, 1793400000000, 'ma vương muốn nghỉ hưu ở quê kurogane yuu', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (15, 'Ma Vương Muốn Nghỉ Hưu Ở Quê', 'Kurogane Yuu', 'https://picsum.photos/seed/novelreader-v2-15/300/450', 'Sau năm trăm năm cai quản Ma giới đầy giấy tờ hành chính, Ma Vương Zeldris mệt mỏi nộp đơn xin nghỉ hưu. Nhưng Dũng giả mới được triệu hồi lại quá hậu đậu, khiến ngài đành phải ẩn danh đi theo chỉ dạy.', 'ongoing', 'light_novel', 'Fantasy,Hài hước,Isekai', 8, 4.7, 1560000, 1793400000000, 'ma vương muốn nghỉ hưu ở quê kurogane yuu', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (150001, 15, 1, 'Chương 1: Đơn xin nghỉ phép năm trăm năm', '【Chương 1 — Đơn xin nghỉ phép năm trăm năm】 Câu chuyện của "Ma Vương Muốn Nghỉ Hưu Ở Quê" bước sang một diễn biến mới khi những sự kiện tưởng như tình cờ bắt đầu đan cài vào nhau.
 Tháp Ma Thuật Hoàng Gia cao vút chín tầng, mỗi tầng đại diện cho một cảnh giới nguyên tố mà các pháp sư cả đời theo đuổi.
 Cậu tự tin tuyên bố mình nấu ăn rất giỏi. Mười phút sau, cả căn bếp chìm trong khói trắng và cả đám phải chạy ra sân ho sặc sụa.
@@ -5151,9 +5151,9 @@ Từ phía xa vọng lại tiếng chuông báo hiệu. Mọi người thu dọn
 — Hết chương 8: Kỳ nghỉ phép vẫn chưa thể bắt đầu —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (16, 'Thiếu Nữ Thám Tử Và Con Mèo Đen Biết Nói', 'Shiraishi Mio', 'https://picsum.photos/seed/novelreader-v2-16/300/450', 'Rin là một nữ sinh trung học bình thường, cho đến khi con mèo đen cô nhặt về dưới mưa lại biết nói tiếng người và tự xưng là thám tử lừng danh bị dính lời nguyền.', 'ongoing', 'light_novel', 'Trinh thám,Học đường,Fantasy', 8, 4.5, 670000, 1793400000000, 'thiếu nữ thám tử và con mèo đen biết nói shiraishi mio', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (16, 'Thiếu Nữ Thám Tử Và Con Mèo Đen Biết Nói', 'Shiraishi Mio', 'https://picsum.photos/seed/novelreader-v2-16/300/450', 'Rin là một nữ sinh trung học bình thường, cho đến khi con mèo đen cô nhặt về dưới mưa lại biết nói tiếng người và tự xưng là thám tử lừng danh bị dính lời nguyền.', 'ongoing', 'light_novel', 'Trinh thám,Học đường,Fantasy', 8, 4.5, 670000, 1793400000000, 'thiếu nữ thám tử và con mèo đen biết nói shiraishi mio', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (160001, 16, 1, 'Chương 1: Con mèo đen dưới gầm ghế công viên', '【Chương 1 — Con mèo đen dưới gầm ghế công viên】 Câu chuyện của "Thiếu Nữ Thám Tử Và Con Mèo Đen Biết Nói" bước sang một diễn biến mới khi những sự kiện tưởng như tình cờ bắt đầu đan cài vào nhau.
 Mưa đêm gõ đều trên mái tôn. Trong văn phòng nhỏ, tấm bảng trắng đã kín đặc những mũi tên nối các manh mối rời rạc lại với nhau.
 Câu lạc bộ chỉ còn lại vài thành viên, và nguy cơ bị giải tán đang treo lơ lửng trên đầu. Họ cần hoàn thành dự án trước cuối tháng này.
@@ -5488,9 +5488,9 @@ Những ngọn đèn ma pháp lơ lửng dọc con đường lát đá, tỏa ra
 — Hết chương 8: Vụ án lễ hội mùa đông —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (17, 'Kiếm Sĩ Cấp F Và Học Viện Ma Thuật Hoàng Gia', 'Takamura Sho', 'https://picsum.photos/seed/novelreader-v2-17/300/450', 'Tại Học viện Ma thuật Hoàng gia, nơi chỉ số ma lực quyết định thứ bậc, Leon là học viên duy nhất có ma lực bằng không. Thứ duy nhất cậu mang theo là thanh kiếm gỗ và mười năm khổ luyện kiếm thuật.', 'completed', 'light_novel', 'Học đường,Fantasy,Hành động', 8, 4.5, 830000, 1793400000000, 'kiếm sĩ cấp f và học viện ma thuật hoàng gia takamura sho', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (17, 'Kiếm Sĩ Cấp F Và Học Viện Ma Thuật Hoàng Gia', 'Takamura Sho', 'https://picsum.photos/seed/novelreader-v2-17/300/450', 'Tại Học viện Ma thuật Hoàng gia, nơi chỉ số ma lực quyết định thứ bậc, Leon là học viên duy nhất có ma lực bằng không. Thứ duy nhất cậu mang theo là thanh kiếm gỗ và mười năm khổ luyện kiếm thuật.', 'completed', 'light_novel', 'Học đường,Fantasy,Hành động', 8, 4.5, 830000, 1793400000000, 'kiếm sĩ cấp f và học viện ma thuật hoàng gia takamura sho', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (170001, 17, 1, 'Chương 1: Viên pha lê đo ma lực không phát sáng', '【Chương 1 — Viên pha lê đo ma lực không phát sáng】 Câu chuyện của "Kiếm Sĩ Cấp F Và Học Viện Ma Thuật Hoàng Gia" bước sang một diễn biến mới khi những sự kiện tưởng như tình cờ bắt đầu đan cài vào nhau.
 Bầu trời phía đông dần ửng sáng, những tia nắng đầu tiên xuyên qua tầng mây mỏng chiếu xuống mặt đất còn đẫm sương đêm. Một ngày mới bắt đầu, mang theo cả những hy vọng lẫn thử thách chưa biết trước.
 Cuộc trò chuyện kéo dài đến tận khuya. Bên ánh đèn dầu leo lét, từng bí mật tưởng chừng đã chôn vùi theo năm tháng dần được hé mở, khiến ai nấy đều trầm ngâm.
@@ -5825,9 +5825,9 @@ Tiếng rồng gầm vọng lại từ dãy núi phía bắc. Đám lính gác t
 — Hết chương 8: Danh hiệu Kiếm Thánh học đường —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (18, 'Quán Cà Phê Đêm Thứ Sáu Ở Thế Giới Khác', 'Hoshino Aki', 'https://picsum.photos/seed/novelreader-v2-18/300/450', 'Một quán cà phê nhỏ ở con hẻm Tokyo mỗi đêm thứ Sáu lại kết nối với thế giới khác. Chủ quán trẻ Yuki pha cà phê và làm bánh ngọt phục vụ hiệp sĩ, pháp sư, tinh linh và cả rồng cổ đại.', 'ongoing', 'light_novel', 'Isekai,Ngôn tình,Hài hước', 8, 4.8, 1120000, 1793400000000, 'quán cà phê đêm thứ sáu ở thế giới khác hoshino aki', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (18, 'Quán Cà Phê Đêm Thứ Sáu Ở Thế Giới Khác', 'Hoshino Aki', 'https://picsum.photos/seed/novelreader-v2-18/300/450', 'Một quán cà phê nhỏ ở con hẻm Tokyo mỗi đêm thứ Sáu lại kết nối với thế giới khác. Chủ quán trẻ Yuki pha cà phê và làm bánh ngọt phục vụ hiệp sĩ, pháp sư, tinh linh và cả rồng cổ đại.', 'ongoing', 'light_novel', 'Isekai,Ngôn tình,Hài hước', 8, 4.8, 1120000, 1793400000000, 'quán cà phê đêm thứ sáu ở thế giới khác hoshino aki', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (180001, 18, 1, 'Chương 1: Tiếng chuông gió lúc mười hai giờ đêm', '【Chương 1 — Tiếng chuông gió lúc mười hai giờ đêm】 Câu chuyện của "Quán Cà Phê Đêm Thứ Sáu Ở Thế Giới Khác" bước sang một diễn biến mới khi những sự kiện tưởng như tình cờ bắt đầu đan cài vào nhau.
 Buổi chiều hôm ấy trôi qua nhanh hơn tưởng tượng. Khi ngẩng đầu lên khỏi đống tài liệu và ghi chép, hoàng hôn đã nhuộm đỏ cả một góc trời phía tây.
 Đúng mười hai giờ đêm thứ Sáu, chiếc chuông đồng gắn hình mặt trăng trên cánh cửa gỗ khẽ ngân vang, mở lối sang đại lục bên kia cánh cổng không gian.
@@ -6162,9 +6162,9 @@ Kế hoạch hoàn hảo bàn bạc suốt ba tiếng đồng hồ đổ bể ch
 — Hết chương 8: Lời hẹn mỗi tối thứ Sáu —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (19, 'Thư Viện Cuối Cùng Ở Tận Thế', 'Amamiya Sora', 'https://picsum.photos/seed/novelreader-v2-19/300/450', 'Ba trăm năm sau khi nền văn minh cũ sụp đổ, thiếu nữ thủ thư Noel cùng một cỗ máy tự động đời cũ đi khắp những thành phố phủ đầy cây xanh để thu thập và bảo tồn những cuốn sách giấy cuối cùng.', 'ongoing', 'light_novel', 'Fantasy,Hành động', 8, 4.8, 740000, 1793400000000, 'thư viện cuối cùng ở tận thế amamiya sora', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (19, 'Thư Viện Cuối Cùng Ở Tận Thế', 'Amamiya Sora', 'https://picsum.photos/seed/novelreader-v2-19/300/450', 'Ba trăm năm sau khi nền văn minh cũ sụp đổ, thiếu nữ thủ thư Noel cùng một cỗ máy tự động đời cũ đi khắp những thành phố phủ đầy cây xanh để thu thập và bảo tồn những cuốn sách giấy cuối cùng.', 'ongoing', 'light_novel', 'Fantasy,Hành động', 8, 4.8, 740000, 1793400000000, 'thư viện cuối cùng ở tận thế amamiya sora', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (190001, 19, 1, 'Chương 1: Tháp đồng hồ giữa rừng cây cổ thụ', '【Chương 1 — Tháp đồng hồ giữa rừng cây cổ thụ】 Câu chuyện của "Thư Viện Cuối Cùng Ở Tận Thế" bước sang một diễn biến mới khi những sự kiện tưởng như tình cờ bắt đầu đan cài vào nhau.
 Mỗi trang sách được cứu về là một mảnh ký ức của nhân loại được giữ lại cho thế hệ mai sau.
 Cuốn sách cổ phát sáng khi những ngón tay chạm vào. Các ký tự cổ ngữ tự sắp xếp lại trên trang giấy da cừu, tạo thành một câu thần chú thất truyền.
@@ -6499,9 +6499,9 @@ Tiếng rồng gầm vọng lại từ dãy núi phía bắc. Đám lính gác t
 — Hết chương 8: Thư viện mở cửa đón những đứa trẻ —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (20, 'Nữ Công Tước Phản Diện Mở Tiệm Bánh Ngọt', 'Kanzaki Reina', 'https://picsum.photos/seed/novelreader-v2-20/300/450', 'Tỉnh dậy trong vai nữ phụ phản diện sắp bị hủy hôn trong tiểu thuyết, tiểu thư Eliana quyết định trả lại hôn ước ngay lập tức, dùng số vốn riêng mở một tiệm trà bánh kiểu Pháp khiến cả kinh thành mê mẩn.', 'completed', 'light_novel', 'Isekai,Ngôn tình,Hài hước', 8, 4.6, 1340000, 1793400000000, 'nữ công tước phản diện mở tiệm bánh ngọt kanzaki reina', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (20, 'Nữ Công Tước Phản Diện Mở Tiệm Bánh Ngọt', 'Kanzaki Reina', 'https://picsum.photos/seed/novelreader-v2-20/300/450', 'Tỉnh dậy trong vai nữ phụ phản diện sắp bị hủy hôn trong tiểu thuyết, tiểu thư Eliana quyết định trả lại hôn ước ngay lập tức, dùng số vốn riêng mở một tiệm trà bánh kiểu Pháp khiến cả kinh thành mê mẩn.', 'completed', 'light_novel', 'Isekai,Ngôn tình,Hài hước', 8, 4.6, 1340000, 1793400000000, 'nữ công tước phản diện mở tiệm bánh ngọt kanzaki reina', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (200001, 20, 1, 'Chương 1: Buổi tiệc hủy hôn được mong chờ nhất', '【Chương 1 — Buổi tiệc hủy hôn được mong chờ nhất】 Câu chuyện của "Nữ Công Tước Phản Diện Mở Tiệm Bánh Ngọt" bước sang một diễn biến mới khi những sự kiện tưởng như tình cờ bắt đầu đan cài vào nhau.
 Đồng tiền đồng đầu tiên kiếm được từ nhiệm vụ hái thảo dược tuy chẳng đáng là bao, nhưng lại nặng trĩu trong lòng bàn tay cậu.
 Quán cà phê nhỏ ở góc đường vẫn mở bài hát cũ ấy. Mỗi lần nghe lại, ký ức về mùa hè năm nào lại ùa về rõ ràng như mới hôm qua.
@@ -6836,9 +6836,9 @@ Từ phía xa vọng lại tiếng chuông báo hiệu. Mọi người thu dọn
 — Hết chương 8: Hạnh phúc ngọt ngào như kem bơ —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (21, 'Giả Kim Thuật Sư Tập Sự Và Chuyến Tàu Xuyên Lục Địa', 'Minato Kousei', 'https://picsum.photos/seed/novelreader-v2-21/300/450', 'Để hoàn thành bài thi tốt nghiệp Học viện Giả kim, cậu học trò Theo lên chuyến tàu hơi nước ma đạo chạy xuyên qua sáu quốc gia, vừa điều chế dược phẩm giúp hành khách vừa khám phá bí mật cuối đường ray.', 'ongoing', 'light_novel', 'Fantasy,Học đường,Hành động', 8, 4.5, 620000, 1793400000000, 'giả kim thuật sư tập sự và chuyến tàu xuyên lục địa minato kousei', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (21, 'Giả Kim Thuật Sư Tập Sự Và Chuyến Tàu Xuyên Lục Địa', 'Minato Kousei', 'https://picsum.photos/seed/novelreader-v2-21/300/450', 'Để hoàn thành bài thi tốt nghiệp Học viện Giả kim, cậu học trò Theo lên chuyến tàu hơi nước ma đạo chạy xuyên qua sáu quốc gia, vừa điều chế dược phẩm giúp hành khách vừa khám phá bí mật cuối đường ray.', 'ongoing', 'light_novel', 'Fantasy,Học đường,Hành động', 8, 4.5, 620000, 1793400000000, 'giả kim thuật sư tập sự và chuyến tàu xuyên lục địa minato kousei', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (210001, 21, 1, 'Chương 1: Tấm vé tàu hạng ba đi về phương Tây', '【Chương 1 — Tấm vé tàu hạng ba đi về phương Tây】 Câu chuyện của "Giả Kim Thuật Sư Tập Sự Và Chuyến Tàu Xuyên Lục Địa" bước sang một diễn biến mới khi những sự kiện tưởng như tình cờ bắt đầu đan cài vào nhau.
 Bầu trời phía đông dần ửng sáng, những tia nắng đầu tiên xuyên qua tầng mây mỏng chiếu xuống mặt đất còn đẫm sương đêm. Một ngày mới bắt đầu, mang theo cả những hy vọng lẫn thử thách chưa biết trước.
 Cuộc trò chuyện kéo dài đến tận khuya. Bên ánh đèn dầu leo lét, từng bí mật tưởng chừng đã chôn vùi theo năm tháng dần được hé mở, khiến ai nấy đều trầm ngâm.
@@ -7173,9 +7173,9 @@ Mặt đất rung chuyển dưới những bước chân nặng nề. Bụi đá
 — Hết chương 8: Bằng chứng nhận Giả kim thuật sư chính thức —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (22, 'Hội Học Sinh Trường Phép Thuật Có Quá Nhiều Bí Mật', 'Fujimoto Yui', 'https://picsum.photos/seed/novelreader-v2-22/300/450', 'Ren chỉ muốn có một cuộc sống học đường yên bình, nhưng sau khi vô tình được bầu làm thư ký Hội học sinh, cậu phát hiện ra hội trưởng là ma cà rồng, phó hội trưởng là người sói còn thủ quỹ là tinh linh cổ đại.', 'ongoing', 'light_novel', 'Học đường,Fantasy,Hài hước', 8, 4.4, 890000, 1793400000000, 'hội học sinh trường phép thuật có quá nhiều bí mật fujimoto yui', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (22, 'Hội Học Sinh Trường Phép Thuật Có Quá Nhiều Bí Mật', 'Fujimoto Yui', 'https://picsum.photos/seed/novelreader-v2-22/300/450', 'Ren chỉ muốn có một cuộc sống học đường yên bình, nhưng sau khi vô tình được bầu làm thư ký Hội học sinh, cậu phát hiện ra hội trưởng là ma cà rồng, phó hội trưởng là người sói còn thủ quỹ là tinh linh cổ đại.', 'ongoing', 'light_novel', 'Học đường,Fantasy,Hài hước', 8, 4.4, 890000, 1793400000000, 'hội học sinh trường phép thuật có quá nhiều bí mật fujimoto yui', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (220001, 22, 1, 'Chương 1: Lá phiếu bầu cử định mệnh', '【Chương 1 — Lá phiếu bầu cử định mệnh】 Câu chuyện của "Hội Học Sinh Trường Phép Thuật Có Quá Nhiều Bí Mật" bước sang một diễn biến mới khi những sự kiện tưởng như tình cờ bắt đầu đan cài vào nhau.
 Buổi chiều hôm ấy trôi qua nhanh hơn tưởng tượng. Khi ngẩng đầu lên khỏi đống tài liệu và ghi chép, hoàng hôn đã nhuộm đỏ cả một góc trời phía tây.
 Phòng Hội học sinh luôn kéo rèm nhung kín mít vào buổi trưa vì Hội trưởng bảo rằng mình bị “dị ứng nhẹ với ánh nắng mặt trời”.
@@ -7510,9 +7510,9 @@ Cuộc trò chuyện kéo dài đến tận khuya. Bên ánh đèn dầu leo lé
 — Hết chương 8: Bí mật riêng của cậu thư ký bình thường —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (23, 'Nhật Ký Thuần Hóa Thần Thú Ở Nông Trại Đảo Bay', 'Tachibana Sora', 'https://picsum.photos/seed/novelreader-v2-23/300/450', 'Được thừa kế một hòn đảo bay nhỏ từ ông nội, Sora bắt đầu trồng cây ăn quả và chăn nuôi – nhưng những con vật tìm đến nông trại của cậu toàn là Phượng Hoàng lửa, Sói băng và Rồng mây trong truyền thuyết.', 'ongoing', 'light_novel', 'Isekai,Fantasy,Hài hước', 8, 4.7, 1050000, 1793400000000, 'nhật ký thuần hóa thần thú ở nông trại đảo bay tachibana sora', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (23, 'Nhật Ký Thuần Hóa Thần Thú Ở Nông Trại Đảo Bay', 'Tachibana Sora', 'https://picsum.photos/seed/novelreader-v2-23/300/450', 'Được thừa kế một hòn đảo bay nhỏ từ ông nội, Sora bắt đầu trồng cây ăn quả và chăn nuôi – nhưng những con vật tìm đến nông trại của cậu toàn là Phượng Hoàng lửa, Sói băng và Rồng mây trong truyền thuyết.', 'ongoing', 'light_novel', 'Isekai,Fantasy,Hài hước', 8, 4.7, 1050000, 1793400000000, 'nhật ký thuần hóa thần thú ở nông trại đảo bay tachibana sora', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (230001, 23, 1, 'Chương 1: Hòn đảo nhỏ lơ lửng trên tầng mây', '【Chương 1 — Hòn đảo nhỏ lơ lửng trên tầng mây】 Câu chuyện của "Nhật Ký Thuần Hóa Thần Thú Ở Nông Trại Đảo Bay" bước sang một diễn biến mới khi những sự kiện tưởng như tình cờ bắt đầu đan cài vào nhau.
 Mở mắt ra, trước mặt cậu là một bảng trạng thái trong suốt hiện lên giữa không trung. Cấp độ một, kỹ năng: thẩm định cơ bản. Khởi đầu thật chẳng mấy hứa hẹn.
 Kiến thức hiện đại hóa ra lại là vũ khí lợi hại nhất. Chỉ với một hệ thống ròng rọc và bánh răng đơn giản, cậu đã khiến cả công xưởng kinh ngạc.
@@ -7847,9 +7847,9 @@ Buổi chiều hôm ấy trôi qua nhanh hơn tưởng tượng. Khi ngẩng đ�
 — Hết chương 8: Bữa tiệc thu hoạch trên mây —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (24, 'Bản Giao Hưởng Ánh Trăng Và Người Chế Tạo Búp Bê Cơ Khí', 'Shirakawa Noel', 'https://picsum.photos/seed/novelreader-v2-24/300/450', 'Tại thành phố cảng sương mù thế kỷ mười chín giả tưởng, nghệ nhân trẻ tuổi Julian chế tạo những cỗ máy dây cót tinh xảo có khả năng đàn dương cầm, vô tình vướng vào bí ẩn về một bản nhạc cổ thất truyền.', 'completed', 'light_novel', 'Fantasy,Trinh thám,Ngôn tình', 8, 4.6, 580000, 1793400000000, 'bản giao hưởng ánh trăng và người chế tạo búp bê cơ khí shirakawa noel', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (24, 'Bản Giao Hưởng Ánh Trăng Và Người Chế Tạo Búp Bê Cơ Khí', 'Shirakawa Noel', 'https://picsum.photos/seed/novelreader-v2-24/300/450', 'Tại thành phố cảng sương mù thế kỷ mười chín giả tưởng, nghệ nhân trẻ tuổi Julian chế tạo những cỗ máy dây cót tinh xảo có khả năng đàn dương cầm, vô tình vướng vào bí ẩn về một bản nhạc cổ thất truyền.', 'completed', 'light_novel', 'Fantasy,Trinh thám,Ngôn tình', 8, 4.6, 580000, 1793400000000, 'bản giao hưởng ánh trăng và người chế tạo búp bê cơ khí shirakawa noel', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (240001, 24, 1, 'Chương 1: Xưởng cơ khí bên bờ kênh sương mù', '【Chương 1 — Xưởng cơ khí bên bờ kênh sương mù】 Câu chuyện của "Bản Giao Hưởng Ánh Trăng Và Người Chế Tạo Búp Bê Cơ Khí" bước sang một diễn biến mới khi những sự kiện tưởng như tình cờ bắt đầu đan cài vào nhau.
 Bầu trời phía đông dần ửng sáng, những tia nắng đầu tiên xuyên qua tầng mây mỏng chiếu xuống mặt đất còn đẫm sương đêm. Một ngày mới bắt đầu, mang theo cả những hy vọng lẫn thử thách chưa biết trước.
 Cuộc trò chuyện kéo dài đến tận khuya. Bên ánh đèn dầu leo lét, từng bí mật tưởng chừng đã chôn vùi theo năm tháng dần được hé mở, khiến ai nấy đều trầm ngâm.
@@ -8184,9 +8184,9 @@ Từ phía xa vọng lại tiếng chuông báo hiệu. Mọi người thu dọn
 — Hết chương 8: Khúc vĩ thanh nơi bến cảng —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (25, 'Thợ Săn Hầm Ngục Cấp S: Độc Chiến Vương', 'Studio KuroNeko', 'https://picsum.photos/seed/novelreader-v2-25/300/450', '[Webtoon Màu] Khi các cổng không gian mở ra khắp thành phố, thợ săn cấp E Minh Vũ vô tình thức tỉnh hệ thống Thăng Cấp Bóng Tối trong một hầm ngục kép. Mỗi trang tranh là những màn chiến đấu mãn nhãn.', 'ongoing', 'comic', 'Hành động,Fantasy,Đô thị', 9, 4.9, 4600000, 1793400000000, 'thợ săn hầm ngục cấp s: độc chiến vương studio kuroneko', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (25, 'Thợ Săn Hầm Ngục Cấp S: Độc Chiến Vương', 'Studio KuroNeko', 'https://picsum.photos/seed/novelreader-v2-25/300/450', '[Webtoon Màu] Khi các cổng không gian mở ra khắp thành phố, thợ săn cấp E Minh Vũ vô tình thức tỉnh hệ thống Thăng Cấp Bóng Tối trong một hầm ngục kép. Mỗi trang tranh là những màn chiến đấu mãn nhãn.', 'ongoing', 'comic', 'Hành động,Fantasy,Đô thị', 9, 4.9, 4600000, 1793400000000, 'thợ săn hầm ngục cấp s: độc chiến vương studio kuroneko', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (250001, 25, 1, 'Chap 1: Cánh cổng đỏ cấp S giữa lòng thành phố', '【Chap 1 — Cánh cổng đỏ cấp S giữa lòng thành phố】 (Thợ Săn Hầm Ngục Cấp S: Độc Chiến Vương • Bản Truyện Tranh / Webtoon)
 [img]https://picsum.photos/seed/manga-25-ch1-p1/720/1020[/img]
 Trang 1/10 — Tòa cao ốc sừng sững giữa trung tâm tài chính, nơi những quyết định lớn được đưa ra sau những cánh cửa kính cách âm.
@@ -8387,9 +8387,9 @@ Trang 10/10 — Khu rừng của tộc Elf tĩnh lặng đến lạ thường. M
 — Hết Chap 9: Bí mật đằng sau Hệ thống —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (26, 'Hoàng Hậu Tái Sinh Chỉ Muốn Làm Giàu', 'Aoi Hanabi Art', 'https://picsum.photos/seed/novelreader-v2-26/300/450', '[Manhwa Ngôn Tình] Sống lại năm mười tám tuổi trước ngày bước vào hoàng cung, tiểu thư Aria quyết định dùng trí nhớ kiếp trước để thâu tóm toàn bộ tuyến thương mại đường biển.', 'ongoing', 'comic', 'Ngôn tình,Isekai,Fantasy', 8, 4.8, 3150000, 1793400000000, 'hoàng hậu tái sinh chỉ muốn làm giàu aoi hanabi art', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (26, 'Hoàng Hậu Tái Sinh Chỉ Muốn Làm Giàu', 'Aoi Hanabi Art', 'https://picsum.photos/seed/novelreader-v2-26/300/450', '[Manhwa Ngôn Tình] Sống lại năm mười tám tuổi trước ngày bước vào hoàng cung, tiểu thư Aria quyết định dùng trí nhớ kiếp trước để thâu tóm toàn bộ tuyến thương mại đường biển.', 'ongoing', 'comic', 'Ngôn tình,Isekai,Fantasy', 8, 4.8, 3150000, 1793400000000, 'hoàng hậu tái sinh chỉ muốn làm giàu aoi hanabi art', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (260001, 26, 1, 'Chap 1: Trở về buổi vũ hội năm mười tám tuổi', '【Chap 1 — Trở về buổi vũ hội năm mười tám tuổi】 (Hoàng Hậu Tái Sinh Chỉ Muốn Làm Giàu • Bản Truyện Tranh / Webtoon)
 [img]https://picsum.photos/seed/manga-26-ch1-p1/720/1020[/img]
 Trang 1/10 — Hội mạo hiểm giả đông nghẹt người. Cô tiếp tân mỉm cười đưa cho cậu tờ đơn đăng ký bằng giấy da, chẳng hề biết người trước mặt đến từ một thế giới khác.
@@ -8568,9 +8568,9 @@ Trang 10/10 — Khu rừng của tộc Elf tĩnh lặng đến lạ thường. M
 — Hết Chap 8: Nữ chủ nhân giàu nhất đế quốc —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (27, 'Học Viện Siêu Năng Lực: Lớp Học Cuối Bảng', 'Takahashi Ken (Manga)', 'https://picsum.photos/seed/novelreader-v2-27/300/450', '[Manga Shonen] Ở thành phố Neo-Tokyo nơi 80% học sinh sở hữu siêu năng lực nguyên tố, lớp 1-Z gồm toàn những năng lực “kỳ quặc” lại liên tục đánh bại các lớp thượng đẳng trong giải đấu liên trường.', 'ongoing', 'comic', 'Học đường,Hành động,Hài hước', 8, 4.7, 2480000, 1793400000000, 'học viện siêu năng lực: lớp học cuối bảng takahashi ken (manga)', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (27, 'Học Viện Siêu Năng Lực: Lớp Học Cuối Bảng', 'Takahashi Ken (Manga)', 'https://picsum.photos/seed/novelreader-v2-27/300/450', '[Manga Shonen] Ở thành phố Neo-Tokyo nơi 80% học sinh sở hữu siêu năng lực nguyên tố, lớp 1-Z gồm toàn những năng lực “kỳ quặc” lại liên tục đánh bại các lớp thượng đẳng trong giải đấu liên trường.', 'ongoing', 'comic', 'Học đường,Hành động,Hài hước', 8, 4.7, 2480000, 1793400000000, 'học viện siêu năng lực: lớp học cuối bảng takahashi ken (manga)', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (270001, 27, 1, 'Chap 1: Cậu học sinh có năng lực điều khiển trọng lực bán kính một mét', '【Chap 1 — Cậu học sinh có năng lực điều khiển trọng lực bán kính một mét】 (Học Viện Siêu Năng Lực: Lớp Học Cuối Bảng • Bản Truyện Tranh / Webtoon)
 [img]https://picsum.photos/seed/manga-27-ch1-p1/720/1020[/img]
 Trang 1/10 — Lễ hội văn hóa sắp đến gần. Lớp học biến thành xưởng thủ công với giấy màu, sơn nước, keo dán và những tràng cười không dứt.
@@ -8749,9 +8749,9 @@ Trang 10/10 — Câu lạc bộ chỉ còn lại vài thành viên, và nguy cơ
 — Hết Chap 8: Cúp vô địch về tay lớp cuối bảng —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (28, 'Võ Đạo Đỉnh Phong: Vạn Cổ Kiếm Tôn (Bản Truyện Tranh)', 'Huyền Vũ Studio', 'https://picsum.photos/seed/novelreader-v2-28/300/450', '[Manhua Tiên Hiệp] Chuyển thể truyện tranh full màu từ tiểu thuyết kiếm hiệp tu tiên: hành trình thiếu niên Lâm Hiên từ ngoại môn đệ tử bước lên Cửu Tiêu Kiếm Đài.', 'ongoing', 'comic', 'Tiên hiệp,Hành động,Fantasy', 8, 4.8, 3890000, 1793400000000, 'võ đạo đỉnh phong: vạn cổ kiếm tôn (bản truyện tranh) huyền vũ studio', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (28, 'Võ Đạo Đỉnh Phong: Vạn Cổ Kiếm Tôn (Bản Truyện Tranh)', 'Huyền Vũ Studio', 'https://picsum.photos/seed/novelreader-v2-28/300/450', '[Manhua Tiên Hiệp] Chuyển thể truyện tranh full màu từ tiểu thuyết kiếm hiệp tu tiên: hành trình thiếu niên Lâm Hiên từ ngoại môn đệ tử bước lên Cửu Tiêu Kiếm Đài.', 'ongoing', 'comic', 'Tiên hiệp,Hành động,Fantasy', 8, 4.8, 3890000, 1793400000000, 'võ đạo đỉnh phong: vạn cổ kiếm tôn (bản truyện tranh) huyền vũ studio', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (280001, 28, 1, 'Chap 1: Kiếm冢 vạn năm rung chuyển', '【Chap 1 — Kiếm冢 vạn năm rung chuyển】 (Võ Đạo Đỉnh Phong: Vạn Cổ Kiếm Tôn (Bản Truyện Tranh) • Bản Truyện Tranh / Webtoon)
 [img]https://picsum.photos/seed/manga-28-ch1-p1/720/1020[/img]
 Trang 1/10 — Khu rừng của tộc Elf tĩnh lặng đến lạ thường. Mỗi bước chân giẫm lên thảm lá đều như đang bị hàng trăm đôi mắt vô hình dõi theo từ tán cây cổ thụ.
@@ -8930,9 +8930,9 @@ Trang 10/10 — Tiếng chuông sớm vang lên ba hồi ngân dài, các đệ 
 — Hết Chap 8: Phi thăng Thượng giới —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (29, 'Nhật Ký Mèo Mun Ở Tiệm Sách Cũ', 'Morioka Rin (Webtoon)', 'https://picsum.photos/seed/novelreader-v2-29/300/450', '[Webtoon Chữa Lành] Những mẩu truyện tranh ngắn ấm áp góc nhìn từ chú mèo béo Mochi sống trong một tiệm sách cũ ở Kyoto, chứng kiến bao câu chuyện dễ thương của khách ghé thăm.', 'completed', 'comic', 'Hài hước,Đô thị,Học đường', 8, 4.9, 1720000, 1793400000000, 'nhật ký mèo mun ở tiệm sách cũ morioka rin (webtoon)', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (29, 'Nhật Ký Mèo Mun Ở Tiệm Sách Cũ', 'Morioka Rin (Webtoon)', 'https://picsum.photos/seed/novelreader-v2-29/300/450', '[Webtoon Chữa Lành] Những mẩu truyện tranh ngắn ấm áp góc nhìn từ chú mèo béo Mochi sống trong một tiệm sách cũ ở Kyoto, chứng kiến bao câu chuyện dễ thương của khách ghé thăm.', 'completed', 'comic', 'Hài hước,Đô thị,Học đường', 8, 4.9, 1720000, 1793400000000, 'nhật ký mèo mun ở tiệm sách cũ morioka rin (webtoon)', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (290001, 29, 1, 'Chap 1: Chỗ nằm có nắng ấm nhất trên kệ sách', '【Chap 1 — Chỗ nằm có nắng ấm nhất trên kệ sách】 (Nhật Ký Mèo Mun Ở Tiệm Sách Cũ • Bản Truyện Tranh / Webtoon)
 [img]https://picsum.photos/seed/manga-29-ch1-p1/720/1020[/img]
 Trang 1/10 — Tòa cao ốc sừng sững giữa trung tâm tài chính, nơi những quyết định lớn được đưa ra sau những cánh cửa kính cách âm.
@@ -9111,9 +9111,9 @@ Trang 10/10 — Thành phố về đêm rực rỡ ánh đèn neon. Giữa dòng
 — Hết Chap 8: Mùa xuân lại về trên con dốc nhỏ —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (30, 'Hồ Sơ Bí Ẩn Tuyến Tàu Điện Ngầm Số 13', 'Shinji Ito Art', 'https://picsum.photos/seed/novelreader-v2-30/300/450', '[Manga Trinh Thám – Kinh Dị] Mỗi khi đồng hồ điểm 0 giờ 13 phút, tại nhà ga bỏ hoang lại xuất hiện một đoàn tàu không có trên bản đồ. Phóng viên tự do Kurosawa mang máy ảnh bước lên toa số bốn.', 'completed', 'comic', 'Trinh thám,Kinh dị,Đô thị', 8, 4.6, 1450000, 1793400000000, 'hồ sơ bí ẩn tuyến tàu điện ngầm số 13 shinji ito art', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (30, 'Hồ Sơ Bí Ẩn Tuyến Tàu Điện Ngầm Số 13', 'Shinji Ito Art', 'https://picsum.photos/seed/novelreader-v2-30/300/450', '[Manga Trinh Thám – Kinh Dị] Mỗi khi đồng hồ điểm 0 giờ 13 phút, tại nhà ga bỏ hoang lại xuất hiện một đoàn tàu không có trên bản đồ. Phóng viên tự do Kurosawa mang máy ảnh bước lên toa số bốn.', 'completed', 'comic', 'Trinh thám,Kinh dị,Đô thị', 8, 4.6, 1450000, 1793400000000, 'hồ sơ bí ẩn tuyến tàu điện ngầm số 13 shinji ito art', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (300001, 30, 1, 'Chap 1: Tấm vé giấy in ngày tháng của hai mươi năm trước', '【Chap 1 — Tấm vé giấy in ngày tháng của hai mươi năm trước】 (Hồ Sơ Bí Ẩn Tuyến Tàu Điện Ngầm Số 13 • Bản Truyện Tranh / Webtoon)
 [img]https://picsum.photos/seed/manga-30-ch1-p1/720/1020[/img]
 Trang 1/10 — Ngọn đèn hành lang chập chờn rồi tắt hẳn. Trong bóng tối đặc quánh, có tiếng bước chân chậm rãi tiến lại gần từ phía cầu thang.
@@ -9292,9 +9292,9 @@ Trang 10/10 — “Khi bạn đã loại bỏ hết những điều không thể
 — Hết Chap 8: Chuyến tàu cuối cùng trở về thực tại —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (31, 'Đầu Bếp Lang Thang Giữa Thế Giới Ma Thú', 'Yamada Taro Studio', 'https://picsum.photos/seed/novelreader-v2-31/300/450', '[Manga Isekai Ẩm Thực] Mang theo chiếc chảo gang không bao giờ hỏng và kho gia vị vô tận sang dị giới, đầu bếp trẻ Haruto chinh phục cả Ma thú lẫn Hiệp sĩ đoàn bằng những món ăn nóng hổi.', 'ongoing', 'comic', 'Isekai,Hài hước,Fantasy', 8, 4.8, 2260000, 1793400000000, 'đầu bếp lang thang giữa thế giới ma thú yamada taro studio', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (31, 'Đầu Bếp Lang Thang Giữa Thế Giới Ma Thú', 'Yamada Taro Studio', 'https://picsum.photos/seed/novelreader-v2-31/300/450', '[Manga Isekai Ẩm Thực] Mang theo chiếc chảo gang không bao giờ hỏng và kho gia vị vô tận sang dị giới, đầu bếp trẻ Haruto chinh phục cả Ma thú lẫn Hiệp sĩ đoàn bằng những món ăn nóng hổi.', 'ongoing', 'comic', 'Isekai,Hài hước,Fantasy', 8, 4.8, 2260000, 1793400000000, 'đầu bếp lang thang giữa thế giới ma thú yamada taro studio', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (310001, 31, 1, 'Chap 1: Món thịt nướng thảo mộc giữa rừng sâu', '【Chap 1 — Món thịt nướng thảo mộc giữa rừng sâu】 (Đầu Bếp Lang Thang Giữa Thế Giới Ma Thú • Bản Truyện Tranh / Webtoon)
 [img]https://picsum.photos/seed/manga-31-ch1-p1/720/1020[/img]
 Trang 1/10 — Mở mắt ra, trước mặt cậu là một bảng trạng thái trong suốt hiện lên giữa không trung. Cấp độ một, kỹ năng: thẩm định cơ bản. Khởi đầu thật chẳng mấy hứa hẹn.
@@ -9473,9 +9473,9 @@ Trang 10/10 — Tiếng rồng gầm vọng lại từ dãy núi phía bắc. Đ
 — Hết Chap 8: Thực đơn đặc biệt đãi khách phương xa —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (32, 'Bản Hợp Đồng Của Thám Tử Tâm Linh', 'CLAMP-Style Studio', 'https://picsum.photos/seed/novelreader-v2-32/300/450', '[Manhwa Trinh Thám Siêu Nhiên] Văn phòng thám tử ở tầng áp mái chuyên nhận giải quyết những vụ việc mà cảnh sát không thể giải thích bằng khoa học thông thường.', 'ongoing', 'comic', 'Trinh thám,Fantasy,Kinh dị', 8, 4.7, 1830000, 1793400000000, 'bản hợp đồng của thám tử tâm linh clamp-style studio', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (32, 'Bản Hợp Đồng Của Thám Tử Tâm Linh', 'CLAMP-Style Studio', 'https://picsum.photos/seed/novelreader-v2-32/300/450', '[Manhwa Trinh Thám Siêu Nhiên] Văn phòng thám tử ở tầng áp mái chuyên nhận giải quyết những vụ việc mà cảnh sát không thể giải thích bằng khoa học thông thường.', 'ongoing', 'comic', 'Trinh thám,Fantasy,Kinh dị', 8, 4.7, 1830000, 1793400000000, 'bản hợp đồng của thám tử tâm linh clamp-style studio', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (320001, 32, 1, 'Chap 1: Chiếc gương cổ phản chiếu căn phòng khác', '【Chap 1 — Chiếc gương cổ phản chiếu căn phòng khác】 (Bản Hợp Đồng Của Thám Tử Tâm Linh • Bản Truyện Tranh / Webtoon)
 [img]https://picsum.photos/seed/manga-32-ch1-p1/720/1020[/img]
 Trang 1/10 — Anh ngồi xuống, lặng lẽ quan sát từng chi tiết nhỏ: vết bùn khô trên mép thảm, chiếc đồng hồ quả lắc chạy chậm năm phút, tách trà còn nguyên chưa uống.
@@ -9654,9 +9654,9 @@ Trang 10/10 — Viên ma thạch cấp cao tỏa ra luồng năng lượng tinh 
 — Hết Chap 8: Bản hợp đồng mới trên bàn làm việc —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (33, 'Nữ Hiệp Sĩ Và Chàng Pháp Sư Hậu Đậu', 'Hana & Leaf Comic', 'https://picsum.photos/seed/novelreader-v2-33/300/450', '[Manga Hài Lãng Mạn] Đội trưởng đội Kỵ sĩ Hoàng gia nghiêm khắc bất đắc dĩ phải lập tổ đội đi làm nhiệm vụ cùng anh chàng pháp sư thiên tài nhưng lúc nào cũng quên thần chú.', 'completed', 'comic', 'Ngôn tình,Hài hước,Fantasy', 8, 4.6, 1640000, 1793400000000, 'nữ hiệp sĩ và chàng pháp sư hậu đậu hana & leaf comic', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (33, 'Nữ Hiệp Sĩ Và Chàng Pháp Sư Hậu Đậu', 'Hana & Leaf Comic', 'https://picsum.photos/seed/novelreader-v2-33/300/450', '[Manga Hài Lãng Mạn] Đội trưởng đội Kỵ sĩ Hoàng gia nghiêm khắc bất đắc dĩ phải lập tổ đội đi làm nhiệm vụ cùng anh chàng pháp sư thiên tài nhưng lúc nào cũng quên thần chú.', 'completed', 'comic', 'Ngôn tình,Hài hước,Fantasy', 8, 4.6, 1640000, 1793400000000, 'nữ hiệp sĩ và chàng pháp sư hậu đậu hana & leaf comic', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (330001, 33, 1, 'Chap 1: Buổi ghép đội định mệnh ở quảng trường', '【Chap 1 — Buổi ghép đội định mệnh ở quảng trường】 (Nữ Hiệp Sĩ Và Chàng Pháp Sư Hậu Đậu • Bản Truyện Tranh / Webtoon)
 [img]https://picsum.photos/seed/manga-33-ch1-p1/720/1020[/img]
 Trang 1/10 — Cơn mưa đầu mùa rơi lất phất trên con phố quen thuộc. Cô đứng dưới mái hiên, khẽ kéo cao cổ áo, không ngờ có người lặng lẽ nghiêng chiếc ô đen về phía mình.
@@ -9835,9 +9835,9 @@ Trang 10/10 — Cuộc thương lượng căng thẳng bỗng chốc biến thà
 — Hết Chap 8: Tổ đội mạnh nhất vương quốc —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (34, 'Chiến Binh Cơ Giáp: Bầu Trời Sao Thứ Bảy', 'MechaCore Studio', 'https://picsum.photos/seed/novelreader-v2-34/300/450', '[Webtoon Sci-Fi Hành Động] Năm 2240, nhân loại xây dựng các колони trên quỹ đạo Sao Mộc. Phi công trẻ tuổi Hải Đăng điều khiển cỗ máy cơ giáp thế hệ cũ bảo vệ trạm không gian quê hương.', 'ongoing', 'comic', 'Hành động,Đô thị,Fantasy', 8, 4.8, 2090000, 1793400000000, 'chiến binh cơ giáp: bầu trời sao thứ bảy mechacore studio', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (34, 'Chiến Binh Cơ Giáp: Bầu Trời Sao Thứ Bảy', 'MechaCore Studio', 'https://picsum.photos/seed/novelreader-v2-34/300/450', '[Webtoon Sci-Fi Hành Động] Năm 2240, nhân loại xây dựng các колони trên quỹ đạo Sao Mộc. Phi công trẻ tuổi Hải Đăng điều khiển cỗ máy cơ giáp thế hệ cũ bảo vệ trạm không gian quê hương.', 'ongoing', 'comic', 'Hành động,Đô thị,Fantasy', 8, 4.8, 2090000, 1793400000000, 'chiến binh cơ giáp: bầu trời sao thứ bảy mechacore studio', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (340001, 34, 1, 'Chap 1: Cỗ máy cơ giáp phủ bụi trong khoang chứa số 7', '【Chap 1 — Cỗ máy cơ giáp phủ bụi trong khoang chứa số 7】 (Chiến Binh Cơ Giáp: Bầu Trời Sao Thứ Bảy • Bản Truyện Tranh / Webtoon)
 [img]https://picsum.photos/seed/manga-34-ch1-p1/720/1020[/img]
 Trang 1/10 — Tiếng rồng gầm vọng lại từ dãy núi phía bắc. Đám lính gác trên tường thành nhìn nhau, bàn tay nắm chặt cán giáo không giấu nổi sự run rẩy.
@@ -10016,9 +10016,9 @@ Trang 10/10 — Tòa cao ốc sừng sững giữa trung tâm tài chính, nơi 
 — Hết Chap 8: Hướng về phía các vì sao xa —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (35, 'Bí Mật Câu Lạc Bộ Nhiếp Ảnh Trường Trung Học', 'Natsu Ao (Manga)', 'https://picsum.photos/seed/novelreader-v2-35/300/450', '[Manga Học Đường] Chiếc máy ảnh phim cũ tìm thấy trong phòng kho câu lạc bộ có khả năng chụp lại những khoảnh khắc đẹp nhất của quá khứ từng diễn ra ngay tại sân trường.', 'completed', 'comic', 'Học đường,Ngôn tình,Trinh thám', 8, 4.7, 1380000, 1793400000000, 'bí mật câu lạc bộ nhiếp ảnh trường trung học natsu ao (manga)', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (35, 'Bí Mật Câu Lạc Bộ Nhiếp Ảnh Trường Trung Học', 'Natsu Ao (Manga)', 'https://picsum.photos/seed/novelreader-v2-35/300/450', '[Manga Học Đường] Chiếc máy ảnh phim cũ tìm thấy trong phòng kho câu lạc bộ có khả năng chụp lại những khoảnh khắc đẹp nhất của quá khứ từng diễn ra ngay tại sân trường.', 'completed', 'comic', 'Học đường,Ngôn tình,Trinh thám', 8, 4.7, 1380000, 1793400000000, 'bí mật câu lạc bộ nhiếp ảnh trường trung học natsu ao (manga)', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (350001, 35, 1, 'Chap 1: Phòng tối rửa ảnh ở dãy nhà cũ', '【Chap 1 — Phòng tối rửa ảnh ở dãy nhà cũ】 (Bí Mật Câu Lạc Bộ Nhiếp Ảnh Trường Trung Học • Bản Truyện Tranh / Webtoon)
 [img]https://picsum.photos/seed/manga-35-ch1-p1/720/1020[/img]
 Trang 1/10 — Tiếng chuông hết giờ vang lên, cả lớp ồn ào như ong vỡ tổ. Chỉ có cậu bạn ngồi cạnh cửa sổ vẫn lặng lẽ nhìn ra sân trường đầy nắng.
@@ -10197,9 +10197,9 @@ Trang 10/10 — Quán cà phê nhỏ ở góc đường vẫn mở bài hát cũ
 — Hết Chap 8: Nụ cười lưu lại mãi với thời gian —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
-INSERT INTO public.novels (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (36, 'Trọng Sinh Làm Ông Chủ Chuỗi Cửa Hàng Tiện Lợi Dị Giới', 'K-Toon Studio', 'https://picsum.photos/seed/novelreader-v2-36/300/450', '[Webtoon Kinh Doanh Hài Hước] Mở chuỗi cửa hàng tiện lợi 24/7 ngay trước cổng Mê Cung Lớn: bán cơm nắm hồi máu, nước tăng lực hồi ma pháp và mì ly nóng hổi cho các đoàn mạo hiểm giả.', 'ongoing', 'comic', 'Isekai,Đô thị,Hài hước', 8, 4.8, 2740000, 1793400000000, 'trọng sinh làm ông chủ chuỗi cửa hàng tiện lợi dị giới k-toon studio', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
+INSERT INTO public.truyen (id, title, author, cover_url, description, status, type, genres, total_chapters, rating, views, updated_at, search_text, moderation_status, owner_id) VALUES (36, 'Trọng Sinh Làm Ông Chủ Chuỗi Cửa Hàng Tiện Lợi Dị Giới', 'K-Toon Studio', 'https://picsum.photos/seed/novelreader-v2-36/300/450', '[Webtoon Kinh Doanh Hài Hước] Mở chuỗi cửa hàng tiện lợi 24/7 ngay trước cổng Mê Cung Lớn: bán cơm nắm hồi máu, nước tăng lực hồi ma pháp và mì ly nóng hổi cho các đoàn mạo hiểm giả.', 'ongoing', 'comic', 'Isekai,Đô thị,Hài hước', 8, 4.8, 2740000, 1793400000000, 'trọng sinh làm ông chủ chuỗi cửa hàng tiện lợi dị giới k-toon studio', 'approved', 1) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, total_chapters=EXCLUDED.total_chapters;
 
-INSERT INTO public.chapters (id, novel_id, chapter_index, title, content) VALUES
+INSERT INTO public.chuong (id, novel_id, chapter_index, title, content) VALUES
 (360001, 36, 1, 'Chap 1: Cửa hàng sáng đèn 24 giờ trước cổng mê cung', '【Chap 1 — Cửa hàng sáng đèn 24 giờ trước cổng mê cung】 (Trọng Sinh Làm Ông Chủ Chuỗi Cửa Hàng Tiện Lợi Dị Giới • Bản Truyện Tranh / Webtoon)
 [img]https://picsum.photos/seed/manga-36-ch1-p1/720/1020[/img]
 Trang 1/10 — 【Cảnh 1】 Tiếng chuông cửa tự động “Kính coong” vang lên giữa đêm tối, ánh đèn trắng ấm áp của cửa hàng tiện lợi thu hút cả tiểu đội kỵ sĩ.
@@ -10377,3 +10377,10 @@ Trang 9/10 — Kế hoạch hoàn hảo bàn bạc suốt ba tiếng đồng h�
 Trang 10/10 — Cuộc thương lượng căng thẳng bỗng chốc biến thành buổi tranh luận xem món mì ở quán nào ngon hơn.
 — Hết Chap 8: Chuỗi siêu thị phủ sóng toàn lục địa —')
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
+
+-- Manual seed IDs must advance the generated ID sequence for later inserts.
+SELECT setval(
+  pg_get_serial_sequence('public.truyen', 'id'),
+  GREATEST(COALESCE((SELECT MAX(id) FROM public.truyen), 0) + 1, 1),
+  false
+);

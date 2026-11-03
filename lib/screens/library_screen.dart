@@ -52,19 +52,21 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   title: Text('${AppStrings.moveTo}: ${Format.category(cat)}'),
                   onTap: () {
                     Navigator.pop(ctx);
-                    lp.setCategory(item.novelId, cat);
+                    _saveLibraryChange(() => lp.setCategory(item.novelId, cat));
                   },
                 ),
             ListTile(
-              leading: Icon(Icons.delete_outline,
-                  color: Theme.of(ctx).colorScheme.error),
+              leading: Icon(
+                Icons.delete_outline,
+                color: Theme.of(ctx).colorScheme.error,
+              ),
               title: Text(
                 AppStrings.removeFromLibrary,
                 style: TextStyle(color: Theme.of(ctx).colorScheme.error),
               ),
               onTap: () {
                 Navigator.pop(ctx);
-                lp.remove(item.novelId);
+                _saveLibraryChange(() => lp.remove(item.novelId));
               },
             ),
             const SizedBox(height: 8),
@@ -72,6 +74,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _saveLibraryChange(Future<void> Function() action) async {
+    try {
+      await action();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Không thể cập nhật tủ sách: $error')),
+      );
+    }
   }
 
   Future<void> _showImportLocalDialog() async {
@@ -102,9 +115,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
             IconButton(
               tooltip: AppStrings.history,
               icon: const Icon(Icons.history_rounded),
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const HistoryScreen()),
-              ),
+              onPressed: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const HistoryScreen())),
             ),
             PopupMenuButton<LibrarySort>(
               initialValue: lp.sort,

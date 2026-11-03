@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:sqflite/sqflite.dart';
 
 import '../database/app_database.dart';
 import '../database/v2_database_store.dart';
@@ -81,23 +80,16 @@ class ModerationProvider extends ChangeNotifier {
       reason: reason.trim(),
       createdAt: DateTime.now(),
     );
-    await db.insert('reports', report.toMap());
+    await V2DatabaseStore.createReport(db, report);
 
     if (targetType == 'comment') {
-      final count = Sqflite.firstIntValue(
-            await db.rawQuery(
-              "SELECT COUNT(*) FROM reports WHERE target_type = 'comment' AND target_id = ?",
-              [targetId],
-            ),
-          ) ??
-          0;
+      final count = await V2DatabaseStore.countReportsForTarget(
+        db,
+        targetType: 'comment',
+        targetId: targetId,
+      );
       if (count >= 3) {
-        await db.update(
-          'comments',
-          {'is_hidden': 1},
-          where: 'id = ?',
-          whereArgs: [targetId],
-        );
+        await V2DatabaseStore.hideComment(db, targetId);
       }
     }
     await loadAll();
@@ -113,24 +105,25 @@ class ModerationProvider extends ChangeNotifier {
     RoleGuard.requireAdmin(admin);
     final db = await _appDb.database;
     final newStatus = actionType == 'ignore' ? 'rejected' : 'resolved';
-    await db.update(
-      'reports',
-      {
-        'status': newStatus,
-        'handled_by': admin.id,
-        'resolution_note': note.trim(),
-      },
-      where: 'id = ?',
-      whereArgs: [report.id],
+    await V2DatabaseStore.updateReport(
+      db,
+      ReportItem(
+        id: report.id,
+        reporterId: report.reporterId,
+        reporterName: report.reporterName,
+        targetType: report.targetType,
+        targetId: report.targetId,
+        targetSnapshot: report.targetSnapshot,
+        reason: report.reason,
+        status: newStatus,
+        handledBy: admin.id,
+        resolutionNote: note.trim(),
+        createdAt: report.createdAt,
+      ),
     );
 
     if (actionType == 'hide_comment' && report.targetType == 'comment') {
-      await db.update(
-        'comments',
-        {'is_hidden': 1},
-        where: 'id = ?',
-        whereArgs: [report.targetId],
-      );
+      await V2DatabaseStore.hideComment(db, report.targetId);
     } else if (actionType == 'warn') {
       await V2DatabaseStore.createNotification(
         db,
@@ -162,11 +155,7 @@ class ModerationProvider extends ChangeNotifier {
     for (final raw in words) {
       final w = raw.trim().toLowerCase();
       if (w.isEmpty) continue;
-      await db.insert(
-        'banned_words',
-        {'word': w},
-        conflictAlgorithm: ConflictAlgorithm.ignore,
-      );
+      await V2DatabaseStore.addBannedWord(db, w);
     }
     await V2DatabaseStore.writeAuditLog(
       db,
@@ -182,7 +171,7 @@ class ModerationProvider extends ChangeNotifier {
   Future<void> removeBannedWord(AppUser admin, String word) async {
     RoleGuard.requireAdmin(admin);
     final db = await _appDb.database;
-    await db.delete('banned_words', where: 'word = ?', whereArgs: [word]);
+    await V2DatabaseStore.removeBannedWord(db, word.trim().toLowerCase());
     await V2DatabaseStore.writeAuditLog(
       db,
       admin: admin,
@@ -216,7 +205,7 @@ class ModerationProvider extends ChangeNotifier {
       endsAt: now.add(Duration(days: durationDays)),
       isActive: true,
     );
-    await db.insert('quests', quest.toMap());
+    await V2DatabaseStore.createQuest(db, quest);
     await V2DatabaseStore.writeAuditLog(
       db,
       admin: admin,

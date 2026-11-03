@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 /// Màn hình thông báo lỗi khi thiếu cấu hình SUPABASE_URL hoặc SUPABASE_ANON_KEY.
 class ConfigErrorScreen extends StatelessWidget {
-  const ConfigErrorScreen({super.key});
+  final String? message;
+
+  const ConfigErrorScreen({super.key, this.message});
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +31,7 @@ class ConfigErrorScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                     const Text(
-                      'Thiếu Cấu Hình Supabase',
+                      'Không thể kết nối Supabase',
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
@@ -38,13 +40,14 @@ class ConfigErrorScreen extends StatelessWidget {
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 12),
-                    const Text(
-                      'Ứng dụng yêu cầu biến môi trường SUPABASE_URL và SUPABASE_ANON_KEY để kết nối cơ sở dữ liệu đám mây.\n\nVui lòng khởi chạy ứng dụng với cờ --dart-define:',
-                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                    Text(
+                      message ??
+                          'Ứng dụng cần URL và publishable key của Supabase. Khởi chạy với các cờ --dart-define:',
+                      style: const TextStyle(color: Colors.white70, fontSize: 14),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 16),
-                    Container(
+                    if (message == null) Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: Colors.black38,
@@ -52,8 +55,8 @@ class ConfigErrorScreen extends StatelessWidget {
                       ),
                       child: const SelectableText(
                         'flutter run \\\n'
-                        '  --dart-define=SUPABASE_URL=https://... \\\n'
-                        '  --dart-define=SUPABASE_ANON_KEY=sb_publishable_...',
+                        '  --dart-define=NEXT_PUBLIC_SUPABASE_URL=https://... \\\n'
+                        '  --dart-define=NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...',
                         style: TextStyle(
                           fontFamily: 'monospace',
                           fontSize: 12,

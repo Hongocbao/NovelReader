@@ -158,7 +158,7 @@ class V2SeedData {
   /// Khởi tạo dữ liệu mẫu v2 nếu bảng `users` đang trống.
   static Future<void> seedIfNeeded(Database db) async {
     final userCount = Sqflite.firstIntValue(
-          await db.rawQuery('SELECT COUNT(*) FROM users'),
+          await db.rawQuery('SELECT COUNT(*) FROM nguoi_dung'),
         ) ??
         0;
     if (userCount == 0) {
@@ -166,13 +166,13 @@ class V2SeedData {
     }
 
     final achCount = Sqflite.firstIntValue(
-          await db.rawQuery('SELECT COUNT(*) FROM achievements'),
+          await db.rawQuery('SELECT COUNT(*) FROM thanh_tuu'),
         ) ??
         0;
     if (achCount == 0) {
       for (final a in defaultAchievements) {
         await db.insert(
-          'achievements',
+          'thanh_tuu',
           a.toMap(),
           conflictAlgorithm: ConflictAlgorithm.ignore,
         );
@@ -180,7 +180,7 @@ class V2SeedData {
     }
 
     final questCount = Sqflite.firstIntValue(
-          await db.rawQuery('SELECT COUNT(*) FROM quests'),
+          await db.rawQuery('SELECT COUNT(*) FROM nhiem_vu'),
         ) ??
         0;
     if (questCount == 0) {
@@ -188,7 +188,7 @@ class V2SeedData {
     }
 
     final glossaryCount = Sqflite.firstIntValue(
-          await db.rawQuery('SELECT COUNT(*) FROM glossary_terms'),
+          await db.rawQuery('SELECT COUNT(*) FROM thuat_ngu'),
         ) ??
         0;
     if (glossaryCount == 0) {
@@ -196,7 +196,7 @@ class V2SeedData {
     }
 
     final configCount = Sqflite.firstIntValue(
-          await db.rawQuery('SELECT COUNT(*) FROM app_config'),
+          await db.rawQuery('SELECT COUNT(*) FROM cau_hinh_ung_dung'),
         ) ??
         0;
     if (configCount == 0) {
@@ -256,13 +256,13 @@ class V2SeedData {
       createdAt: now.subtract(const Duration(days: 14)),
     );
 
-    await db.insert('users', admin.toMap());
-    await db.insert('users', author.toMap());
-    await db.insert('users', reader.toMap());
+    await db.insert('nguoi_dung', admin.toMap());
+    await db.insert('nguoi_dung', author.toMap());
+    await db.insert('nguoi_dung', reader.toMap());
 
     // Mở khóa sẵn một số huy hiệu mẫu
     for (final code in ['khoi_dau', 'lu_khach']) {
-      await db.insert('user_achievements', {
+      await db.insert('thanh_tuu_nguoi_dung', {
         'user_id': 3,
         'code': code,
         'unlocked_at': now.millisecondsSinceEpoch,
@@ -336,7 +336,7 @@ class V2SeedData {
       ),
     ];
     for (final q in quests) {
-      await db.insert('quests', q.toMap());
+      await db.insert('nhiem_vu', q.toMap());
     }
   }
 
@@ -379,7 +379,7 @@ class V2SeedData {
       ),
     ];
     for (final t in terms) {
-      await db.insert('glossary_terms', t.toMap());
+      await db.insert('thuat_ngu', t.toMap());
     }
 
     final summaries = [
@@ -407,7 +407,7 @@ class V2SeedData {
     ];
     for (final s in summaries) {
       await db.insert(
-        'chapter_summaries',
+        'tom_tat_chuong',
         s.toMap(),
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
@@ -427,7 +427,7 @@ class V2SeedData {
     };
     for (final entry in configs.entries) {
       await db.insert(
-        'app_config',
+        'cau_hinh_ung_dung',
         {'key': entry.key, 'value': entry.value},
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
@@ -435,13 +435,13 @@ class V2SeedData {
 
     for (final word in ['lừa đảo', 'spam_link', 'cá độ', 'chửi_thề_xấu']) {
       await db.insert(
-        'banned_words',
+        'tu_cam',
         {'word': word},
         conflictAlgorithm: ConflictAlgorithm.ignore,
       );
     }
 
-    await db.insert('announcements', {
+    await db.insert('thong_bao_chung', {
       'title': '🎉 Chào mừng đến với NovelReader v2.0!',
       'body':
           'Phiên bản 2.0 ra mắt hệ thống Nhiệm vụ Linh Thạch, Khiên chống Spoil, Tủ sách 3D, Reading Wrapped và Khu Quản Trị Admin toàn diện.',
@@ -451,7 +451,7 @@ class V2SeedData {
       'created_at': now,
     });
 
-    await db.insert('notifications', {
+    await db.insert('thong_bao', {
       'user_id': 3,
       'title': '🎁 Quà tân thủ NovelReader v2',
       'body':
@@ -461,7 +461,7 @@ class V2SeedData {
       'created_at': now,
     });
 
-    await db.insert('novel_requests', {
+    await db.insert('yeu_cau_truyen', {
       'user_id': 3,
       'user_name': 'Bảo Ngọc Độc Giả',
       'title': 'Phàm Nhân Tu Tiên - Ngoại Truyện',
@@ -474,7 +474,7 @@ class V2SeedData {
     // Đánh dấu 4 truyện đầu là Featured Banner
     for (var i = 1; i <= 4; i++) {
       await db.update(
-        'novels',
+        'truyen',
         {'is_featured': 1, 'featured_order': i},
         where: 'id = ?',
         whereArgs: [i],

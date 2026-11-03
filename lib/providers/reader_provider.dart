@@ -49,11 +49,7 @@ class OfflineException implements Exception {
 /// trạng thái mạng và tải chương để đọc offline.
 class ReaderProvider extends ChangeNotifier {
   /// [connectivityStream]/[checkConnectivity] cho phép thay thế khi test.
-  ReaderProvider(
-    this._db, {
-    this.connectivityStream,
-    this.checkConnectivity,
-  });
+  ReaderProvider(this._db, {this.connectivityStream, this.checkConnectivity});
 
   final AppDatabase _db;
   final Stream<bool>? connectivityStream;
@@ -73,7 +69,8 @@ class ReaderProvider extends ChangeNotifier {
   /// Bắt đầu theo dõi kết nối mạng.
   Future<void> init() async {
     final check = checkConnectivity ?? _defaultCheck;
-    final stream = connectivityStream ??
+    final stream =
+        connectivityStream ??
         Connectivity().onConnectivityChanged.map(_hasNetwork);
     try {
       _networkAvailable = await check();
@@ -116,13 +113,22 @@ class ReaderProvider extends ChangeNotifier {
   bool isLoadingChapters(int novelId) => _chaptersLoading.contains(novelId);
 
   /// Tải danh sách chương từ DB.
-  Future<List<Chapter>> loadChapters(int novelId, {bool force = false}) async {
+  Future<List<Chapter>> loadChapters(
+    int novelId, {
+    bool force = false,
+    Novel? novel,
+  }) async {
     if (!force && _chapters.containsKey(novelId)) return _chapters[novelId]!;
     _chaptersLoading.add(novelId);
     _chapterErrors.remove(novelId);
     notifyListeners();
     try {
-      final list = await _db.getChapters(novelId);
+      final list = !isOnline && novelId >= 0
+          ? await _db.getCachedChapters(novelId)
+          : await _db.getChapters(
+              novelId,
+              novel: novel ?? (_novel?.id == novelId ? _novel : null),
+            );
       _chapters[novelId] = list;
       return list;
     } catch (e) {
@@ -167,8 +173,9 @@ class ReaderProvider extends ChangeNotifier {
   List<Chapter> get currentChapters =>
       _novel == null ? const [] : (_chapters[_novel!.id] ?? const []);
 
-  int get _currentPos =>
-      _current == null ? -1 : currentChapters.indexWhere((c) => c.id == _current!.id);
+  int get _currentPos => _current == null
+      ? -1
+      : currentChapters.indexWhere((c) => c.id == _current!.id);
 
   Chapter? get previousChapter {
     final i = _currentPos;
@@ -184,16 +191,20 @@ class ReaderProvider extends ChangeNotifier {
 
   /// Mở truyện tại chương [chapterId] (mặc định chương đầu).
   Future<void> openNovel(Novel novel, {int? chapterId}) async {
+    final request = ++_contentRequest;
     _novel = novel;
     _current = null;
     _content = null;
     _contentError = null;
     _loadingContent = true;
     notifyListeners();
-    final chapters = await loadChapters(novel.id);
+    final chapters = await loadChapters(novel.id, novel: novel);
+    if (request != _contentRequest) return;
     if (chapters.isEmpty) {
       _loadingContent = false;
-      _contentError = _chapterErrors[novel.id] ?? AppStrings.noChapters;
+      _contentError = !isOnline
+          ? const OfflineException().toString()
+          : _chapterErrors[novel.id] ?? AppStrings.noChapters;
       notifyListeners();
       return;
     }
@@ -218,7 +229,9 @@ class ReaderProvider extends ChangeNotifier {
       _content = text;
     } catch (e) {
       if (request != _contentRequest) return;
-      _contentError = e is OfflineException ? e.toString() : '${AppStrings.loadFailed}: $e';
+      _contentError = e is OfflineException
+          ? e.toString()
+          : '${AppStrings.loadFailed}: $e';
     } finally {
       if (request == _contentRequest) {
         _loadingContent = false;
@@ -238,11 +251,10 @@ class ReaderProvider extends ChangeNotifier {
 
   Future<String> _loadContent(Chapter chapter) async {
     if (chapter.isDownloaded) {
-      final saved = await _db.getChapter(chapter.id);
+      final saved = await _db.getChapter(chapter.id, novelId: chapter.novelId);
       if (saved?.content != null) return saved!.content!;
     }
     if (!isOnline) throw const OfflineException();
-    await Future<void>.delayed(AppInfo.fakeNetworkDelay);
     return _db.fetchChapterContent(chapter.novelId, chapter.chapterIndex);
   }
 
@@ -294,7 +306,11 @@ class ReaderProvider extends ChangeNotifier {
   /// Tải nhiều chương (1 chương, nhiều chương hoặc cả truyện).
   /// Bỏ qua chương đã tải. Trả về số chương tải thành công.
   /// Ném [OfflineException] nếu không có mạng.
-  Future<int> downloadChapters(int novelId, List<Chapter> chapters) async {
+  Future<int> downloadChapters(
+    int novelId,
+    List<Chapter> chapters, {
+    Novel? novel,
+  }) async {
     if (_tasks[novelId]?.running ?? false) return 0;
     if (!isOnline) throw const OfflineException();
     final pending = chapters.where((c) => !c.isDownloaded).toList();
@@ -307,9 +323,12 @@ class ReaderProvider extends ChangeNotifier {
     try {
       for (final ch in pending) {
         if (!isOnline) throw const OfflineException();
-        await Future<void>.delayed(AppInfo.fakeNetworkDelay);
         final text = await _db.fetchChapterContent(novelId, ch.chapterIndex);
-        await _db.saveChapterContent(ch.id, text);
+        await _db.saveChapterContent(
+          ch,
+          text,
+          novel: novel ?? (_novel?.id == novelId ? _novel : null),
+        );
         _updateCachedChapter(novelId, ch.id, true);
         success++;
         task = task.copyWith(done: success);
@@ -334,7 +353,7 @@ class ReaderProvider extends ChangeNotifier {
 
   /// Xóa 1 chương đã tải.
   Future<void> deleteDownload(Chapter chapter) async {
-    await _db.deleteChapterContent(chapter.id);
+    await _db.deleteChapterContent(chapter);
     _updateCachedChapter(chapter.novelId, chapter.id, false);
     await _refreshDownloadsSilently();
     notifyListeners();

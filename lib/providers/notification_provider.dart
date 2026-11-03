@@ -37,11 +37,7 @@ class NotificationProvider extends ChangeNotifier {
       final db = await _appDb.database;
       _notifications = await V2DatabaseStore.getNotifications(db, userId);
       _announcements = await V2DatabaseStore.getAnnouncements(db);
-      final reqRows = await db.query(
-        'novel_requests',
-        orderBy: 'votes DESC, created_at DESC',
-      );
-      _requests = reqRows.map(NovelRequestItem.fromMap).toList();
+      _requests = await V2DatabaseStore.getNovelRequests(db);
     } catch (e) {
       _error = e.toString();
     } finally {
@@ -53,11 +49,10 @@ class NotificationProvider extends ChangeNotifier {
   /// Đánh dấu đã đọc một thông báo.
   Future<void> markAsRead(int notificationId, String userId) async {
     final db = await _appDb.database;
-    await db.update(
-      'notifications',
-      {'is_read': 1},
-      where: 'id = ?',
-      whereArgs: [notificationId],
+    await V2DatabaseStore.markNotificationRead(
+      db,
+      notificationId: notificationId,
+      userId: userId,
     );
     _notifications = await V2DatabaseStore.getNotifications(db, userId);
     notifyListeners();
@@ -66,12 +61,7 @@ class NotificationProvider extends ChangeNotifier {
   /// Đánh dấu đã đọc toàn bộ thông báo của người dùng.
   Future<void> markAllAsRead(String userId) async {
     final db = await _appDb.database;
-    await db.update(
-      'notifications',
-      {'is_read': 1},
-      where: 'user_id = ? OR user_id = ?',
-      whereArgs: [userId, ''],
-    );
+    await V2DatabaseStore.markAllNotificationsRead(db, userId: userId);
     _notifications = await V2DatabaseStore.getNotifications(db, userId);
     notifyListeners();
   }
@@ -94,16 +84,17 @@ class NotificationProvider extends ChangeNotifier {
       votes: 1,
       createdAt: DateTime.now(),
     );
-    await db.insert('novel_requests', item.toMap());
+    await V2DatabaseStore.submitNovelRequest(db, item);
     await loadAll(user.id);
   }
 
   /// Bình chọn (+1 vote) cho một yêu cầu truyện.
   Future<void> voteNovelRequest(int requestId, String userId) async {
     final db = await _appDb.database;
-    await db.rawUpdate(
-      'UPDATE novel_requests SET votes = votes + 1 WHERE id = ?',
-      [requestId],
+    await V2DatabaseStore.voteNovelRequest(
+      db,
+      requestId: requestId,
+      userId: userId,
     );
     await loadAll(userId);
   }
@@ -119,8 +110,8 @@ class NotificationProvider extends ChangeNotifier {
     RoleGuard.requireAdmin(admin);
     final db = await _appDb.database;
     final now = DateTime.now();
-    await db.insert(
-      'announcements',
+    await V2DatabaseStore.createAnnouncement(
+      db,
       Announcement(
         title: title.trim(),
         body: body.trim(),
@@ -128,7 +119,7 @@ class NotificationProvider extends ChangeNotifier {
         pinned: pinned,
         createdBy: admin.id,
         createdAt: now,
-      ).toMap(),
+      ),
     );
     await V2DatabaseStore.createNotification(
       db,
@@ -154,7 +145,7 @@ class NotificationProvider extends ChangeNotifier {
   Future<void> deleteAnnouncement(AppUser admin, int id) async {
     RoleGuard.requireAdmin(admin);
     final db = await _appDb.database;
-    await db.delete('announcements', where: 'id = ?', whereArgs: [id]);
+    await V2DatabaseStore.deleteAnnouncement(db, id);
     await V2DatabaseStore.writeAuditLog(
       db,
       admin: admin,

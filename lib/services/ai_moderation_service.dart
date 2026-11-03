@@ -1,8 +1,10 @@
 import 'dart:math';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/chapter.dart';
 import '../models/novel.dart';
+import '../utils/format.dart';
 
 /// Kết quả thẩm định tự động bằng AI (AI Content Pre-Screening Report).
 class AiModerationReport {
@@ -38,8 +40,16 @@ class AiModerationService {
   AiModerationService._();
 
   static const _defaultBannedKeywords = [
-    'lua dao', 'cam bay', 'phan dong', 'khung bo', 'ma tuy',
-    'chich hut', 'co bac', 'danh bac', 'khieu dam', 'doi truy'
+    'lua dao',
+    'cam bay',
+    'phan dong',
+    'khung bo',
+    'ma tuy',
+    'chich hut',
+    'co bac',
+    'danh bac',
+    'khieu dam',
+    'doi truy',
   ];
 
   /// Quét và thẩm định toàn diện một bộ truyện kèm các chương.
@@ -50,9 +60,7 @@ class AiModerationService {
     // 1. Lấy danh sách từ cấm từ database (nếu có)
     List<String> bannedList = List.from(_defaultBannedKeywords);
     try {
-      final res = await Supabase.instance.client
-          .from('banned_words')
-          .select('word');
+      final res = await Supabase.instance.client.from('tu_cam').select('word');
       for (final r in res) {
         if (r['word'] != null) {
           bannedList.add(r['word'].toString().toLowerCase());
@@ -74,17 +82,36 @@ class AiModerationService {
         final matches = RegExp(r'\[img\]').allMatches(textContent);
         imageCount += matches.length;
       } else {
-        final words = textContent.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length;
+        final words = textContent
+            .split(RegExp(r'\s+'))
+            .where((w) => w.isNotEmpty)
+            .length;
         totalWords += words;
       }
     }
 
     // 3. Quét từ ngữ nhạy cảm / độc hại trong tiêu đề, mô tả và nội dung
-    final fullTextToScan = '${novel.title} ${novel.description} ${chapters.map((c) => c.title).join(" ")}'.toLowerCase();
+    final scanText = <String>[
+      novel.title,
+      novel.description,
+      for (final chapter in chapters) chapter.title,
+      for (final chapter in chapters)
+        (chapter.content ?? '').replaceAll(
+          RegExp(r'\[img\].*?\[/img\]', caseSensitive: false, dotAll: true),
+          ' ',
+        ),
+    ].join(' ');
+    final normalizedText = Format.normalize(scanText);
 
+    final matchedWords = <String>{};
     for (final word in bannedList) {
-      if (word.trim().isEmpty) continue;
-      if (fullTextToScan.contains(word.trim().toLowerCase())) {
+      final normalizedWord = Format.normalize(word).trim();
+      if (normalizedWord.isEmpty) continue;
+      final escapedWord = RegExp.escape(normalizedWord)
+          .replaceAll(r'\ ', r'\s+');
+      final wordPattern = RegExp('(^|[^a-z0-9])$escapedWord([^a-z0-9]|\$)');
+      if (wordPattern.hasMatch(normalizedText) &&
+          matchedWords.add(normalizedWord)) {
         detectedWords.add(word);
       }
     }
@@ -93,10 +120,14 @@ class AiModerationService {
     int score = 100;
 
     if (detectedWords.isEmpty) {
-      passedCriteria.add('100% không chứa từ khóa cấm, ngôn từ thù địch hay nhạy cảm');
+      passedCriteria.add(
+        'Không phát hiện từ khóa cấm trong metadata và nội dung chương',
+      );
     } else {
       score -= min(50, detectedWords.length * 20);
-      warnings.add('Phát hiện ${detectedWords.length} từ khóa cần xem xét: ${detectedWords.join(", ")}');
+      warnings.add(
+        'Phát hiện ${detectedWords.length} từ khóa cần xem xét: ${detectedWords.join(", ")}',
+      );
     }
 
     if (chapters.isNotEmpty) {
@@ -108,17 +139,23 @@ class AiModerationService {
 
     if (novel.isComic) {
       if (imageCount >= 5) {
-        passedCriteria.add('Định dạng Manga đạt chuẩn ($imageCount trang ảnh minh họa sắc nét)');
+        passedCriteria.add(
+          'Định dạng Manga đạt chuẩn ($imageCount trang ảnh minh họa sắc nét)',
+        );
       } else {
         score -= 20;
         warnings.add('Số trang truyện tranh quá ít ($imageCount trang)');
       }
     } else {
       if (totalWords >= 500) {
-        passedCriteria.add('Dung lượng văn bản dồi dào ($totalWords từ), độ dài chương chuẩn');
+        passedCriteria.add(
+          'Dung lượng văn bản dồi dào ($totalWords từ), độ dài chương chuẩn',
+        );
       } else if (totalWords > 0) {
         score -= 15;
-        warnings.add('Nội dung khá ngắn ($totalWords từ), nên bổ sung thêm tình tiết');
+        warnings.add(
+          'Nội dung khá ngắn ($totalWords từ), nên bổ sung thêm tình tiết',
+        );
       }
     }
 
@@ -153,7 +190,9 @@ class AiModerationService {
 
     final suggestedGenres = novel.genres.isNotEmpty
         ? novel.genres
-        : (novel.isComic ? ['Action', 'Manga', 'Fantasy'] : ['Tien hiep', 'Huyen huyen', 'Phieu luu']);
+        : (novel.isComic
+              ? ['Action', 'Manga', 'Fantasy']
+              : ['Tien hiep', 'Huyen huyen', 'Phieu luu']);
 
     return AiModerationReport(
       safetyScore: score.clamp(0, 100),

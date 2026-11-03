@@ -10,7 +10,14 @@ import '../utils/theme.dart';
 class ReaderSettingsSheet extends StatelessWidget {
   final bool showPreview;
 
-  const ReaderSettingsSheet({super.key, this.showPreview = false});
+  /// Gợi ý chế độ cuộn dọc liên tục khi đang đọc truyện tranh.
+  final bool isComic;
+
+  const ReaderSettingsSheet({
+    super.key,
+    this.showPreview = false,
+    this.isComic = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -238,12 +245,43 @@ class ReaderSettingsSheet extends StatelessWidget {
                 ),
               ],
             ),
+            if (isComic) ...[
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  const Icon(Icons.view_day_outlined, size: 16),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Truyện tranh: chọn Cuộn dọc để đọc liên tục kiểu webtoon.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 8),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text(AppStrings.keepScreenOn),
               value: s.keepScreenOn,
               onChanged: provider.setKeepScreenOn,
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Row(
+                children: [
+                  Icon(Icons.smart_toy_rounded, size: 18, color: Color(0xFF8B5CF6)),
+                  SizedBox(width: 8),
+                  Text('Bong bóng Trợ lý AI'),
+                ],
+              ),
+              subtitle: const Text(
+                'Hiển thị bong bóng AI hỗ trợ tóm tắt, giải thích chương khi đọc',
+                style: TextStyle(fontSize: 11.5),
+              ),
+              value: s.showAiBubble,
+              onChanged: provider.setShowAiBubble,
             ),
           ],
         ),

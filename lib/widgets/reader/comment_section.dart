@@ -118,17 +118,26 @@ class _ReaderCommentSectionState extends State<ReaderCommentSection> {
       final banned = mod?.bannedWords ?? const <String>[];
       final cleanText = ProfanityFilter.sanitize(ctrl.text, banned);
       final user = auth?.currentUser;
-      await context.read<LibraryProvider>().addComment(
-            novelId: widget.novelId,
-            chapterId: widget.chapter.id,
-            content: cleanText,
-            stars: stars,
-            userId: user?.id ?? '',
-            userName: user?.displayName ?? 'Độc giả',
-            chapterIndex: commentChapterIdx,
-          );
-      if (user != null && quest != null) {
-        await quest.recordProgress(user: user, goalType: 'comment', delta: 1);
+      try {
+        await context.read<LibraryProvider>().addComment(
+          novelId: widget.novelId,
+          chapterId: widget.chapter.id,
+          content: cleanText,
+          stars: stars,
+          userId: user?.id ?? '',
+          userName: user?.displayName ?? 'Độc giả',
+          chapterIndex: commentChapterIdx,
+        );
+        if (user != null && quest != null) {
+          await quest.recordProgress(user: user, goalType: 'comment', delta: 1);
+        }
+      } catch (_) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Không gửi được bình luận. Hãy kiểm tra kết nối.'),
+          ),
+        );
       }
     }
   }
@@ -292,7 +301,10 @@ class _ReaderCommentSectionState extends State<ReaderCommentSection> {
                           else
                             Text(
                               c.content,
-                              style: TextStyle(color: textColor, fontSize: 13.5),
+                              style: TextStyle(
+                                color: textColor,
+                                fontSize: 13.5,
+                              ),
                             ),
                         ],
                       ),
