@@ -52,6 +52,18 @@ class DownloadCancelledException implements Exception {
       'Đã dừng lượt tải do bản tải đã bị xóa hoặc ứng dụng đã đóng.';
 }
 
+@immutable
+class ReaderSnapshot {
+  const ReaderSnapshot({
+    required this.novel,
+    required this.chapter,
+    required this.content,
+  });
+  final Novel novel;
+  final Chapter chapter;
+  final String content;
+}
+
 /// Quản lý việc đọc: danh sách chương, nội dung chương hiện tại,
 /// trạng thái mạng và tải chương để đọc offline.
 class ReaderProvider extends ChangeNotifier {
@@ -233,12 +245,56 @@ class ReaderProvider extends ChangeNotifier {
   bool _loadingContent = false;
   String? _contentError;
   int _contentRequest = 0;
+  Object? _readerOwner;
+  Object? get readerOwner => _readerOwner;
+
+  void releaseReader(Object owner) {
+    if (identical(_readerOwner, owner)) _readerOwner = null;
+  }
 
   Novel? get novel => _novel;
   Chapter? get currentChapter => _current;
   String? get content => _content;
   bool get isLoadingContent => _loadingContent;
   String? get contentError => _contentError;
+
+  ReaderSnapshot? captureReader() {
+    final book = novel;
+    final chapter = currentChapter;
+    final text = content;
+    if (book == null ||
+        chapter?.novelId != book.id ||
+        text == null ||
+        text.trim().isEmpty ||
+        isLoadingContent) {
+      return null;
+    }
+    return ReaderSnapshot(novel: book, chapter: chapter!, content: text);
+  }
+
+  /// Khôi phục màn đọc đang nằm dưới màn khác, dùng lại nội dung trong RAM.
+  void restoreReader(ReaderSnapshot snapshot, {Object? owner}) {
+    if (_disposed) return;
+    if (snapshot.chapter.novelId != snapshot.novel.id ||
+        snapshot.content.trim().isEmpty) {
+      throw ArgumentError('Nội dung khôi phục không thuộc truyện.');
+    }
+    _contentRequest++;
+    _readerOwner = owner;
+    _novel = snapshot.novel;
+    _current = snapshot.chapter.copyWith(
+      isDownloaded:
+          _downloadStatus[(
+            novelId: snapshot.novel.id,
+            chapterId: snapshot.chapter.id,
+          )] ??
+          snapshot.chapter.isDownloaded,
+    );
+    _content = snapshot.content;
+    _contentError = null;
+    _loadingContent = false;
+    _emit();
+  }
 
   /// Danh sách chương của truyện đang đọc.
   List<Chapter> get currentChapters =>
@@ -261,9 +317,10 @@ class ReaderProvider extends ChangeNotifier {
   }
 
   /// Mở truyện tại chương [chapterId] (mặc định chương đầu).
-  Future<void> openNovel(Novel novel, {int? chapterId}) async {
+  Future<void> openNovel(Novel novel, {int? chapterId, Object? owner}) async {
     if (_disposed) return;
     final request = ++_contentRequest;
+    _readerOwner = owner;
     _novel = novel;
     _current = null;
     _content = null;
@@ -345,6 +402,7 @@ class ReaderProvider extends ChangeNotifier {
   /// Đóng truyện đang đọc (khi thoát màn hình đọc).
   void closeReader() {
     _contentRequest++;
+    _readerOwner = null;
     _novel = null;
     _current = null;
     _content = null;

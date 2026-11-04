@@ -29,6 +29,15 @@ class LibraryProvider extends ChangeNotifier {
   int _identityRevision = 0;
   int _historyRevision = 0;
   int _statsRevision = 0;
+  int _lastProgressTime = 0;
+
+  /// Giữ thứ tự thao tác kể cả khi nhiều màn đọc lưu trong cùng mili giây.
+  DateTime captureProgressTime() {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    _lastProgressTime = now > _lastProgressTime ? now : _lastProgressTime + 1;
+    return DateTime.fromMillisecondsSinceEpoch(_lastProgressTime);
+  }
+
   bool _disposed = false;
   bool? _wasOnline;
   final _autoStartAttempts = <({int identity, int novelId})>{};
@@ -316,11 +325,21 @@ class LibraryProvider extends ChangeNotifier {
   /// Lưu tiến độ đọc: chương hiện tại + vị trí cuộn (tỉ lệ 0..1).
   /// Tự gọi khi mở chương, khi cuộn (có debounce), khi thoát màn hình đọc.
   /// Nếu truyện đang ở "Muốn đọc" sẽ tự chuyển sang "Đang đọc".
-  Future<void> saveProgress(Novel novel, Chapter chapter, double offset) async {
+  Future<void> saveProgress(
+    Novel novel,
+    Chapter chapter,
+    double offset, {
+    DateTime? readAt,
+    String? userId,
+  }) async {
+    if (_disposed || (userId != null && _userId != null && userId != _userId)) {
+      return;
+    }
     final revision = _identityRevision;
-    final uid = _userId;
+    final uid = userId ?? _userId;
     _historyRevision++;
-    final now = DateTime.now();
+    final now = readAt ?? captureProgressTime();
+    if (historyFor(novel.id)?.lastReadAt.isAfter(now) == true) return;
     final updated = ReadingHistory(
       novelId: novel.id,
       lastChapterId: chapter.id,
@@ -332,6 +351,7 @@ class LibraryProvider extends ChangeNotifier {
     );
     await _db.saveHistory(updated, userId: uid);
     if (revision != _identityRevision) return;
+    if (historyFor(novel.id)?.lastReadAt.isAfter(now) == true) return;
     _history = [updated, ..._history.where((h) => h.novelId != novel.id)];
 
     // Cập nhật tiến độ trong tủ sách mà không cần đọc lại DB.

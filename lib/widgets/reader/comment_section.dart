@@ -179,19 +179,29 @@ class _ReaderCommentSectionState extends State<ReaderCommentSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 4,
             children: [
-              Icon(Icons.forum_outlined, size: 18, color: textColor),
-              const SizedBox(width: 8),
-              Text(
-                '${AppStrings.chapterComments} (${allComments.length})',
-                style: TextStyle(
-                  color: textColor,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 15,
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.forum_outlined, size: 18, color: textColor),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      '${AppStrings.chapterComments} (${allComments.length})',
+                      style: TextStyle(
+                        color: textColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              const Spacer(),
               TextButton.icon(
                 onPressed: () => _showAddCommentDialog(context),
                 icon: const Icon(Icons.add_comment_outlined, size: 16),
@@ -220,7 +230,8 @@ class _ReaderCommentSectionState extends State<ReaderCommentSection> {
                     CircleAvatar(
                       radius: 14,
                       child: Text(
-                        c.userName.characters.first.toUpperCase(),
+                        (c.userName.trim().characters.firstOrNull ?? '?')
+                            .toUpperCase(),
                         style: const TextStyle(fontSize: 12),
                       ),
                     ),
@@ -231,27 +242,18 @@ class _ReaderCommentSectionState extends State<ReaderCommentSection> {
                         children: [
                           Row(
                             children: [
-                              Text(
-                                c.userName,
-                                style: TextStyle(
-                                  color: textColor,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 13,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              for (var s = 0; s < c.stars; s++)
-                                const Icon(
-                                  Icons.star_rounded,
-                                  size: 13,
-                                  color: AppColors.rating,
-                                ),
-                              const Spacer(),
-                              Text(
-                                Format.relative(c.createdAt),
-                                style: TextStyle(
-                                  color: textColor.withValues(alpha: 0.6),
-                                  fontSize: 11,
+                              Expanded(
+                                child: Text(
+                                  c.userName.trim().isEmpty
+                                      ? 'Độc giả'
+                                      : c.userName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: textColor,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
                                 ),
                               ),
                               IconButton(
@@ -263,6 +265,31 @@ class _ReaderCommentSectionState extends State<ReaderCommentSection> {
                                   color: textColor.withValues(alpha: 0.55),
                                 ),
                                 onPressed: () => _reportComment(c),
+                              ),
+                            ],
+                          ),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  for (var s = 0; s < c.stars.clamp(0, 5); s++)
+                                    const Icon(
+                                      Icons.star_rounded,
+                                      size: 13,
+                                      color: AppColors.rating,
+                                    ),
+                                ],
+                              ),
+                              Text(
+                                Format.relative(c.createdAt),
+                                style: TextStyle(
+                                  color: textColor.withValues(alpha: 0.6),
+                                  fontSize: 11,
+                                ),
                               ),
                             ],
                           ),

@@ -96,7 +96,7 @@ class _Reader extends ReaderProvider {
   @override
   List<Chapter> get currentChapters => [chapter];
   @override
-  Future<void> openNovel(Novel novel, {int? chapterId}) async {}
+  Future<void> openNovel(Novel novel, {int? chapterId, Object? owner}) async {}
   void change({
     required Chapter next,
     required String? content,
@@ -115,8 +115,10 @@ class _Library extends LibraryProvider {
   Future<void> saveProgress(
     Novel novel,
     Chapter chapter,
-    double offset,
-  ) async {}
+    double offset, {
+    DateTime? readAt,
+    String? userId,
+  }) async {}
 }
 
 void main() {

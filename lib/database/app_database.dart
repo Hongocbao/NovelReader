@@ -1158,10 +1158,22 @@ class AppDatabase {
       return;
     }
     final db = await database;
-    await db.insert(
-      'lich_su_doc',
-      history.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
+    final timestamp = history.lastReadAt.millisecondsSinceEpoch;
+    await db.rawInsert(
+      '''
+      INSERT OR REPLACE INTO lich_su_doc (novel_id, last_chapter_id, scroll_offset, last_read_at)
+      SELECT ?, ?, ?, ? WHERE NOT EXISTS (
+        SELECT 1 FROM lich_su_doc WHERE novel_id = ? AND last_read_at > ?
+      )
+    ''',
+      [
+        history.novelId,
+        history.lastChapterId,
+        history.scrollOffset,
+        timestamp,
+        history.novelId,
+        timestamp,
+      ],
     );
   }
 

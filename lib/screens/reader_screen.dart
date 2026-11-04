@@ -64,7 +64,11 @@ class _ReaderScreenState extends State<ReaderScreen>
   final PageController _pageCtrl = PageController();
   final FocusNode _keyFocusNode = FocusNode();
   final Map<int, GlobalKey> _paragraphKeys = {};
-  final Map<int, ({Chapter chapter, double offset})> _pendingProgressSaves = {};
+  final Map<
+    int,
+    ({Chapter chapter, double offset, DateTime readAt, String userId})
+  >
+  _pendingProgressSaves = {};
   Timer? _saveDebounce;
   Timer? _autoScrollTimer;
   Timer? _activityTimer;
@@ -75,6 +79,11 @@ class _ReaderScreenState extends State<ReaderScreen>
   Chapter? _activityChapter;
   String? _activityContent;
   String _activityUserId = '';
+  ReaderSnapshot? _readerSnapshot;
+  double _snapshotRatio = 0;
+  bool _readerStarted = false;
+  bool? _restoredHorizontalMode;
+  Orientation? _readerOrientation;
 
   bool _showToolbar = true;
   bool _isAutoScrolling = false;
@@ -110,26 +119,9 @@ class _ReaderScreenState extends State<ReaderScreen>
     _scrollCtrl.addListener(_onScroll);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
-      _applyWakelock(context.read<SettingsProvider>().reader.keepScreenOn);
-      try {
-        await _libraryProvider.loadBookmarks(widget.novel.id);
-      } catch (error) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Không tải được dấu trang: $error')),
-          );
-        }
-      }
-      if (_readerProvider.currentChapter?.novelId != widget.novel.id ||
-          _readerProvider.currentChapter?.id != widget.initialChapterId ||
-          _readerProvider.content == null) {
-        await _readerProvider.openNovel(
-          widget.novel,
-          chapterId: widget.initialChapterId,
-        );
-      }
-      if (mounted) _persistNow();
+      if (!mounted || !_readerRouteActive) return;
+      unawaited(_loadReaderBookmarks());
+      await _resumeOwnReader();
     });
   }
 
@@ -144,7 +136,9 @@ class _ReaderScreenState extends State<ReaderScreen>
       _activityRoute = route;
       if (route != null) appRouteObserver.subscribe(this, route);
     }
-    final keepOn = context.read<SettingsProvider>().reader.keepScreenOn;
+    final keepOn =
+        context.read<SettingsProvider>().reader.keepScreenOn &&
+        _readerRouteActive;
     if (keepOn != _lastKeepOn) {
       _applyWakelock(keepOn);
     }
@@ -156,7 +150,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   }
 
   void _onScroll() {
-    if (!_scrollCtrl.hasClients) return;
+    if (!_readerRouteActive || !_scrollCtrl.hasClients) return;
     final max = _scrollCtrl.position.maxScrollExtent;
     final nextRatio = max <= 0
         ? 0.0
@@ -189,16 +183,86 @@ class _ReaderScreenState extends State<ReaderScreen>
     return user == null || user.isGuest ? '' : user.id;
   }
 
+  bool get _readerRouteActive =>
+      _routeVisible && (_activityRoute?.isCurrent ?? true);
+
+  bool _matchesInitialChapter(Chapter? chapter) =>
+      _readerStarted ||
+      widget.initialChapterId == null ||
+      chapter?.id == widget.initialChapterId;
+
+  void _rememberOwnReader({bool atBoundary = false}) {
+    if (!atBoundary && !_readerRouteActive) return;
+    if (_readerStarted && !identical(_readerProvider.readerOwner, this)) return;
+    final snapshot = _readerProvider.captureReader();
+    if (snapshot?.novel.id == widget.novel.id &&
+        _matchesInitialChapter(snapshot?.chapter)) {
+      _readerSnapshot = snapshot;
+      _snapshotRatio = _currentRatio;
+    }
+  }
+
+  Future<void> _loadReaderBookmarks() async {
+    try {
+      await _libraryProvider.loadBookmarks(widget.novel.id);
+    } catch (error) {
+      if (!mounted || !_readerRouteActive) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Không tải được dấu trang: $error')),
+      );
+    }
+  }
+
+  Future<void> _resumeOwnReader() async {
+    if (!mounted || !_readerRouteActive) return;
+    _applyWakelock(context.read<SettingsProvider>().reader.keepScreenOn);
+    final initial = !_readerStarted;
+    _readerStarted = true;
+    final snapshot = _readerSnapshot;
+    if (!initial &&
+        snapshot != null &&
+        !identical(_readerProvider.readerOwner, this)) {
+      _currentRatio = _snapshotRatio;
+      _pendingRestoreRatio = _snapshotRatio;
+      _restoredForChapterId = null;
+      _readerProvider.restoreReader(snapshot, owner: this);
+    } else if (_readerProvider.novel?.id != widget.novel.id ||
+        _readerProvider.currentChapter == null ||
+        _readerProvider.content == null ||
+        (initial &&
+            widget.initialChapterId != null &&
+            _readerProvider.currentChapter?.id != widget.initialChapterId)) {
+      if (!initial &&
+          _readerProvider.novel?.id == widget.novel.id &&
+          _readerProvider.isLoadingContent) {
+        return;
+      }
+      await _readerProvider.openNovel(
+        widget.novel,
+        chapterId: widget.initialChapterId,
+        owner: this,
+      );
+    } else if (!identical(_readerProvider.readerOwner, this)) {
+      final available = _readerProvider.captureReader();
+      if (available != null) {
+        _readerProvider.restoreReader(available, owner: this);
+      }
+    }
+    if (!mounted || !_readerRouteActive) return;
+    _rememberOwnReader();
+    _persistNow();
+  }
+
   bool get _readingVisible =>
-      _appState == AppLifecycleState.resumed &&
-      _routeVisible &&
-      (_activityRoute?.isCurrent ?? true);
+      _appState == AppLifecycleState.resumed && _readerRouteActive;
 
   void _syncReadingActivity(ReaderProvider reader, String userId) {
     final chapter = reader.currentChapter;
     final content = reader.content;
     final ready =
         chapter?.novelId == widget.novel.id &&
+        (!_readerStarted || identical(reader.readerOwner, this)) &&
+        _matchesInitialChapter(chapter) &&
         content != null &&
         content.trim().isNotEmpty &&
         !reader.isLoadingContent;
@@ -250,20 +314,43 @@ class _ReaderScreenState extends State<ReaderScreen>
 
   @override
   void didPushNext() {
+    _rememberOwnReader(atBoundary: true);
+    _persistNow();
+    _saveDebounce?.cancel();
     _routeVisible = false;
     _pauseReadingActivity();
+    _stopListen();
+    _stopAutoScroll();
+    _applyWakelock(false);
   }
 
   @override
   void didPopNext() {
     _routeVisible = true;
-    _syncReadingActivity(_readerProvider, _currentReadingUserId());
+    // Observer chạy trong lúc Navigator cập nhật route; khôi phục sau lượt đó.
+    scheduleMicrotask(() async {
+      if (!mounted || !_readerRouteActive) return;
+      setState(() {
+        _restoredForChapterId = null;
+        _pendingRestoreRatio = _currentRatio;
+      });
+      await _resumeOwnReader();
+      if (mounted && _readerRouteActive) {
+        _syncReadingActivity(_readerProvider, _currentReadingUserId());
+      }
+    });
   }
 
   @override
   void didPop() {
+    _rememberOwnReader(atBoundary: true);
+    _persistNow();
+    _saveDebounce?.cancel();
     _routeVisible = false;
     _pauseReadingActivity();
+    _stopListen();
+    _stopAutoScroll();
+    _applyWakelock(false);
   }
 
   void _toggleAutoScroll() {
@@ -358,7 +445,7 @@ class _ReaderScreenState extends State<ReaderScreen>
 
   void _stopListen() {
     _ttsSessionId++;
-    stopSpeechPlatform();
+    if (_isListening) stopSpeechPlatform();
     if (mounted && (_isListening || _speakingParagraphIndex != -1)) {
       setState(() {
         _isListening = false;
@@ -435,12 +522,18 @@ class _ReaderScreenState extends State<ReaderScreen>
   }
 
   void _persistNow() {
-    final ch = _readerProvider.currentChapter;
+    _rememberOwnReader();
+    final ch = _readerSnapshot?.chapter;
     if (ch == null || ch.novelId != widget.novel.id) return;
     // Đưa chương vừa đọc về cuối hàng đợi để lần đọc mới nhất được ghi sau
     // cùng, kể cả khi người đọc chuyển A -> B -> A lúc mạng đang chậm.
     _pendingProgressSaves.remove(ch.id);
-    _pendingProgressSaves[ch.id] = (chapter: ch, offset: _currentRatio);
+    _pendingProgressSaves[ch.id] = (
+      chapter: ch,
+      offset: _snapshotRatio,
+      readAt: _libraryProvider.captureProgressTime(),
+      userId: _activityUserId,
+    );
     if (_isSavingProgress) return;
     _isSavingProgress = true;
     unawaited(_flushProgressSaves());
@@ -459,6 +552,8 @@ class _ReaderScreenState extends State<ReaderScreen>
             widget.novel,
             entry.value.chapter,
             entry.value.offset,
+            readAt: entry.value.readAt,
+            userId: entry.value.userId,
           );
         } catch (error) {
           debugPrint('Không lưu được tiến độ đọc: $error');
@@ -478,15 +573,23 @@ class _ReaderScreenState extends State<ReaderScreen>
     bool horizontalMode,
     int pageCount,
   ) {
-    if (_restoredForChapterId == chapter.id && _pendingRestoreRatio == null) {
+    if (!_readerRouteActive || chapter.novelId != widget.novel.id) return;
+    if (_restoredForChapterId == chapter.id &&
+        _pendingRestoreRatio == null &&
+        _restoredHorizontalMode == horizontalMode) {
       return;
     }
     final targetRatio = _pendingRestoreRatio ?? _currentRatio;
     _pendingRestoreRatio = null;
     _restoredForChapterId = chapter.id;
+    _restoredHorizontalMode = horizontalMode;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
+      if (!mounted ||
+          !_readerRouteActive ||
+          _readerProvider.currentChapter?.id != chapter.id) {
+        return;
+      }
       if (horizontalMode && _pageCtrl.hasClients && pageCount > 1) {
         final targetPage = (targetRatio * (pageCount - 1)).round().clamp(
           0,
@@ -504,6 +607,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   }
 
   Future<void> _switchChapter(Chapter chapter, {double offset = 0}) async {
+    if (!_readerRouteActive || chapter.novelId != widget.novel.id) return;
     _stopListen();
     _stopAutoScroll();
     _persistNow();
@@ -516,7 +620,7 @@ class _ReaderScreenState extends State<ReaderScreen>
 
   Future<void> _addBookmarkDialog() async {
     final ch = _readerProvider.currentChapter;
-    if (ch == null) return;
+    if (ch == null || ch.novelId != widget.novel.id) return;
     final ctrl = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
@@ -718,8 +822,11 @@ class _ReaderScreenState extends State<ReaderScreen>
     _stopListen();
     _autoScrollTimer?.cancel();
     _saveDebounce?.cancel();
-    _persistNow();
-    _applyWakelock(false);
+    if (_routeVisible) {
+      _persistNow();
+      _applyWakelock(false);
+    }
+    _readerProvider.releaseReader(this);
     _keyFocusNode.dispose();
     _pageCtrl.dispose();
     _scrollCtrl.dispose();
@@ -729,13 +836,19 @@ class _ReaderScreenState extends State<ReaderScreen>
   @override
   Widget build(BuildContext context) {
     final rp = context.watch<ReaderProvider>();
+    _rememberOwnReader();
     final user = context.watch<AuthProvider?>()?.currentUser;
     _syncReadingActivity(rp, user == null || user.isGuest ? '' : user.id);
     final settings = context.watch<SettingsProvider>().reader;
-    final chapter = rp.currentChapter;
+    final chapter =
+        rp.currentChapter?.novelId == widget.novel.id &&
+            (!_readerStarted || identical(rp.readerOwner, this)) &&
+            _matchesInitialChapter(rp.currentChapter)
+        ? rp.currentChapter
+        : null;
     final bg = settings.background;
 
-    final paragraphs = (rp.content ?? '')
+    final paragraphs = (chapter == null ? '' : (rp.content ?? ''))
         .split('\n')
         .map((p) => p.trim())
         .where((p) => p.isNotEmpty)
@@ -746,11 +859,14 @@ class _ReaderScreenState extends State<ReaderScreen>
     ).length;
 
     if (chapter != null && rp.content != null && !rp.isLoadingContent) {
-      _scheduleRestoreIfNeeded(chapter, settings.horizontalPageMode, pageCount);
       if (_loadedCommentsForChapterId != chapter.id) {
         _loadedCommentsForChapterId = chapter.id;
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
+          if (!mounted ||
+              !_readerRouteActive ||
+              _readerProvider.currentChapter?.id != chapter.id) {
+            return;
+          }
           _loadCommentsForChapter(chapter.id);
         });
       }
@@ -760,6 +876,7 @@ class _ReaderScreenState extends State<ReaderScreen>
       focusNode: _keyFocusNode,
       autofocus: true,
       onKeyEvent: (event) {
+        if (!_readerRouteActive) return;
         if (event is! KeyDownEvent) return;
         final key = event.logicalKey;
         if (key == LogicalKeyboardKey.escape) {
@@ -777,9 +894,12 @@ class _ReaderScreenState extends State<ReaderScreen>
       child: Scaffold(
         backgroundColor: bg.background,
         body: OrientationBuilder(
-          builder: (context, _) {
+          builder: (context, orientation) {
             if (chapter != null && rp.content != null) {
-              _pendingRestoreRatio ??= _currentRatio;
+              if (_readerOrientation != orientation) {
+                _readerOrientation = orientation;
+                _pendingRestoreRatio ??= _currentRatio;
+              }
               _scheduleRestoreIfNeeded(
                 chapter,
                 settings.horizontalPageMode,
@@ -973,6 +1093,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     List<String> paragraphs,
     ReaderSettings settings,
   ) {
+    if (rp.novel?.id != widget.novel.id) return const LoadingView();
     if (rp.isLoadingContent) {
       return const LoadingView();
     }
@@ -1016,6 +1137,10 @@ class _ReaderScreenState extends State<ReaderScreen>
         isListening: _isListening,
         searchKeyword: _searchKeyword,
         onPageChanged: (pageIdx) {
+          if (!_readerRouteActive ||
+              _readerProvider.currentChapter?.id != chapter.id) {
+            return;
+          }
           final ratio = totalPages <= 1 ? 0.0 : pageIdx / (totalPages - 1);
           setState(() => _currentRatio = ratio);
           _saveDebounce?.cancel();

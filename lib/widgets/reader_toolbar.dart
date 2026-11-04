@@ -57,17 +57,15 @@ class ReaderTopBar extends StatelessWidget {
                       novelTitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
+                      style: Theme.of(context).textTheme.labelMedium
+                          ?.copyWith(color: scheme.onSurfaceVariant),
                     ),
                     Text(
                       chapterTitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
+                      style: Theme.of(context).textTheme.titleSmall
+                          ?.copyWith(fontWeight: FontWeight.bold),
                     ),
                   ],
                 ),
@@ -162,32 +160,42 @@ class ReaderBottomBar extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _BarItem(
-                icon: Icons.skip_previous_rounded,
-                label: AppStrings.prevChapter,
-                onTap: hasPrev ? onPrev : null,
+              Expanded(
+                child: _BarItem(
+                  icon: Icons.skip_previous_rounded,
+                  label: AppStrings.prevChapter,
+                  onTap: hasPrev ? onPrev : null,
+                ),
               ),
-              _BarItem(
-                icon: Icons.format_list_bulleted_rounded,
-                label: AppStrings.tableOfContents,
-                onTap: onOpenToc,
+              Expanded(
+                child: _BarItem(
+                  icon: Icons.format_list_bulleted_rounded,
+                  label: AppStrings.tableOfContents,
+                  onTap: onOpenToc,
+                ),
               ),
-              _BarItem(
-                icon: isAutoScrolling
-                    ? Icons.pause_circle_filled_rounded
-                    : Icons.slow_motion_video_rounded,
-                label: AppStrings.autoScroll,
-                onTap: onToggleAutoScroll,
+              Expanded(
+                child: _BarItem(
+                  icon: isAutoScrolling
+                      ? Icons.pause_circle_filled_rounded
+                      : Icons.slow_motion_video_rounded,
+                  label: AppStrings.autoScroll,
+                  onTap: onToggleAutoScroll,
+                ),
               ),
-              _BarItem(
-                icon: Icons.text_fields_rounded,
-                label: AppStrings.readerSettings,
-                onTap: onOpenSettings,
+              Expanded(
+                child: _BarItem(
+                  icon: Icons.text_fields_rounded,
+                  label: AppStrings.readerSettings,
+                  onTap: onOpenSettings,
+                ),
               ),
-              _BarItem(
-                icon: Icons.skip_next_rounded,
-                label: AppStrings.nextChapter,
-                onTap: hasNext ? onNext : null,
+              Expanded(
+                child: _BarItem(
+                  icon: Icons.skip_next_rounded,
+                  label: AppStrings.nextChapter,
+                  onTap: hasNext ? onNext : null,
+                ),
               ),
             ],
           ),
@@ -217,7 +225,7 @@ class _BarItem extends StatelessWidget {
         enabled: enabled,
         label: label,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -225,6 +233,9 @@ class _BarItem extends StatelessWidget {
               const SizedBox(height: 2),
               Text(
                 label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontSize: 11, color: color),
               ),
             ],
