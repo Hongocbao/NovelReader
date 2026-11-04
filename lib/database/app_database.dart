@@ -12,6 +12,7 @@ import '../models/library_item.dart';
 import '../models/novel.dart';
 import '../models/reading_history.dart';
 import '../repositories/reading_history_remote.dart';
+import '../repositories/library_remote.dart';
 import '../utils/constants.dart';
 import '../utils/format.dart';
 import '../utils/portable_backup_images.dart';
@@ -19,6 +20,7 @@ import 'supabase_database.dart';
 import 'reading_history_cache.dart';
 import 'v2_database_store.dart';
 import 'custom_novel_backup.dart';
+import 'library_cache.dart';
 
 /// Lớp truy cập SQLite của ứng dụng: tạo bảng, CRUD và nạp dữ liệu mẫu.
 ///
@@ -37,8 +39,10 @@ class AppDatabase {
     this.factory,
     this.path,
     ReadingHistoryRemote? historyRemote,
+    LibraryRemote? libraryRemote,
     Future<String> Function()? sampleJsonLoader,
   }) : _historyRemoteOverride = historyRemote,
+       _libraryRemoteOverride = libraryRemote,
        _sampleJsonLoader =
            sampleJsonLoader ??
            (() => rootBundle.loadString(AppInfo.sampleDataAsset));
@@ -51,6 +55,16 @@ class AppDatabase {
   final Future<String> Function() _sampleJsonLoader;
   final ReadingHistoryRemote? _historyRemoteOverride;
   ReadingHistoryCache? _historyCache;
+  final LibraryRemote? _libraryRemoteOverride;
+  LibraryCache? _libraryCache;
+  LibraryRemote? get _libraryRemote =>
+      _libraryRemoteOverride ??
+      (isSupabaseReady ? SupabaseDatabase.instance : null);
+
+  Future<LibraryCache> _libraryStore(LibraryRemote remote) async {
+    final db = await database;
+    return _libraryCache ??= LibraryCache(db, remote);
+  }
 
   ReadingHistoryRemote? get _historyRemote =>
       _historyRemoteOverride ??
@@ -227,6 +241,7 @@ class AppDatabase {
   /// Tạo các bảng mở rộng (trích dẫn yêu thích & bình luận chương).
   Future<void> _ensureExtraTables(Database db) async {
     await ReadingHistoryCache.ensureSchema(db);
+    await LibraryCache.ensureSchema(db);
     await db.execute('''
       CREATE TABLE IF NOT EXISTS trich_dan (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -991,23 +1006,17 @@ class AppDatabase {
 
   /// Toàn bộ tủ sách (kèm thông tin truyện + tiến độ).
   Future<List<LibraryItem>> getLibrary({String? userId}) async {
+    final uid = _historyUserId(userId);
+    final remote = _libraryRemote;
     final db = await database;
     final localRows = await db.rawQuery(
       '$_librarySelect WHERE l.novel_id < 0 ORDER BY l.added_at DESC',
     );
     final localItems = localRows.map(LibraryItem.fromMap).toList();
-    if (isSupabaseReady) {
-      if (userId == '') return localItems;
-      try {
-        final cloudItems = await SupabaseDatabase.instance.getLibrary(
-          userId: userId,
-        );
-        return [...cloudItems, ...localItems]
-          ..sort((a, b) => b.addedAt.compareTo(a.addedAt));
-      } catch (e) {
-        debugPrint('Supabase getLibrary error: $e');
-        return localItems;
-      }
+    if (remote != null) {
+      final items = await (await _libraryStore(remote)).load(uid);
+      return [...items, ...localItems]
+        ..sort((a, b) => b.addedAt.compareTo(a.addedAt));
     }
     final rows = await db.rawQuery('$_librarySelect ORDER BY l.added_at DESC');
     return rows.map(LibraryItem.fromMap).toList();
@@ -1015,6 +1024,8 @@ class AppDatabase {
 
   /// Thêm hoặc cập nhật danh mục của truyện trong tủ sách.
   Future<void> upsertLibrary(LibraryItem item, {String? userId}) async {
+    final uid = _historyUserId(userId);
+    final remote = _libraryRemote;
     if (item.novelId < 0) {
       final db = await database;
       await db.insert(
@@ -1024,11 +1035,13 @@ class AppDatabase {
       );
       return;
     }
-    if (isSupabaseReady) {
-      await SupabaseDatabase.instance.upsertLibrary(item, userId: userId);
+    if (remote != null) {
+      final novel = item.novel ?? await getNovel(item.novelId);
+      if (novel == null) throw StateError('Không tìm thấy thông tin truyện.');
+      await (await _libraryStore(remote))
+          .save(item.copyWith(novel: novel), uid);
       return;
     }
-    if (kIsWeb) return;
     final db = await database;
     await db.insert(
       'tu_sach',
@@ -1039,19 +1052,17 @@ class AppDatabase {
 
   /// Xóa truyện khỏi tủ sách.
   Future<void> removeFromLibrary(int novelId, {String? userId}) async {
+    final uid = _historyUserId(userId);
+    final remote = _libraryRemote;
     if (novelId < 0) {
       final db = await database;
       await db.delete('tu_sach', where: 'novel_id = ?', whereArgs: [novelId]);
       return;
     }
-    if (isSupabaseReady) {
-      await SupabaseDatabase.instance.removeFromLibrary(
-        novelId,
-        userId: userId,
-      );
+    if (remote != null) {
+      await (await _libraryStore(remote)).remove(novelId, uid);
       return;
     }
-    if (kIsWeb) return;
     final db = await database;
     await db.delete('tu_sach', where: 'novel_id = ?', whereArgs: [novelId]);
   }
@@ -1580,7 +1591,15 @@ class AppDatabase {
       );
 
       return <String, Object?>{
-        'backup_version': 4,
+        'backup_version': 5,
+        'cached_library': [
+          for (final row in await db.query(
+            LibraryCache.table,
+            where: 'user_id = ?',
+            whereArgs: [uid],
+          ))
+            Map<String, Object?>.from(row)..remove('user_id'),
+        ],
         'custom_novels': await db.query(
           'truyen',
           where: 'id < 0',
@@ -1682,6 +1701,16 @@ class AppDatabase {
         }
       }
       final cachedHistory = decoded['cached_reading_history'];
+      final cachedLibrary = decoded['cached_library'];
+      if (cachedLibrary is List) {
+        for (final item in cachedLibrary.whereType<Map<String, dynamic>>()) {
+          await txn.insert(LibraryCache.table, {
+            ...item,
+            'user_id': uid,
+            'pending': 1,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+      }
       if (cachedHistory is List) {
         for (final item in cachedHistory.whereType<Map<String, dynamic>>()) {
           await txn.insert(ReadingHistoryCache.table, {
@@ -1701,5 +1730,6 @@ class AppDatabase {
     _db = null;
     _opening = null;
     _historyCache = null;
+    _libraryCache = null;
   }
 }

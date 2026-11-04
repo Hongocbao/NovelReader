@@ -9,11 +9,12 @@ import '../models/library_item.dart';
 import '../models/novel.dart';
 import '../models/reading_history.dart';
 import '../repositories/reading_history_remote.dart';
+import '../repositories/library_remote.dart';
 import '../utils/constants.dart';
 import '../utils/format.dart';
 
 /// Lớp truy cập Cloud Database Supabase thay thế hoàn toàn cho SQLite.
-class SupabaseDatabase implements ReadingHistoryRemote {
+class SupabaseDatabase implements ReadingHistoryRemote, LibraryRemote {
   SupabaseDatabase._();
   static final SupabaseDatabase instance = SupabaseDatabase._();
 
@@ -319,6 +320,7 @@ class SupabaseDatabase implements ReadingHistoryRemote {
   // Step 5: Truyền auth.uid(), bỏ giá trị mặc định userId = 1
   // ---------------------------------------------------------------------------
 
+  @override
   Future<List<LibraryItem>> getLibrary({String? userId}) async {
     final uid = userId ?? _client.auth.currentUser?.id ?? '';
     final res = await _client
@@ -339,6 +341,7 @@ class SupabaseDatabase implements ReadingHistoryRemote {
     }).toList();
   }
 
+  @override
   Future<void> upsertLibrary(LibraryItem item, {String? userId}) async {
     final uid = userId ?? _client.auth.currentUser?.id ?? '';
     await _client.from('tu_sach').upsert({
@@ -349,6 +352,7 @@ class SupabaseDatabase implements ReadingHistoryRemote {
     });
   }
 
+  @override
   Future<void> removeFromLibrary(int novelId, {String? userId}) async {
     final uid = userId ?? _client.auth.currentUser?.id ?? '';
     await _client

@@ -147,6 +147,7 @@ class LibraryProvider extends ChangeNotifier {
       if (historyRevision == _historyRevision) {
         _history = results[1] as List<ReadingHistory>;
       }
+      _items = _withProgress(_items);
       _quotes = results[2] as List<QuoteItem>;
       _sessions = results[3] as List<ReadingSessionStat>;
       _loaded = true;
@@ -197,7 +198,7 @@ class LibraryProvider extends ChangeNotifier {
   }
 
   /// Thêm truyện vào tủ sách hoặc chuyển danh mục.
-  Future<void> setCategory(int novelId, String category) async {
+  Future<void> setCategory(int novelId, String category, {Novel? novel}) async {
     final uid = _userId;
     final revision = _identityRevision;
     final existing = _items.where((e) => e.novelId == novelId).firstOrNull;
@@ -206,6 +207,7 @@ class LibraryProvider extends ChangeNotifier {
         novelId: novelId,
         category: category,
         addedAt: existing?.addedAt ?? DateTime.now(),
+        novel: novel ?? existing?.novel,
       ),
       userId: uid,
     );
@@ -225,9 +227,20 @@ class LibraryProvider extends ChangeNotifier {
     final revision = _identityRevision;
     final items = await _db.getLibrary(userId: _userId);
     if (revision != _identityRevision) return;
-    _items = items;
+    _items = _withProgress(items);
     notifyListeners();
   }
+
+  List<LibraryItem> _withProgress(List<LibraryItem> items) => [
+    for (final item in items)
+      if (historyFor(item.novelId) case final ReadingHistory history)
+        item.copyWith(
+          lastChapterIndex: history.chapterIndex,
+          lastReadAt: history.lastReadAt,
+        )
+      else
+        item,
+  ];
 
   // ---------------------------------------------------------------------------
   // Lịch sử & tiến độ
@@ -263,7 +276,7 @@ class LibraryProvider extends ChangeNotifier {
     _history = [updated, ..._history.where((h) => h.novelId != novel.id)];
 
     if (categoryOf(novel.id) == LibraryCategory.want) {
-      await setCategory(novel.id, LibraryCategory.reading);
+      await setCategory(novel.id, LibraryCategory.reading, novel: novel);
       return; // setCategory đã notify
     }
     // Cập nhật tiến độ trong tủ sách mà không cần đọc lại DB.
@@ -288,7 +301,7 @@ class LibraryProvider extends ChangeNotifier {
     _history = _history.where((h) => h.novelId != novelId).toList();
     final items = await _db.getLibrary(userId: _userId);
     if (revision != _identityRevision) return;
-    _items = items;
+    _items = _withProgress(items);
     notifyListeners();
   }
 
@@ -301,7 +314,7 @@ class LibraryProvider extends ChangeNotifier {
     _history = [];
     final items = await _db.getLibrary(userId: _userId);
     if (revision != _identityRevision) return;
-    _items = items;
+    _items = _withProgress(items);
     notifyListeners();
   }
 

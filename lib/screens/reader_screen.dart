@@ -1271,6 +1271,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
       await _libraryProvider.setCategory(
         widget.novel.id,
         LibraryCategory.finished,
+        novel: widget.novel,
       );
       if (!mounted) return;
       if (!user.isGuest) {

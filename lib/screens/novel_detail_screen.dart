@@ -133,7 +133,9 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                 title: Text(Format.category(cat)),
                 onTap: () {
                   Navigator.pop(ctx);
-                  _saveLibraryChange(() => lp.setCategory(novel.id, cat));
+                  _saveLibraryChange(
+                    () => lp.setCategory(novel.id, cat, novel: novel),
+                  );
                 },
               ),
             if (currentCategory != null)

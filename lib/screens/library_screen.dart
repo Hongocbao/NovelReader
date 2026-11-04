@@ -52,7 +52,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   title: Text('${AppStrings.moveTo}: ${Format.category(cat)}'),
                   onTap: () {
                     Navigator.pop(ctx);
-                    _saveLibraryChange(() => lp.setCategory(item.novelId, cat));
+                    _saveLibraryChange(
+                      () =>
+                          lp.setCategory(item.novelId, cat, novel: item.novel),
+                    );
                   },
                 ),
             ListTile(
