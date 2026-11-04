@@ -8,6 +8,8 @@ class AiChatMessage {
   final bool isUser;
   final DateTime timestamp;
   final List<String> suggestions;
+  final bool isError;
+  final bool includeInContext;
 
   const AiChatMessage({
     required this.id,
@@ -15,6 +17,8 @@ class AiChatMessage {
     required this.isUser,
     required this.timestamp,
     this.suggestions = const [],
+    this.isError = false,
+    this.includeInContext = true,
   });
 
   factory AiChatMessage.user(String text) {
@@ -26,13 +30,20 @@ class AiChatMessage {
     );
   }
 
-  factory AiChatMessage.ai(String text, {List<String> suggestions = const []}) {
+  factory AiChatMessage.ai(
+    String text, {
+    List<String> suggestions = const [],
+    bool isError = false,
+    bool includeInContext = true,
+  }) {
     return AiChatMessage(
       id: 'ai_${DateTime.now().microsecondsSinceEpoch}',
       content: text.trim(),
       isUser: false,
       timestamp: DateTime.now(),
       suggestions: suggestions,
+      isError: isError,
+      includeInContext: includeInContext,
     );
   }
 }

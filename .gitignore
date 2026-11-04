@@ -49,4 +49,5 @@ app.*.map.json
 
 # Temporary and local scratch
 .temp_localappdata/
+.app_screenshots/
 scripts/

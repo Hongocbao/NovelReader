@@ -170,7 +170,6 @@ class NovelProvider extends ChangeNotifier {
   List<Novel> _newest = [];
   List<Novel> _hot = [];
   List<Novel> _completed = [];
-  List<Novel> _comics = [];
   bool _homeLoading = false;
   String? _homeError;
   bool _homeLoaded = false;
@@ -180,7 +179,7 @@ class NovelProvider extends ChangeNotifier {
   List<Novel> get newest => _newest;
   List<Novel> get hot => _hot;
   List<Novel> get completed => _completed;
-  List<Novel> get comics => _comics;
+  List<Novel> get comics => const [];
   bool get homeLoading => _homeLoading;
   String? get homeError => _homeError;
   bool get homeLoaded => _homeLoaded;
@@ -201,18 +200,12 @@ class NovelProvider extends ChangeNotifier {
           sort: NovelSort.rating,
           limit: 12,
         ),
-        _db.queryNovels(
-          type: NovelType.comic,
-          sort: NovelSort.views,
-          limit: 12,
-        ),
       ]);
       if (requestId != _homeRequestId) return;
       _featured = results[0];
       _newest = results[1];
       _hot = results[2];
       _completed = results[3];
-      _comics = results[4];
       _homeLoaded = true;
     } catch (e) {
       if (requestId != _homeRequestId) return;

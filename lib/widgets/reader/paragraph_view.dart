@@ -175,14 +175,22 @@ class ReaderParagraphView extends StatelessWidget {
         image: true,
         button: true,
         label:
-            'Ảnh minh họa Manga/Light Novel trong ${chapter.title}, chạm để phóng to',
+            'Ảnh minh họa trong ${chapter.title}, chạm để phóng to',
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: GestureDetector(
-            onTap: () => onTapImage(url),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: imageWidget,
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: 340,
+                maxHeight: 260,
+              ),
+              child: GestureDetector(
+                onTap: () => onTapImage(url),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: imageWidget,
+                ),
+              ),
             ),
           ),
         ),

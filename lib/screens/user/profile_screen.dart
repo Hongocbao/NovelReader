@@ -29,7 +29,152 @@ class UserProfileScreen extends StatefulWidget {
 
 class _UserProfileScreenState extends State<UserProfileScreen> {
   bool _showOnLeaderboard = true;
+  bool _checkedInToday = false;
   final _buyingItems = <({String owner, String item})>{};
+  final _exchangeLogs = <String>[];
+
+  Future<void> _dailyCheckIn(AuthProvider auth) async {
+    if (_checkedInToday) return;
+    final ok = await auth.adjustSpiritStones(50, streakDelta: 1);
+    if (!mounted || !ok) return;
+    setState(() {
+      _checkedInToday = true;
+      _exchangeLogs.insert(
+        0,
+        '🎁 Điểm danh hàng ngày: +50 💎 Linh Thạch & +1 🔥 Streak',
+      );
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          '🎁 Điểm danh thành công! Bạn nhận được +50 💎 Linh Thạch & +1 ngày Streak!',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _spinLuckyWheel(AuthProvider auth) async {
+    if (auth.currentUser.linhThach < 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cần ít nhất 10 💎 Linh Thạch để rút quẻ may mắn!'),
+        ),
+      );
+      return;
+    }
+    final rewards = [15, 25, 40, 60, 88, 5, 30];
+    final prize =
+        rewards[DateTime.now().millisecondsSinceEpoch % rewards.length];
+    final netDelta = prize - 10;
+    final ok = await auth.adjustSpiritStones(netDelta);
+    if (!mounted || !ok) return;
+    setState(() {
+      _exchangeLogs.insert(
+        0,
+        '🎰 Rút quẻ Khí Vận (Tốn 10 💎) → Nhận được $prize 💎 Linh Thạch!',
+      );
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '🎰 Kỳ duyên xuất hiện! Bạn rút trúng túi Càn Khôn chứa $prize 💎 Linh Thạch!',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _tipAuthorDialog(AuthProvider auth) async {
+    final authorCtrl = TextEditingController(text: 'Bút Mặc Tiên Sinh');
+    final noteCtrl = TextEditingController(
+      text: 'Cảm ơn đạo hữu vì chương truyện rất cuốn!',
+    );
+    int amount = 20;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => AlertDialog(
+          title: const Text('💝 Tặng Linh Thạch Ủng Hộ Tác Giả'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: authorCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Tên Tác giả / Bộ truyện nhận thưởng',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Chọn gói Linh Thạch trao tặng:',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                children: [10, 20, 50, 100].map((v) {
+                  return ChoiceChip(
+                    label: Text('$v 💎'),
+                    selected: amount == v,
+                    onSelected: (_) => setModalState(() => amount = v),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: noteCtrl,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Lời nhắn gửi tác giả',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Hủy'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(ctx, true),
+              icon: const Icon(Icons.card_giftcard, size: 18),
+              label: Text('Tặng $amount 💎'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    if (auth.currentUser.linhThach < amount) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Số dư Linh Thạch không đủ để trao tặng!')),
+      );
+      return;
+    }
+    final ok = await auth.adjustSpiritStones(-amount);
+    if (!mounted || !ok) return;
+    final target = authorCtrl.text.trim().isEmpty
+        ? 'Tác giả'
+        : authorCtrl.text.trim();
+    setState(() {
+      _exchangeLogs.insert(
+        0,
+        '💝 Đã tặng $amount 💎 Linh Thạch ủng hộ "$target"',
+      );
+    });
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '💝 Đã trao tặng $amount 💎 Linh Thạch cho "$target" thành công!',
+          ),
+        ),
+      );
+    }
+  }
 
   Future<void> _buyItem(
     AuthProvider auth,
@@ -93,6 +238,27 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       desc: 'Hiệu ứng ánh sáng tương lai',
       cost: 150,
       icon: '⚡',
+    ),
+    (
+      key: 'lotus_immortal',
+      title: 'Khung Avatar Thanh Liên Kiếm Tông',
+      desc: 'Hào quang kiếm ý thanh khiết bảo hộ đạo tâm',
+      cost: 90,
+      icon: '🪷',
+    ),
+    (
+      key: 'phoenix_fire',
+      title: 'Khung Avatar Phượng Hoàng Niết Bàn',
+      desc: 'Hỏa vũ rực rỡ dành cho độc giả kỳ cựu',
+      cost: 180,
+      icon: '🔥',
+    ),
+    (
+      key: 'title_daohuu',
+      title: 'Danh Hiệu Đạo Hiệu: Vạn Quyển Chân Nhân',
+      desc: 'Danh hiệu cao quý hiển thị trong Hồ sơ & Bình luận',
+      cost: 60,
+      icon: '🎖️',
     ),
     (
       key: 'sepia_pro',
@@ -602,6 +768,105 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
+                Card(
+                  color: cs.primaryContainer.withValues(alpha: 0.35),
+                  margin: const EdgeInsets.only(bottom: 12),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          '⚡ Trung tâm Kiếm & Trao đổi Linh Thạch',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14.5,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            FilledButton.icon(
+                              onPressed: user.isGuest || _checkedInToday
+                                  ? null
+                                  : () => _dailyCheckIn(auth),
+                              icon: const Icon(
+                                Icons.calendar_today_outlined,
+                                size: 16,
+                              ),
+                              label: Text(
+                                _checkedInToday
+                                    ? 'Đã điểm danh hôm nay'
+                                    : 'Điểm danh nhận +50 💎',
+                              ),
+                            ),
+                            FilledButton.tonalIcon(
+                              onPressed: user.isGuest
+                                  ? null
+                                  : () => _spinLuckyWheel(auth),
+                              icon: const Icon(
+                                Icons.casino_outlined,
+                                size: 16,
+                              ),
+                              label: const Text('Rút Quẻ Khí Vận (10 💎)'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: user.isGuest || user.hasStreakShield
+                                  ? null
+                                  : () async {
+                                      final ok = await auth.buyStreakShield();
+                                      if (!context.mounted) return;
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            ok
+                                                ? '🛡️ Đã kích hoạt Khiên Bảo Vệ Streak!'
+                                                : 'Chưa đủ 20 💎 Linh Thạch.',
+                                          ),
+                                        ),
+                                      );
+                                    },
+                              icon: const Icon(Icons.shield_outlined, size: 16),
+                              label: Text(
+                                user.hasStreakShield
+                                    ? 'Đã có Khiên Streak'
+                                    : 'Mua Khiên Streak (20 💎)',
+                              ),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: user.isGuest
+                                  ? null
+                                  : () => _tipAuthorDialog(auth),
+                              icon: const Icon(
+                                Icons.volunteer_activism_outlined,
+                                size: 16,
+                              ),
+                              label: const Text('Tặng Linh Thạch Tác giả'),
+                            ),
+                          ],
+                        ),
+                        if (_exchangeLogs.isNotEmpty) ...[
+                          const Divider(height: 16),
+                          for (final log in _exchangeLogs.take(3))
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 3),
+                              child: Text(
+                                log,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
                 for (final item in _shopItems) ...[
                   Builder(
                     builder: (context) {

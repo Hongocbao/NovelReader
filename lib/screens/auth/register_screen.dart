@@ -28,14 +28,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
     final auth = context.read<AuthProvider>();
-    final ok = await auth.register(
+    if (auth.isLoading || !_formKey.currentState!.validate()) return;
+    final operation = auth.register(
       email: _emailCtrl.text.trim(),
       displayName: _nameCtrl.text.trim(),
       password: _passCtrl.text,
     );
-    if (!mounted) return;
+    final revision = auth.sessionRevision;
+    final ok = await operation;
+    if (!mounted || auth.sessionRevision != revision) return;
     if (ok) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

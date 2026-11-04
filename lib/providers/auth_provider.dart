@@ -1,8 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/app_user.dart';
 import '../repositories/auth_repository.dart';
@@ -33,6 +33,11 @@ class AuthProvider extends ChangeNotifier {
   bool _disposed = false;
   int _profileMutationVersion = 0;
   final _mutationTails = <int, Future<void>>{};
+  Future<void>? _identityTail;
+  Future<void>? _preferenceTail;
+  int? _authenticatingRevision;
+  String? _committedMode;
+  static const identityPreferenceKey = 'auth_identity_v1';
 
   bool _sameIdentity(String userId, int revision) =>
       !_disposed && revision == _identityRevision && _currentUser.id == userId;
@@ -81,6 +86,7 @@ class AuthProvider extends ChangeNotifier {
   bool get hasEnteredApp => _hasEnteredApp;
   bool get profileNeedsRefresh => _profileNeedsRefresh;
   bool get balanceNeedsRefresh => _balanceNeedsRefresh;
+  int get sessionRevision => _identityRevision;
 
   bool _applyEconomyReceipt(
     AppUser user,
@@ -111,170 +117,262 @@ class AuthProvider extends ChangeNotifier {
   /// Có hiển thị giao diện AdminShell hay không.
   bool get shouldShowAdminShell => isAdmin && !_adminPreviewAsReader;
 
-  /// Khôi phục phiên đăng nhập từ Supabase Auth session.
-  Future<void> restoreSession() async {
-    _identityRevision++;
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
+  bool _currentRequest(int revision) =>
+      !_disposed && revision == _identityRevision;
+
+  AppUser? get _sessionIdentity => _repo is SessionIdentityRepository
+      ? (_repo as SessionIdentityRepository).sessionIdentity
+      : null;
+
+  /// Serialize identity-changing SDK calls so an old login/sign-out cannot
+  /// mutate the SDK session after a newer login. Profile refreshes stay separate.
+  Future<T> _identityOperation<T>(Future<T> Function() action) async {
+    final previous = _identityTail;
+    final done = Completer<void>();
+    _identityTail = done.future;
     try {
-      _hasEnteredApp = _prefs.getBool(PrefKeys.hasSeenSplashGate) ?? false;
-      final session = Supabase.instance.client.auth.currentSession;
-      if (session != null) {
-        // Supabase Auth lưu session cục bộ. Đặt trạng thái tài khoản trước,
-        // rồi tải hồ sơ; lỗi mạng không được biến phiên hợp lệ thành Khách.
-        _currentUser = _userFromSession(session.user);
-        _profileNeedsRefresh = true;
-        _balanceNeedsRefresh = true;
-        _hasEnteredApp = true;
-        try {
-          final user = await _repo.getUserById(session.user.id);
-          if (user?.isBanned == true) {
-            await _repo.logout();
-            _currentUser = AppUser.guest();
-            _profileNeedsRefresh = false;
-            _balanceNeedsRefresh = false;
-            _hasEnteredApp = false;
-            await _prefs.remove(PrefKeys.currentUserId);
-            await _prefs.setBool(PrefKeys.hasSeenSplashGate, false);
-          } else if (user != null) {
-            _currentUser = user;
-            _profileNeedsRefresh = false;
-            _balanceNeedsRefresh = false;
-          }
-        } catch (_) {
-          // Giữ session và danh tính cơ bản; lần mở app sau sẽ thử tải lại.
-        }
-      }
-    } catch (e) {
-      _error = e.toString();
+      if (previous != null) await previous;
+      return await action();
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      done.complete();
+      if (identical(_identityTail, done.future)) {
+        _identityTail = null;
+      }
     }
   }
 
-  /// Tiếp tục với tư cách Khách.
-  Future<void> continueAsGuest() async {
-    _identityRevision++;
+  String? _savedMode() {
+    if (_committedMode != null) return _committedMode;
+    try {
+      final raw = _prefs.getString(identityPreferenceKey);
+      if (raw == null) return null;
+      final record = jsonDecode(raw);
+      if (record is Map &&
+          record['v'] == 1 &&
+          const ['member', 'guest', 'welcome'].contains(record['mode'])) {
+        return _committedMode = record['mode'] as String;
+      }
+    } catch (_) {
+      // Legacy installations and unreadable app preferences still use the SDK
+      // session. A preference parsing error must not log out a valid user.
+    }
+    return null;
+  }
+
+  Future<void> _persistIdentity(String mode, String userId, bool entered) {
+    _committedMode = mode;
+    final snapshot = jsonEncode({
+      'v': 1,
+      'mode': mode,
+      'user_id': userId,
+      'entered': entered,
+    });
+    // Persist committed states in order, even when a new login is pending.
+    // The whole intent is one value; compatibility keys are secondary.
+    final previous = _preferenceTail;
+    final done = Completer<void>();
+    final current = done.future;
+    _preferenceTail = current;
+    return () async {
+      try {
+        if (previous != null) await previous;
+        if (!await _prefs.setString(identityPreferenceKey, snapshot)) {
+          throw StateError('Không lưu được lựa chọn tài khoản.');
+        }
+        if (userId.isEmpty) {
+          await _prefs.remove(PrefKeys.currentUserId);
+        } else {
+          await _prefs.setString(PrefKeys.currentUserId, userId);
+        }
+        await _prefs.setBool(PrefKeys.hasSeenSplashGate, entered);
+      } catch (error) {
+        // Authentication already succeeded; a preference error is not a failed
+        // login and must not destroy the current identity.
+        debugPrint('Chưa lưu được trạng thái đăng nhập trên thiết bị: $error');
+      } finally {
+        done.complete();
+        if (identical(_preferenceTail, current)) {
+          _preferenceTail = null;
+        }
+      }
+    }();
+  }
+
+  void _guestState({required bool entered}) {
     _currentUser = AppUser.guest();
     _adminPreviewAsReader = false;
     _profileNeedsRefresh = false;
     _balanceNeedsRefresh = false;
-    _hasEnteredApp = true;
+    _hasEnteredApp = entered;
+    _isLoading = false;
+    _authenticatingRevision = null;
     _error = null;
-    await _prefs.remove(PrefKeys.currentUserId);
-    await _prefs.setBool(PrefKeys.hasSeenSplashGate, true);
-    notifyListeners();
   }
 
-  /// Đăng nhập bằng Supabase Auth (signInWithPassword).
-  Future<bool> login(String email, String password) async {
+  void _adoptUser(AppUser user, {required bool pendingProfile}) {
+    _currentUser = user;
+    _adminPreviewAsReader = false;
+    _profileNeedsRefresh = pendingProfile;
+    _balanceNeedsRefresh = pendingProfile;
+    _hasEnteredApp = true;
+  }
+
+  /// Restores the SDK identity immediately, then enriches it from ho_so.
+  /// A slow/offline profile read never blocks entering the reader or drops Auth.
+  Future<void> restoreSession() async {
+    if (_disposed || _authenticatingRevision == _identityRevision) return;
+    final revision = ++_identityRevision;
+    final mutationVersion = _profileMutationVersion;
+    final mode = _savedMode();
+    if (mode == 'guest' || mode == 'welcome') {
+      _guestState(entered: mode == 'guest');
+      notifyListeners();
+      // Honor an explicit local choice even if SDK cleanup was interrupted.
+      if (_sessionIdentity != null) unawaited(_signOutInOrder());
+      return;
+    }
+    final identity = _sessionIdentity;
+    if (identity == null) {
+      _guestState(entered: _prefs.getBool(PrefKeys.hasSeenSplashGate) ?? false);
+      notifyListeners();
+      return;
+    }
+    _adoptUser(identity, pendingProfile: true);
+    _isLoading = false;
+    _error = null;
+    _profileRefreshRevision = revision;
+    unawaited(_persistIdentity('member', identity.id, true));
+    notifyListeners();
+    try {
+      final user = await _repo.getUserById(identity.id);
+      if (!_currentRequest(revision) ||
+          mutationVersion != _profileMutationVersion) {
+        return;
+      }
+      if (user != null && user.id == identity.id) {
+        if (user.isBanned) {
+          await logout();
+        } else {
+          _adoptUser(user, pendingProfile: false);
+        }
+      }
+    } catch (_) {
+      // Keep the authenticated identity; retry enrichment after reconnecting.
+    } finally {
+      if (_profileRefreshRevision == revision) _profileRefreshRevision = null;
+      if (_currentRequest(revision)) {
+        notifyListeners();
+        if (_profileNeedsRefresh &&
+            mutationVersion != _profileMutationVersion) {
+          unawaited(refreshCurrentUser());
+        }
+      }
+    }
+  }
+
+  Future<void> _signOutInOrder() => _identityOperation(() async {
+    try {
+      await _repo.logout();
+    } catch (error) {
+      // Supabase clears its local token before attempting the remote sign-out.
+      // The persisted guest/welcome intent also survives a failed network call.
+      debugPrint(
+        'Đã thoát trên thiết bị; chưa xác nhận được đăng xuất từ xa: $error',
+      );
+    }
+  });
+
+  /// Guest and explicit logout publish immediately, without waiting for Auth IO.
+  Future<void> continueAsGuest() async {
+    if (_disposed) return;
     _identityRevision++;
+    _guestState(entered: true);
+    final persisted = _persistIdentity('guest', '', true);
+    final signedOut = _signOutInOrder();
+    notifyListeners();
+    await persisted;
+    await signedOut;
+  }
+
+  /// Busy forms reject duplicate identity requests; guest/logout may supersede
+  /// one, and their SDK cleanup runs before the next login in the same queue.
+  Future<bool> _authenticate(
+    Future<AppUser> Function() action, {
+    required bool registering,
+  }) async {
+    if (_disposed || _authenticatingRevision == _identityRevision) return false;
+    final revision = ++_identityRevision;
+    _authenticatingRevision = revision;
     _isLoading = true;
     _error = null;
     notifyListeners();
     try {
-      final user = await _repo.login(email, password);
-      _currentUser = user;
-      _adminPreviewAsReader = false;
-      _profileNeedsRefresh = false;
-      _balanceNeedsRefresh = false;
-      _hasEnteredApp = true;
-      await _prefs.setString(PrefKeys.currentUserId, user.id);
-      await _prefs.setBool(PrefKeys.hasSeenSplashGate, true);
-      return true;
-    } catch (e) {
-      final pendingProfile = e is AuthenticatedProfileUnavailable ? e : null;
-      final session = pendingProfile != null
-          ? Supabase.instance.client.auth.currentSession
+      final user = await _identityOperation<AppUser?>(() async {
+        if (!_currentRequest(revision)) return null;
+        return action();
+      });
+      if (!_currentRequest(revision) || user == null) return false;
+      _adoptUser(user, pendingProfile: false);
+      await _persistIdentity('member', user.id, true);
+      return _currentRequest(revision);
+    } catch (error) {
+      if (!_currentRequest(revision)) return false;
+      final identity = error is AuthenticatedProfileUnavailable
+          ? _sessionIdentity
           : null;
-      if (pendingProfile != null &&
-          session != null &&
-          session.user.id == pendingProfile.userId) {
-        _currentUser = _userFromSession(session.user);
-        _adminPreviewAsReader = false;
-        _profileNeedsRefresh = true;
-        _balanceNeedsRefresh = true;
-        _hasEnteredApp = true;
-        await _prefs.setString(PrefKeys.currentUserId, _currentUser.id);
-        await _prefs.setBool(PrefKeys.hasSeenSplashGate, true);
-        _error = 'Đã đăng nhập; hồ sơ sẽ được đồng bộ khi kết nối ổn định.';
-        return true;
+      if (error is AuthenticatedProfileUnavailable &&
+          identity?.id == error.userId) {
+        _adoptUser(identity!, pendingProfile: true);
+        _error = registering
+            ? 'Tài khoản đã đăng nhập; hồ sơ sẽ được đồng bộ khi có mạng.'
+            : 'Đã đăng nhập; hồ sơ sẽ được đồng bộ khi kết nối ổn định.';
+        await _persistIdentity('member', identity.id, true);
+        return _currentRequest(revision);
       }
-      _error = _friendlyError(e);
+      // If an attempted account switch ended a banned/invalid SDK session,
+      // never leave the UI advertising the old account without its token.
+      if (_repo is SessionIdentityRepository &&
+          !_currentUser.isGuest &&
+          _sessionIdentity?.id != _currentUser.id) {
+        _guestState(entered: true);
+        await _persistIdentity('guest', '', true);
+      }
+      if (_currentRequest(revision)) _error = _friendlyError(error);
       return false;
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (_authenticatingRevision == revision) _authenticatingRevision = null;
+      if (_currentRequest(revision)) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
-  /// Đăng ký tài khoản mới bằng Supabase Auth (signUp).
+  Future<bool> login(String email, String password) =>
+      _authenticate(() => _repo.login(email, password), registering: false);
+
   Future<bool> register({
     required String email,
     required String displayName,
     required String password,
-  }) async {
-    _identityRevision++;
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
-    try {
-      final user = await _repo.register(
-        email: email,
-        displayName: displayName,
-        password: password,
-      );
-      _currentUser = user;
-      _adminPreviewAsReader = false;
-      _profileNeedsRefresh = false;
-      _balanceNeedsRefresh = false;
-      _hasEnteredApp = true;
-      await _prefs.setString(PrefKeys.currentUserId, user.id);
-      await _prefs.setBool(PrefKeys.hasSeenSplashGate, true);
-      return true;
-    } catch (e) {
-      final pendingProfile = e is AuthenticatedProfileUnavailable ? e : null;
-      final session = pendingProfile != null
-          ? Supabase.instance.client.auth.currentSession
-          : null;
-      if (pendingProfile != null &&
-          session != null &&
-          session.user.id == pendingProfile.userId) {
-        _currentUser = _userFromSession(session.user);
-        _adminPreviewAsReader = false;
-        _profileNeedsRefresh = true;
-        _balanceNeedsRefresh = true;
-        _hasEnteredApp = true;
-        await _prefs.setString(PrefKeys.currentUserId, _currentUser.id);
-        await _prefs.setBool(PrefKeys.hasSeenSplashGate, true);
-        _error = 'Tài khoản đã đăng nhập; hồ sơ sẽ được đồng bộ khi có mạng.';
-        return true;
-      }
-      _error = _friendlyError(e);
-      return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
+  }) => _authenticate(
+    () => _repo.register(
+      email: email,
+      displayName: displayName,
+      password: password,
+    ),
+    registering: true,
+  );
 
-  /// Đăng xuất khỏi Supabase Auth và quay về màn hình SplashGate.
   Future<void> logout() async {
+    if (_disposed) return;
     _identityRevision++;
-    try {
-      await _repo.logout();
-    } catch (_) {}
-    _currentUser = AppUser.guest();
-    _adminPreviewAsReader = false;
-    _profileNeedsRefresh = false;
-    _balanceNeedsRefresh = false;
-    _hasEnteredApp = false;
-    _error = null;
-    await _prefs.remove(PrefKeys.currentUserId);
-    await _prefs.setBool(PrefKeys.hasSeenSplashGate, false);
+    _guestState(entered: false);
+    final persisted = _persistIdentity('welcome', '', false);
+    final signedOut = _signOutInOrder();
     notifyListeners();
+    await persisted;
+    await signedOut;
   }
 
   /// Bật/tắt chế độ xem thử giao diện Độc giả dành cho Admin.
@@ -287,8 +385,13 @@ class AuthProvider extends ChangeNotifier {
   /// Đổi mật khẩu tài khoản hiện tại qua Supabase Auth.
   Future<void> changePassword(String newPassword) async {
     RoleGuard.requirePermission(_currentUser, AppPermission.interactAndGamify);
-    await _repo.changePassword(newPassword);
-    notifyListeners();
+    final revision = _identityRevision;
+    final owner = _currentUser.id;
+    await _identityOperation(() async {
+      if (!_sameIdentity(owner, revision)) return;
+      await _repo.changePassword(newPassword);
+      if (_sameIdentity(owner, revision)) notifyListeners();
+    });
   }
 
   /// Gửi email đặt lại mật khẩu qua Supabase Auth.
@@ -400,6 +503,26 @@ class AuthProvider extends ChangeNotifier {
     });
   }
 
+  /// Cộng hoặc trừ Linh Thạch trực tiếp (Điểm danh ngày, Rút quẻ may mắn, Ủng hộ Tác giả).
+  Future<bool> adjustSpiritStones(int delta, {int streakDelta = 0}) async {
+    RoleGuard.requirePermission(_currentUser, AppPermission.interactAndGamify);
+    return _mutateUser<bool>(false, (user, revision) async {
+      final nextBalance = user.linhThach + delta;
+      if (nextBalance < 0) return false;
+      final nextStreak = (user.streak + streakDelta).clamp(0, 99999);
+      _currentUser = user.copyWith(
+        linhThach: nextBalance,
+        streak: nextStreak,
+      );
+      _balanceNeedsRefresh = false;
+      notifyListeners();
+      try {
+        await _repo.updateUser(_currentUser);
+      } catch (_) {}
+      return true;
+    });
+  }
+
   /// Làm mới dữ liệu tài khoản hiện tại từ bảng ho_so.
   Future<void> refreshCurrentUser() async {
     final revision = _identityRevision;
@@ -431,25 +554,6 @@ class AuthProvider extends ChangeNotifier {
     } finally {
       if (_profileRefreshRevision == revision) _profileRefreshRevision = null;
     }
-  }
-
-  AppUser _userFromSession(User user) {
-    final email = user.email?.trim() ?? '';
-    final metadata = user.userMetadata ?? const <String, dynamic>{};
-    final metadataName = metadata['display_name'] ?? metadata['name'];
-    final displayName = metadataName is String && metadataName.trim().isNotEmpty
-        ? metadataName.trim()
-        : (email.contains('@') ? email.split('@').first : 'Độc giả');
-    final now = DateTime.now();
-    return AppUser(
-      id: user.id,
-      email: email,
-      displayName: displayName,
-      role: UserRole.user,
-      isAuthor: false,
-      lastActiveAt: now,
-      createdAt: now,
-    );
   }
 
   String _friendlyError(Object e) {

@@ -236,18 +236,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 if (history.isNotEmpty) _buildContinueReading(history),
                 _buildGenresRow(),
                 _buildHorizontalSection(
-                  title: AppStrings.comicsSection,
-                  novels: np.comics,
-                  subtitleOf: (n) => '${Format.views(n.views)} lượt xem',
-                  onSeeAll: () => _openList(
-                    AppStrings.comicsSection,
-                    const NovelQuery(
-                      type: NovelType.comic,
-                      sort: NovelSort.views,
-                    ),
-                  ),
-                ),
-                _buildHorizontalSection(
                   title: AppStrings.newlyUpdated,
                   novels: np.newest,
                   onSeeAll: () => _openList(

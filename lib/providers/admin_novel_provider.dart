@@ -6,6 +6,7 @@ import '../models/chapter_summary.dart';
 import '../models/glossary_term.dart';
 import '../models/novel.dart';
 import '../repositories/novel_repository.dart';
+import '../repositories/supabase_novel_repository.dart';
 import '../utils/role_guard.dart';
 
 /// Quản lý CRUD Truyện & Chương, Hàng chờ duyệt, Thuật ngữ và Tóm tắt chương (Mục 6.2 & 6.3).
@@ -151,6 +152,41 @@ class AdminNovelProvider extends ChangeNotifier {
     await loadNovels(includeDeleted: true);
   }
 
+  /// Cho phép Tác giả hoặc Admin xóa tác phẩm thuộc sở hữu của mình.
+  Future<void> deleteNovelByOwnerOrAdmin({
+    required AppUser actor,
+    required Novel novel,
+  }) async {
+    RoleGuard.requireAuthorOrAdmin(actor);
+    if (!actor.isAdmin && novel.ownerId != actor.id) {
+      throw StateError('Bạn chỉ có thể xóa tác phẩm do chính mình sáng tác.');
+    }
+    await _novelRepo.softDeleteNovel(
+      novel.id,
+      admin: actor.isAdmin ? actor : null,
+    );
+    await loadNovels(includeDeleted: false);
+  }
+
+  /// Phê duyệt & đăng công khai tác phẩm thông qua AI Kiểm Duyệt hoặc Admin.
+  Future<void> publishNovelByAiOrAdmin({
+    required AppUser actor,
+    required Novel novel,
+    String note = 'AI Kiểm duyệt tự động đạt chuẩn & Đăng công khai',
+  }) async {
+    RoleGuard.requireAuthorOrAdmin(actor);
+    if (!actor.isAdmin && novel.ownerId != actor.id) {
+      throw StateError('Bạn chỉ có thể đăng công khai tác phẩm của chính mình.');
+    }
+    await _novelRepo.approveNovel(
+      novelId: novel.id,
+      admin: actor,
+      note: note,
+    );
+    await loadNovels();
+    await loadNovels(includeDeleted: true);
+  }
+
   /// Khôi phục truyện đã xóa mềm.
   Future<void> restoreNovel(AppUser admin, int novelId) async {
     RoleGuard.requireAdmin(admin);
@@ -206,6 +242,34 @@ class AdminNovelProvider extends ChangeNotifier {
   Future<void> deleteGlossaryTerm(AppUser actor, int termId) async {
     RoleGuard.requireAuthorOrAdmin(actor);
     await _novelRepo.deleteGlossaryTerm(termId);
+    notifyListeners();
+  }
+
+  /// Cập nhật thuật ngữ từ điển.
+  Future<void> updateGlossaryTerm(AppUser actor, GlossaryTerm term) async {
+    RoleGuard.requireAuthorOrAdmin(actor);
+    final repo = _novelRepo;
+    if (repo is SupabaseNovelRepository) {
+      await repo.updateGlossaryTerm(term);
+    }
+    notifyListeners();
+  }
+
+  /// Xóa một chương khỏi bộ truyện và cập nhật lại số thứ tự chương.
+  Future<void> deleteChapter(
+    AppUser actor,
+    int novelId,
+    int chapterId,
+  ) async {
+    RoleGuard.requireAuthorOrAdmin(actor);
+    final repo = _novelRepo;
+    if (repo is SupabaseNovelRepository) {
+      await repo.deleteChapter(
+        novelId,
+        chapterId,
+      );
+    }
+    await loadNovels();
     notifyListeners();
   }
 }

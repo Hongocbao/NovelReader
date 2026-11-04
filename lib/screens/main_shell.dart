@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 
 import '../providers/auth_provider.dart';
 import '../providers/reader_provider.dart';
+import '../providers/settings_provider.dart';
+import '../widgets/reader/ai_chat_bubble.dart';
 import '../utils/constants.dart';
 import 'home_screen.dart';
 import 'library_screen.dart';
@@ -32,6 +34,9 @@ class _MainShellState extends State<MainShell> {
         if (mounted) context.read<AuthProvider>().refreshCurrentUser();
       });
     }
+    final showAi = context.select<SettingsProvider, bool>(
+      (p) => p.reader.showAiBubble,
+    );
     final pages = <Widget>[
       HomeScreen(onJumpToTab: (i) => setState(() => _index = i)),
       const SearchScreen(),
@@ -97,7 +102,13 @@ class _MainShellState extends State<MainShell> {
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 820),
-                child: IndexedStack(index: _index, children: pages),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    IndexedStack(index: _index, children: pages),
+                    if (showAi) const AiChatBubble(),
+                  ],
+                ),
               ),
             ),
           ),

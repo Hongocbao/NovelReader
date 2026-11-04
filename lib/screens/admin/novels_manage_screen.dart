@@ -114,10 +114,6 @@ class _AdminNovelsManageScreenState extends State<AdminNovelsManageScreen> {
                       value: NovelType.lightNovel,
                       child: Text('Light Novel'),
                     ),
-                    DropdownMenuItem(
-                      value: NovelType.comic,
-                      child: Text('Truyện tranh'),
-                    ),
                   ],
                   onChanged: (v) => setState(() => _typeFilter = v ?? 'all'),
                 ),

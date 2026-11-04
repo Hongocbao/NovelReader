@@ -750,8 +750,8 @@ class _SmartNovelImporterSheetState extends State<SmartNovelImporterSheet> {
     try {
       final type = isManga ? NovelType.comic : NovelType.novel;
       final genres = isManga
-          ? ['Action', 'Manga', 'Fantasy']
-          : ['Tien hiep', 'He thong', 'Huyen huyen'];
+          ? ['Hành động', 'Kỳ ảo', 'Phiêu lưu']
+          : ['Tiên hiệp', 'Hệ thống', 'Huyền huyễn'];
 
       Novel createdNovel;
 
@@ -761,8 +761,8 @@ class _SmartNovelImporterSheetState extends State<SmartNovelImporterSheet> {
           title: title,
           author: author.isNotEmpty ? author : user.displayName,
           description: isManga
-              ? 'Tac pham truyen tranh Manga duoc nap boi doc gia ${user.displayName}.'
-              : 'Tac pham truyen chu duoc nap boi doc gia ${user.displayName}.',
+              ? 'Tác phẩm được nạp bởi độc giả ${user.displayName}.'
+              : 'Tác phẩm truyện chữ được nạp bởi độc giả ${user.displayName}.',
           status: NovelStatus.ongoing,
           type: type,
           genres: genres,
@@ -778,8 +778,8 @@ class _SmartNovelImporterSheetState extends State<SmartNovelImporterSheet> {
           title: title,
           author: author.isNotEmpty ? author : user.displayName,
           description: isManga
-              ? 'Tac pham truyen tranh Manga nap cuc bo.'
-              : 'Tac pham truyen chu nap cuc bo.',
+              ? 'Tác phẩm nạp cục bộ trên thiết bị.'
+              : 'Tác phẩm truyện chữ nạp cục bộ trên thiết bị.',
           status: NovelStatus.ongoing,
           type: type,
           genres: genres,

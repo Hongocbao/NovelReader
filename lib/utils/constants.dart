@@ -6,7 +6,7 @@ class AppInfo {
 
   static const String appName = 'NovelReader';
   static const String dbName = 'novel_reader.db';
-  static const int dbVersion = 8;
+  static const int dbVersion = 9;
   static const String sampleDataAsset = 'assets/data/sample_novels.json';
 
   /// Số truyện mỗi trang khi phân trang (infinite scroll).
@@ -47,6 +47,7 @@ class PrefKeys {
   static const String keepScreenOn = 'reader_keep_screen_on';
   static const String pageMode = 'reader_page_mode';
   static const String showAiBubble = 'reader_show_ai_bubble';
+  static const String geminiApiKey = 'reader_gemini_api_key';
   static const String forceOffline = 'force_offline';
   static const String searchHistory = 'search_history';
   static const String currentUserId = 'current_user_id';
@@ -113,28 +114,88 @@ class Genres {
 
   static const List<String> all = [
     'Tiên hiệp',
-    'Ngôn tình',
+    'Kiếm hiệp',
+    'Huyền huyễn',
+    'Kỳ ảo',
     'Fantasy',
     'Isekai',
-    'Học đường',
-    'Trinh thám',
-    'Hành động',
-    'Hài hước',
+    'Hệ thống',
+    'Trọng sinh',
+    'Xuyên không',
     'Đô thị',
+    'Ngôn tình',
+    'Cổ đại',
+    'Cung đấu',
+    'Gia đấu',
+    'Điền văn',
+    'Trinh thám',
+    'Hình sự',
     'Kinh dị',
+    'Linh dị',
+    'Tâm lý',
+    'Khoa huyễn',
+    'Mạt thế',
+    'Võng du',
+    'Thể thao',
+    'Học đường',
+    'Thanh xuân',
+    'Hài hước',
+    'Hành động',
+    'Phiêu lưu',
+    'Lịch sử',
+    'Quân sự',
+    'Dã sử',
+    'Văn học kinh điển',
+    'Văn học Việt Nam',
+    'Triết học',
+    'Kỹ năng sống',
+    'Kinh doanh',
+    'Chữa lành',
+    'Ẩm thực',
+    'Thần thoại',
   ];
 
   static const Map<String, IconData> icons = {
     'Tiên hiệp': Icons.cloud_outlined,
-    'Ngôn tình': Icons.favorite_outline,
+    'Kiếm hiệp': Icons.colorize_outlined,
+    'Huyền huyễn': Icons.auto_fix_high_outlined,
+    'Kỳ ảo': Icons.blur_on_outlined,
     'Fantasy': Icons.auto_awesome_outlined,
     'Isekai': Icons.public,
-    'Học đường': Icons.school_outlined,
-    'Trinh thám': Icons.search,
-    'Hành động': Icons.sports_martial_arts,
-    'Hài hước': Icons.sentiment_very_satisfied_outlined,
+    'Hệ thống': Icons.memory_outlined,
+    'Trọng sinh': Icons.autorenew_outlined,
+    'Xuyên không': Icons.explore_outlined,
     'Đô thị': Icons.location_city,
+    'Ngôn tình': Icons.favorite_outline,
+    'Cổ đại': Icons.account_balance_outlined,
+    'Cung đấu': Icons.workspace_premium_outlined,
+    'Gia đấu': Icons.family_restroom_outlined,
+    'Điền văn': Icons.grass_outlined,
+    'Trinh thám': Icons.search,
+    'Hình sự': Icons.gavel_outlined,
     'Kinh dị': Icons.nights_stay_outlined,
+    'Linh dị': Icons.visibility_outlined,
+    'Tâm lý': Icons.psychology_outlined,
+    'Khoa huyễn': Icons.rocket_launch_outlined,
+    'Mạt thế': Icons.warning_amber_outlined,
+    'Võng du': Icons.sports_esports_outlined,
+    'Thể thao': Icons.emoji_events_outlined,
+    'Học đường': Icons.school_outlined,
+    'Thanh xuân': Icons.wb_sunny_outlined,
+    'Hài hước': Icons.sentiment_very_satisfied_outlined,
+    'Hành động': Icons.sports_martial_arts,
+    'Phiêu lưu': Icons.hiking_outlined,
+    'Lịch sử': Icons.history_edu_outlined,
+    'Quân sự': Icons.shield_outlined,
+    'Dã sử': Icons.castle_outlined,
+    'Văn học kinh điển': Icons.menu_book_outlined,
+    'Văn học Việt Nam': Icons.local_library_outlined,
+    'Triết học': Icons.lightbulb_outline,
+    'Kỹ năng sống': Icons.self_improvement_outlined,
+    'Kinh doanh': Icons.trending_up_outlined,
+    'Chữa lành': Icons.spa_outlined,
+    'Ẩm thực': Icons.restaurant_outlined,
+    'Thần thoại': Icons.bolt_outlined,
   };
 
   static IconData iconOf(String genre) => icons[genre] ?? Icons.menu_book;

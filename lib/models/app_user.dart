@@ -3,6 +3,7 @@ class UserRole {
   UserRole._();
   static const String guest = 'guest';
   static const String user = 'user';
+  static const String author = 'author';
   static const String admin = 'admin';
 }
 
@@ -161,6 +162,7 @@ class AppUser {
     String? status,
     String? banReason,
     DateTime? banUntil,
+    bool clearBanInfo = false,
     int? linhThach,
     int? streak,
     bool? hasStreakShield,
@@ -178,8 +180,8 @@ class AppUser {
       role: role ?? this.role,
       isAuthor: isAuthor ?? this.isAuthor,
       status: status ?? this.status,
-      banReason: banReason ?? this.banReason,
-      banUntil: banUntil ?? this.banUntil,
+      banReason: clearBanInfo ? null : (banReason ?? this.banReason),
+      banUntil: clearBanInfo ? null : (banUntil ?? this.banUntil),
       linhThach: linhThach ?? this.linhThach,
       streak: streak ?? this.streak,
       hasStreakShield: hasStreakShield ?? this.hasStreakShield,

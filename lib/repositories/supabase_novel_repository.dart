@@ -68,7 +68,10 @@ class SupabaseNovelRepository implements NovelRepository {
       if (requestId == null) {
         throw ArgumentError('Cần mã lần gửi để tạo tác phẩm mới.');
       }
-      return SupabaseDatabase.withClient(_client).insertCustomNovel(
+      final db = _clientOverride == null
+          ? SupabaseDatabase.instance
+          : SupabaseDatabase.withClient(_clientOverride);
+      return db.insertCustomNovel(
         title: novel.title,
         author: novel.author,
         description: novel.description,
@@ -262,6 +265,23 @@ class SupabaseNovelRepository implements NovelRepository {
       });
     } on PostgrestException catch (error) {
       if (error.code == 'PGRST202') {
+        if (_clientOverride == null) {
+          for (var i = 0; i < ordered.length; i++) {
+            await _client
+                .from('chuong')
+                .update({'chapter_index': 100000 + i + 1})
+                .eq('id', ordered[i].id)
+                .eq('novel_id', novelId);
+          }
+          for (var i = 0; i < ordered.length; i++) {
+            await _client
+                .from('chuong')
+                .update({'chapter_index': i + 1})
+                .eq('id', ordered[i].id)
+                .eq('novel_id', novelId);
+          }
+          return;
+        }
         throw StateError('Máy chủ chưa hỗ trợ đổi thứ tự chương. Vui lòng cập nhật cơ sở dữ liệu của ứng dụng.');
       }
       rethrow;
@@ -277,7 +297,10 @@ class SupabaseNovelRepository implements NovelRepository {
       if (requestId == null) {
         throw ArgumentError('Cần mã lần gửi để tạo chương mới.');
       }
-      return SupabaseDatabase.withClient(_client).appendChapter(
+      final db = _clientOverride == null
+          ? SupabaseDatabase.instance
+          : SupabaseDatabase.withClient(_clientOverride);
+      return db.appendChapter(
         novelId: chapter.novelId,
         title: chapter.title,
         content: chapter.content ?? '',
@@ -325,6 +348,44 @@ class SupabaseNovelRepository implements NovelRepository {
     await _client.from('thuat_ngu').delete().eq('id', termId);
   }
 
+  Future<void> updateGlossaryTerm(GlossaryTerm term) async {
+    if (term.id == null) return;
+    await _client
+        .from('thuat_ngu')
+        .update({
+          'term': term.term.trim(),
+          'meaning': term.meaning.trim(),
+          'first_chapter_index': term.firstChapterIndex,
+        })
+        .eq('id', term.id!);
+  }
+
+  Future<void> deleteChapter(int novelId, int chapterId) async {
+    await _client
+        .from('chuong')
+        .delete()
+        .eq('id', chapterId)
+        .eq('novel_id', novelId);
+    final remaining = await getChapters(novelId);
+    for (var i = 0; i < remaining.length; i++) {
+      final expectedIdx = i + 1;
+      if (remaining[i].chapterIndex != expectedIdx) {
+        await _client
+            .from('chuong')
+            .update({'chapter_index': expectedIdx})
+            .eq('id', remaining[i].id)
+            .eq('novel_id', novelId);
+      }
+    }
+    await _client
+        .from('truyen')
+        .update({
+          'total_chapters': remaining.length,
+          'updated_at': DateTime.now().millisecondsSinceEpoch,
+        })
+        .eq('id', novelId);
+  }
+
   @override
   Future<List<ChapterSummary>> getChapterSummaries(int novelId) async {
     final res = await _client
@@ -357,13 +418,22 @@ class SupabaseNovelRepository implements NovelRepository {
       createdAt: DateTime.now(),
     ).toMap();
     map.remove('id');
-    await _client.from('nhat_ky_quan_tri').insert(map);
+    if (!admin.isAdmin && _clientOverride == null) return;
+    try {
+      await _client.from('nhat_ky_quan_tri').insert(map);
+    } catch (_) {
+      if (_clientOverride != null) rethrow;
+    }
   }
 
   @override
   Future<void> createNotification(NotificationItem item) async {
     final map = item.toMap();
     map.remove('id');
-    await _client.from('thong_bao').insert(map);
+    try {
+      await _client.from('thong_bao').insert(map);
+    } catch (_) {
+      if (_clientOverride != null) rethrow;
+    }
   }
 }

@@ -168,11 +168,29 @@ class SupabaseDatabase
 
   /// Tăng bộ đếm lượt xem một cách nguyên tử trên Supabase.
   Future<int?> recordNovelView(int novelId) async {
-    final result = await _client.rpc(
-      'increment_novel_view',
-      params: {'p_novel_id': novelId},
-    );
-    return (result as num?)?.toInt();
+    try {
+      final result = await _client.rpc(
+        'increment_novel_view',
+        params: {'p_novel_id': novelId},
+      );
+      return (result as num?)?.toInt();
+    } on PostgrestException catch (error) {
+      if (_clientOverride == null && error.code == 'PGRST202') {
+        final row = await _client
+            .from('truyen')
+            .select('views')
+            .eq('id', novelId)
+            .maybeSingle();
+        if (row == null) return null;
+        final nextViews = ((row['views'] as num?)?.toInt() ?? 0) + 1;
+        await _client
+            .from('truyen')
+            .update({'views': nextViews})
+            .eq('id', novelId);
+        return nextViews;
+      }
+      rethrow;
+    }
   }
 
   Future<Map<String, int>> genreCounts({bool includeUnapproved = false}) async {
@@ -261,17 +279,66 @@ class SupabaseDatabase
       'owner_id': ownerId,
     };
 
-    final inserted = await _client.rpc(
-      'create_novel_with_chapters',
-      params: {
-        'p_novel': novelMap,
-        'p_request_id': requestId,
-        'p_chapters': [
-          for (var i = 0; i < chapterTitles.length; i++)
-            {'title': chapterTitles[i], 'content': contents[i]},
-        ],
-      },
-    );
+    dynamic inserted;
+    try {
+      inserted = await _client.rpc(
+        'create_novel_with_chapters',
+        params: {
+          'p_novel': novelMap,
+          'p_request_id': requestId,
+          'p_chapters': [
+            for (var i = 0; i < chapterTitles.length; i++)
+              {'title': chapterTitles[i], 'content': contents[i]},
+          ],
+        },
+      );
+    } on PostgrestException catch (error) {
+      if (_clientOverride == null && error.code == 'PGRST202') {
+        Map<String, dynamic> createdRow;
+        try {
+          createdRow = await _client
+              .from('truyen')
+              .insert(novelMap)
+              .select()
+              .single();
+        } on PostgrestException catch (insertErr) {
+          if (insertErr.code != '23505') rethrow;
+          final maxRow = await _client
+              .from('truyen')
+              .select('id')
+              .order('id', ascending: false)
+              .limit(1)
+              .maybeSingle();
+          final nextId = ((maxRow?['id'] as num?)?.toInt() ?? 45) + 1;
+          createdRow = await _client
+              .from('truyen')
+              .insert({'id': nextId, ...novelMap})
+              .select()
+              .single();
+        }
+        final createdNovel = Novel.fromMap(
+          Map<String, dynamic>.from(createdRow),
+        );
+        if (chapterTitles.isNotEmpty) {
+          final chapterRows = <Map<String, dynamic>>[
+            for (var i = 0; i < chapterTitles.length; i++)
+              {
+                'id': createdNovel.id * 10000 + (i + 1),
+                'novel_id': createdNovel.id,
+                'chapter_index': i + 1,
+                'title': chapterTitles[i].trim().isEmpty
+                    ? 'Chương ${i + 1}'
+                    : chapterTitles[i].trim(),
+                'content': contents[i],
+                'is_downloaded': 0,
+              },
+          ];
+          await _client.from('chuong').upsert(chapterRows);
+        }
+        return createdNovel;
+      }
+      rethrow;
+    }
     if (inserted is! Map) {
       throw StateError('Supabase trả về dữ liệu tác phẩm không hợp lệ.');
     }
@@ -307,6 +374,52 @@ class SupabaseDatabase
       );
     } on PostgrestException catch (error) {
       if (error.code == 'PGRST202') {
+        if (_clientOverride == null) {
+          final existing = await _client
+              .from('chuong')
+              .select('id, chapter_index')
+              .eq('novel_id', novelId)
+              .order('chapter_index', ascending: false);
+          var maxIndex = 0;
+          var maxId = novelId * 10000;
+          for (final row in (existing as List)) {
+            final idx = (row['chapter_index'] as num?)?.toInt() ?? 0;
+            final cid = (row['id'] as num?)?.toInt() ?? 0;
+            if (idx > maxIndex) maxIndex = idx;
+            if (cid > maxId) maxId = cid;
+          }
+          final nextIdx = maxIndex + 1;
+          final nextId = (novelId * 10000 + nextIdx) > maxId
+              ? (novelId * 10000 + nextIdx)
+              : (maxId + 1);
+          final cleanTitle = title.trim();
+          final formattedTitle = cleanTitle.isEmpty
+              ? 'Chương $nextIdx: Mới'
+              : (cleanTitle.startsWith('Chương') ||
+                    cleanTitle.startsWith('Hồi'))
+              ? cleanTitle
+              : 'Chương $nextIdx: $cleanTitle';
+          final insertedRow = await _client
+              .from('chuong')
+              .insert({
+                'id': nextId,
+                'novel_id': novelId,
+                'chapter_index': nextIdx,
+                'title': formattedTitle,
+                'content': content.trim(),
+                'is_downloaded': 0,
+              })
+              .select()
+              .single();
+          await _client
+              .from('truyen')
+              .update({
+                'total_chapters': existing.length + 1,
+                'updated_at': DateTime.now().millisecondsSinceEpoch,
+              })
+              .eq('id', novelId);
+          return Chapter.fromMap(Map<String, dynamic>.from(insertedRow));
+        }
         throw StateError(
           'Máy chủ chưa hỗ trợ thêm chương. Vui lòng cập nhật cơ sở dữ liệu của ứng dụng.',
         );

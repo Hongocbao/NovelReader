@@ -75,3 +75,8 @@ abstract interface class AtomicEconomyRepository {
 abstract interface class ProfileFieldsRepository {
   Future<AppUser> updateProfileFields(AppUser user);
 }
+
+/// Authenticated identity from local session storage; requires no profile query.
+abstract interface class SessionIdentityRepository {
+  AppUser? get sessionIdentity;
+}

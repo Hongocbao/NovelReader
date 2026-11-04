@@ -1,3 +1,7 @@
+import 'dart:convert';
+import 'dart:typed_data' show BytesBuilder, Uint8List;
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../database/supabase_database.dart';
@@ -87,6 +91,49 @@ class _AddChapterDialogState extends State<AddChapterDialog> {
     super.dispose();
   }
 
+  Future<void> _pickImageFromDevice() async {
+    if (_saving) return;
+    try {
+      final files = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp'],
+        dialogTitle: 'Chọn ảnh minh họa từ máy',
+      );
+      if (!mounted || files.isEmpty) return;
+      final tags = <String>[];
+      for (final file in files) {
+        final builder = BytesBuilder(copy: false);
+        await for (final chunk in file.readAsByteStream()) {
+          if (builder.length + chunk.length > 10 * 1024 * 1024) {
+            throw StateError('Ảnh ${file.name} vượt giới hạn 10 MB.');
+          }
+          builder.add(chunk);
+        }
+        final Uint8List bytes = builder.takeBytes();
+        if (bytes.isEmpty) continue;
+        final ext = file.name.split('.').last.toLowerCase();
+        final mime = switch (ext) {
+          'jpg' || 'jpeg' => 'image/jpeg',
+          'png' => 'image/png',
+          'webp' => 'image/webp',
+          'gif' => 'image/gif',
+          'bmp' => 'image/bmp',
+          _ => 'image/png',
+        };
+        tags.add('[img]data:$mime;base64,${base64Encode(bytes)}[/img]');
+      }
+      if (tags.isEmpty || !mounted) return;
+      final prefix = _content.text.trim().isEmpty
+          ? ''
+          : '${_content.text.trimRight()}\n\n';
+      setState(() {
+        _content.text = '$prefix${tags.join('\n\n')}\n';
+      });
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Không tải được ảnh: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) => PopScope(
     canPop: !_saving,
@@ -109,6 +156,15 @@ class _AddChapterDialogState extends State<AddChapterDialog> {
                 ),
               ),
               const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: _saving ? null : _pickImageFromDevice,
+                  icon: const Icon(Icons.add_photo_alternate_outlined, size: 18),
+                  label: const Text('Tải ảnh từ máy lên'),
+                ),
+              ),
+              const SizedBox(height: 8),
               TextField(
                 controller: _content,
                 enabled: !_saving,

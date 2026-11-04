@@ -15,15 +15,23 @@ class SettingsProvider extends ChangeNotifier {
 
   final SharedPreferences _prefs;
 
+  static const String defaultGeminiApiKey = String.fromEnvironment(
+    'GEMINI_API_KEY',
+  );
+
   ThemeMode _themeMode = ThemeMode.system;
   ReaderSettings _reader = const ReaderSettings();
   bool _forceOffline = false;
+  String _geminiApiKey = defaultGeminiApiKey;
 
   ThemeMode get themeMode => _themeMode;
   ReaderSettings get reader => _reader;
 
   /// Bật chế độ offline giả lập (để thử đọc chương đã tải).
   bool get forceOffline => _forceOffline;
+
+  /// Khóa Gemini API dùng cho Trợ lý AI đọc truyện.
+  String get geminiApiKey => _geminiApiKey;
 
   /// Đọc toàn bộ cài đặt đã lưu.
   void _load() {
@@ -41,6 +49,14 @@ class SettingsProvider extends ChangeNotifier {
       'show_ai_bubble': _prefs.getBool(PrefKeys.showAiBubble),
     });
     _forceOffline = _prefs.getBool(PrefKeys.forceOffline) ?? false;
+    final savedKey = _prefs.getString(PrefKeys.geminiApiKey)?.trim();
+    if (savedKey != null &&
+        savedKey.isNotEmpty &&
+        !savedKey.startsWith('AQ.Ab8RN6JVT')) {
+      _geminiApiKey = savedKey;
+    } else {
+      _geminiApiKey = defaultGeminiApiKey;
+    }
   }
 
   /// Đổi chế độ giao diện sáng/tối/theo hệ thống.
@@ -102,5 +118,14 @@ class SettingsProvider extends ChangeNotifier {
     _forceOffline = value;
     notifyListeners();
     await _prefs.setBool(PrefKeys.forceOffline, value);
+  }
+
+  /// Lưu Gemini API Key dùng cho Trợ lý AI Độc Giả.
+  Future<void> setGeminiApiKey(String value) async {
+    final trimmed = value.trim();
+    if (trimmed == _geminiApiKey) return;
+    _geminiApiKey = trimmed;
+    notifyListeners();
+    await _prefs.setString(PrefKeys.geminiApiKey, trimmed);
   }
 }

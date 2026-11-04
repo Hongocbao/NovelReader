@@ -126,7 +126,6 @@ class _MoodPickerSheetState extends State<MoodPickerSheet> {
       ...novelProv.newest,
       ...novelProv.hot,
       ...novelProv.completed,
-      ...novelProv.comics,
     }.toList();
 
     final moodNovels = _rankByMood(pool);

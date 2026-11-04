@@ -5,7 +5,6 @@ import 'package:provider/provider.dart';
 import '../../models/app_user.dart';
 import '../../providers/admin_user_provider.dart';
 import '../../providers/auth_provider.dart';
-import '../../widgets/admin/confirm_dialog.dart';
 import '../../widgets/admin/data_table_x.dart';
 import '../../widgets/loading_view.dart';
 
@@ -102,6 +101,38 @@ class _AdminUsersManageScreenState extends State<AdminUsersManageScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _showResetPasswordDialog(AppUser target) async {
+    final admin = context.read<AuthProvider>().currentUser;
+    final prov = context.read<AdminUserProvider>();
+    final newPass = await showDialog<String>(
+      context: context,
+      builder: (_) => _ResetPasswordDialog(target: target),
+    );
+    if (newPass == null || !mounted) return;
+    try {
+      await prov.resetTemporaryPassword(
+        admin: admin,
+        target: target,
+        tempPassword: newPass,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Đã cập nhật mật khẩu mới cho ${target.email} thành công!',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
+    }
   }
 
   @override
@@ -246,11 +277,32 @@ class _AdminUsersManageScreenState extends State<AdminUsersManageScreen> {
                 DataCell(
                   Switch(
                     value: u.isAuthor,
-                    onChanged: (v) => prov.toggleAuthorRole(
-                      admin: admin,
-                      target: u,
-                      isAuthor: v,
-                    ),
+                    onChanged: (v) async {
+                      try {
+                        await prov.toggleAuthorRole(
+                          admin: admin,
+                          target: u,
+                          isAuthor: v,
+                        );
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                v
+                                    ? 'Đã cấp quyền Tác giả cho ${u.displayName}'
+                                    : 'Đã thu hồi quyền Tác giả của ${u.displayName}',
+                              ),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(e.toString())),
+                          );
+                        }
+                      }
+                    },
                   ),
                 ),
                 DataCell(Text('💎 ${u.linhThach}')),
@@ -275,28 +327,30 @@ class _AdminUsersManageScreenState extends State<AdminUsersManageScreen> {
                         )
                       else
                         TextButton(
-                          onPressed: () =>
-                              prov.unbanUser(admin: admin, target: u),
+                          onPressed: () async {
+                            try {
+                              await prov.unbanUser(admin: admin, target: u);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Đã mở khóa tài khoản ${u.displayName}'),
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(e.toString())),
+                                );
+                              }
+                            }
+                          },
                           child: const Text('Mở khóa'),
                         ),
                       IconButton(
-                        tooltip: 'Đặt lại mật khẩu tạm (Temp@1234)',
+                        tooltip: 'Đổi / Đặt lại mật khẩu',
                         icon: const Icon(Icons.key_outlined),
-                        onPressed: () async {
-                          final ok = await AdminConfirmDialog.show(
-                            context,
-                            title: 'Đặt lại mật khẩu tạm',
-                            message:
-                                'Đặt mật khẩu của ${u.email} về "Temp@1234"?',
-                          );
-                          if (ok) {
-                            await prov.resetTemporaryPassword(
-                              admin: admin,
-                              target: u,
-                              tempPassword: 'Temp@1234',
-                            );
-                          }
-                        },
+                        onPressed: () => _showResetPasswordDialog(u),
                       ),
                     ],
                   ),
@@ -304,6 +358,76 @@ class _AdminUsersManageScreenState extends State<AdminUsersManageScreen> {
               ],
             );
           }).toList(),
+        ),
+      ],
+    );
+  }
+}
+
+class _ResetPasswordDialog extends StatefulWidget {
+  final AppUser target;
+
+  const _ResetPasswordDialog({required this.target});
+
+  @override
+  State<_ResetPasswordDialog> createState() => _ResetPasswordDialogState();
+}
+
+class _ResetPasswordDialogState extends State<_ResetPasswordDialog> {
+  final _passCtrl = TextEditingController(text: 'Temp@1234');
+
+  @override
+  void dispose() {
+    _passCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Đổi mật khẩu: ${widget.target.displayName}'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Tài khoản: ${widget.target.email}',
+            style: const TextStyle(fontSize: 13),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _passCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Mật khẩu mới (tối thiểu 6 ký tự)',
+              border: OutlineInputBorder(),
+            ),
+            onSubmitted: (v) {
+              if (v.trim().length >= 6) {
+                Navigator.pop(context, v.trim());
+              }
+            },
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Hủy'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final v = _passCtrl.text.trim();
+            if (v.length < 6) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Mật khẩu phải có ít nhất 6 ký tự.'),
+                ),
+              );
+              return;
+            }
+            Navigator.pop(context, v);
+          },
+          child: const Text('Lưu mật khẩu'),
         ),
       ],
     );

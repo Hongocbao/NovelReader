@@ -274,6 +274,12 @@ class AppDatabase implements ReaderExtrasSource {
           await V2DatabaseStore.migrateToV2(db);
           await _ensureExtraTables(db, inMigration: true);
           // Bổ sung truyện mới từ sample_novels.json mà không làm mất lịch sử/tủ sách cũ.
+          if (oldVersion < 9) {
+            await db.delete(
+              'chuong_tai_xuong_cloud',
+              where: 'is_downloaded = 0',
+            );
+          }
           await _syncSampleNovels(db);
         },
       ),
@@ -516,6 +522,22 @@ class AppDatabase implements ReaderExtrasSource {
           ...novel.toMap(),
           'search_text': Format.normalize('${novel.title} ${novel.author}'),
         }, conflictAlgorithm: ConflictAlgorithm.ignore);
+        batch.update(
+          'truyen',
+          {
+            'title': novel.title,
+            'author': novel.author,
+            'cover_url': novel.coverUrl,
+            'description': novel.description,
+            'status': novel.status,
+            'type': novel.type,
+            'genres': novel.genres.join(','),
+            'total_chapters': chapters.length,
+            'search_text': Format.normalize('${novel.title} ${novel.author}'),
+          },
+          where: 'id = ?',
+          whereArgs: [novelId],
+        );
         for (final c in chapters) {
           final index = c['index'] as int;
           batch.insert(

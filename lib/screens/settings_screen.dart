@@ -294,10 +294,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               value: NovelType.lightNovel,
                               label: Text(AppStrings.typeLightNovel),
                             ),
-                            ButtonSegment(
-                              value: NovelType.comic,
-                              label: Text(AppStrings.typeComic),
-                            ),
                           ],
                           selected: {type},
                           onSelectionChanged: (v) =>
@@ -713,6 +709,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onSelectionChanged: (s) => sp.setThemeMode(s.first),
                   ),
                   const Divider(height: 20),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    secondary: const Icon(Icons.smart_toy_outlined),
+                    title: const Text('Bong bóng chat AI'),
+                    subtitle: const Text('Hỏi đáp tự do và hỗ trợ đọc truyện'),
+                    value: sp.reader.showAiBubble,
+                    onChanged: sp.setShowAiBubble,
+                  ),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.text_fields_rounded),

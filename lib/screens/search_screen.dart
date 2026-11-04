@@ -183,11 +183,6 @@ class _SearchScreenState extends State<SearchScreen> {
                   selected: query.type == NovelType.lightNovel,
                   onTap: () => np.setTypeFilter(NovelType.lightNovel),
                 ),
-                _FilterChipItem(
-                  label: AppStrings.typeComic,
-                  selected: query.type == NovelType.comic,
-                  onTap: () => np.setTypeFilter(NovelType.comic),
-                ),
                 const SizedBox(width: 12),
                 _FilterChipItem(
                   label: AppStrings.statusOngoing,

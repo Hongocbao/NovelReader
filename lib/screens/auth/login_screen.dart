@@ -29,10 +29,12 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
     final auth = context.read<AuthProvider>();
-    final ok = await auth.login(_emailCtrl.text.trim(), _passCtrl.text);
-    if (!mounted) return;
+    if (auth.isLoading || !_formKey.currentState!.validate()) return;
+    final operation = auth.login(_emailCtrl.text.trim(), _passCtrl.text);
+    final revision = auth.sessionRevision;
+    final ok = await operation;
+    if (!mounted || auth.sessionRevision != revision) return;
     if (ok) {
       if (auth.isAdmin) {
         Navigator.of(context).pushAndRemoveUntil(

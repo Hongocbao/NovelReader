@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/testing.dart';
 import 'package:novel_reader/database/app_database.dart';
 import 'package:novel_reader/models/bookmark.dart';
 import 'package:novel_reader/models/chapter.dart';
@@ -14,11 +16,32 @@ import 'package:novel_reader/providers/reader_provider.dart';
 import 'package:novel_reader/providers/settings_provider.dart';
 import 'package:novel_reader/repositories/reader_extras_source.dart';
 import 'package:novel_reader/screens/reader_screen.dart';
+import 'package:novel_reader/services/gemini_tts_service.dart';
+import 'package:novel_reader/services/tts_playback.dart';
+import 'package:novel_reader/utils/tts_player.dart';
 import 'package:novel_reader/utils/app_route_observer.dart';
 import 'package:novel_reader/utils/constants.dart';
 import 'package:novel_reader/widgets/reader_toolbar.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'tts_playback_test.dart' show audioReply, requestedVoice;
+
+class _VoiceOutput implements TtsAudioOutput {
+  int played = 0;
+  Completer<void>? playing;
+  @override
+  Future<void> play(Uint8List audio, double rate, {void Function()? onStarted}) async {
+    played++;
+    final done = Completer<void>();
+    playing = done;
+    onStarted?.call();
+    await done.future;
+  }
+  @override
+  Future<void> stop() async {
+    if (playing != null && !playing!.isCompleted) playing!.complete();
+  }
+}
 
 Novel book(int id) => Novel(
   id: id,
@@ -385,4 +408,41 @@ void main() {
       expect(identical(reader.readerOwner, owner), isTrue);
     },
   );
+
+  testWidgets('selected demo voice is applied to chapter playback on a 360px phone',
+      (tester) async {
+    final voices = <String>[];
+    final output = _VoiceOutput();
+    final playback = TtsPlayback(GeminiTtsService(client: MockClient((request) async {
+      voices.add(requestedVoice(request));
+      return audioReply(request);
+    })), output);
+    overrideTtsPlaybackForTesting(playback);
+    addTearDown(() => overrideTtsPlaybackForTesting(null));
+    await open(tester, width: 360);
+    await tester.tap(find.descendant(of: find.byType(ReaderTopBar), matching: find.byIcon(Icons.headphones_outlined)));
+    await tester.pumpAndSettle();
+    final row = find.byKey(const ValueKey('tts-voice-Fenrir'));
+    await tester.scrollUntilVisible(row, 150, scrollable: find.byType(Scrollable).last);
+    final preview = find.descendant(of: row, matching: find.byTooltip('Nghe thử giọng này'));
+    await tester.ensureVisible(preview);
+    await tester.pumpAndSettle();
+    await tester.tap(preview);
+    await tester.pumpAndSettle();
+    expect(voices, ['Fenrir']);
+    expect(output.played, 1);
+    await tester.tap(find.descendant(of: row, matching: find.text('Đọc ngay')));
+    await tester.pumpAndSettle();
+    expect(output.played, 2);
+    expect(voices.length, greaterThanOrEqualTo(2));
+    expect(voices.toSet(), {'Fenrir'});
+    expect(tester.widget<ReaderTopBar>(find.byType(ReaderTopBar)).isListening, isTrue);
+    await tester.tap(find.descendant(of: find.byType(ReaderTopBar), matching: find.byIcon(Icons.record_voice_over_rounded)));
+    await tester.pumpAndSettle();
+    expect(output.played, 2); // The cancelled demo/chapter cannot auto-advance.
+    expect(tester.widget<ReaderTopBar>(find.byType(ReaderTopBar)).isListening, isFalse);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+  });
 }

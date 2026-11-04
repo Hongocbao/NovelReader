@@ -29,6 +29,7 @@ import '../widgets/loading_view.dart';
 import '../widgets/reader/ai_chat_bubble.dart';
 import '../widgets/reader/comment_section.dart';
 import '../widgets/reader/paragraph_view.dart';
+import '../widgets/reader/tts_api_key_dialog.dart';
 import '../widgets/reader/xray_and_quote_sheets.dart';
 import '../widgets/reader_settings_sheet.dart';
 import '../widgets/reader_toolbar.dart';
@@ -36,7 +37,7 @@ import 'user/advanced_reader_sheets.dart';
 
 /// Màn hình đọc truyện (`ReaderScreen`):
 /// - Hỗ trợ cả 2 chế độ: **Cuộn dọc** (`SingleChildScrollView`) và **Lật trang ngang** (`PageView`).
-/// - Tích hợp TTS (`flutter_tts` trên Android/iOS & Web Speech API trên Web) với completion callback
+/// - Phát cùng giọng AI đã chọn trên Web và Android, với completion callback
 ///   chính xác và cuộn tới đúng widget đoạn văn bằng `Scrollable.ensureVisible`.
 /// - Tự lưu & khôi phục vị trí đọc theo tỉ lệ `0.0 .. 1.0`, ghi nhận thống kê vào `reading_sessions`.
 class ReaderScreen extends StatefulWidget {
@@ -56,6 +57,140 @@ class ReaderScreen extends StatefulWidget {
 
   @override
   State<ReaderScreen> createState() => _ReaderScreenState();
+}
+
+/// Cấu hình thể loại giọng đọc (Voice Persona) cho tính năng Nghe đọc chương (TTS).
+class TtsVoiceStyle {
+  final String id;
+  final String emoji;
+  final String title;
+  final String shortLabel;
+  final String genreHint;
+  final double baseRate;
+  final double pitch;
+  final String preferredGender;
+  final String geminiVoiceId;
+  final String stylePrompt;
+
+  const TtsVoiceStyle({
+    required this.id,
+    required this.emoji,
+    required this.title,
+    required this.shortLabel,
+    required this.genreHint,
+    required this.baseRate,
+    required this.pitch,
+    required this.preferredGender,
+    required this.geminiVoiceId,
+    required this.stylePrompt,
+  });
+
+  static const List<TtsVoiceStyle> presets = [
+    TtsVoiceStyle(
+      id: 'female_gentle',
+      emoji: '🌸',
+      title: 'Giọng Nữ Dịu Dàng (Aoede)',
+      shortLabel: 'Nữ Dịu Dàng',
+      genreHint: 'Ngôn tình • Chữa lành • Điền văn',
+      baseRate: 0.95,
+      pitch: 1.18,
+      preferredGender: 'female',
+      geminiVoiceId: 'Aoede',
+      stylePrompt:
+          'Read aloud in a gentle, sweet, warm female Vietnamese voice:',
+    ),
+    TtsVoiceStyle(
+      id: 'male_warm',
+      emoji: '⚔️',
+      title: 'Giọng Nam Trầm Ấm (Charon)',
+      shortLabel: 'Nam Trầm Ấm',
+      genreHint: 'Tiên hiệp • Kiếm hiệp • Huyền huyễn',
+      baseRate: 0.94,
+      pitch: 0.82,
+      preferredGender: 'male',
+      geminiVoiceId: 'Charon',
+      stylePrompt:
+          'Read aloud in a deep, warm, calm male Vietnamese voice:',
+    ),
+    TtsVoiceStyle(
+      id: 'classic_storyteller',
+      emoji: '📜',
+      title: 'Giọng Kể Chuyện Cổ Điển (Orus)',
+      shortLabel: 'Cổ Điển',
+      genreHint: 'Kinh điển • Lịch sử • Dã sử',
+      baseRate: 0.88,
+      pitch: 0.90,
+      preferredGender: 'male',
+      geminiVoiceId: 'Orus',
+      stylePrompt:
+          'Read aloud in a classic, solemn male storyteller Vietnamese voice:',
+    ),
+    TtsVoiceStyle(
+      id: 'mystery_thriller',
+      emoji: '🕵️',
+      title: 'Giọng Bí Ẩn Hồi Hộp (Fenrir)',
+      shortLabel: 'Bí Ẩn',
+      genreHint: 'Trinh thám • Linh dị • Kinh dị',
+      baseRate: 0.85,
+      pitch: 0.76,
+      preferredGender: 'male',
+      geminiVoiceId: 'Fenrir',
+      stylePrompt:
+          'Read aloud in a low, mysterious, suspenseful male Vietnamese voice:',
+    ),
+    TtsVoiceStyle(
+      id: 'action_energetic',
+      emoji: '⚡',
+      title: 'Giọng Sôi Động Kịch Tính (Puck)',
+      shortLabel: 'Sôi Động',
+      genreHint: 'Hành động • Hệ thống • Võng du',
+      baseRate: 1.15,
+      pitch: 1.05,
+      preferredGender: 'any',
+      geminiVoiceId: 'Puck',
+      stylePrompt:
+          'Read aloud in an energetic, fast-paced, dramatic male Vietnamese voice:',
+    ),
+    TtsVoiceStyle(
+      id: 'youth_clear',
+      emoji: '✨',
+      title: 'Giọng Thanh Xuân Trong Trẻo (Leda)',
+      shortLabel: 'Thanh Xuân',
+      genreHint: 'Học đường • Light Novel • Hài hước',
+      baseRate: 1.05,
+      pitch: 1.26,
+      preferredGender: 'female',
+      geminiVoiceId: 'Leda',
+      stylePrompt:
+          'Read aloud in a bright, youthful, cheerful female Vietnamese voice:',
+    ),
+    TtsVoiceStyle(
+      id: 'night_relax',
+      emoji: '🌙',
+      title: 'Giọng Đọc Đêm Thư Giãn (Zephyr)',
+      shortLabel: 'Đọc Đêm',
+      genreHint: 'Đọc khuya • Chậm rãi • Ru ngủ',
+      baseRate: 0.78,
+      pitch: 0.92,
+      preferredGender: 'female',
+      geminiVoiceId: 'Zephyr',
+      stylePrompt:
+          'Read aloud in a soft, slow, soothing bedtime female Vietnamese voice:',
+    ),
+    TtsVoiceStyle(
+      id: 'standard_natural',
+      emoji: '🎙️',
+      title: 'Giọng Tự Nhiên Tiêu Chuẩn (Kore)',
+      shortLabel: 'Tiêu Chuẩn',
+      genreHint: 'Đa thể loại • Cân bằng dễ nghe',
+      baseRate: 1.0,
+      pitch: 1.0,
+      preferredGender: 'any',
+      geminiVoiceId: 'Kore',
+      stylePrompt:
+          'Read aloud in a clear, natural, balanced female Vietnamese voice:',
+    ),
+  ];
 }
 
 class _ReaderScreenState extends State<ReaderScreen>
@@ -91,6 +226,8 @@ class _ReaderScreenState extends State<ReaderScreen>
   bool _isListening = false;
   int _speakingParagraphIndex = -1;
   int _ttsSessionId = 0;
+  TtsVoiceStyle _selectedVoiceStyle = TtsVoiceStyle.presets.first;
+  double _ttsSpeedMultiplier = 1.0;
   String _searchKeyword = '';
   double _currentRatio = 0;
   bool _metricsRestoreScheduled = false;
@@ -423,25 +560,52 @@ class _ReaderScreenState extends State<ReaderScreen>
     }
   }
 
-  /// Bật/tắt chế độ Nghe đọc chương bằng completion callback chính xác (không dùng Timer ước lượng).
+  /// Bật/tắt chế độ Nghe đọc chương hoặc mở bảng chọn Thể loại giọng đọc.
   void _toggleListen() {
     if (_isListening) {
       _stopListen();
       return;
     }
+    _showVoiceStyleSheet();
+  }
+
+  List<String> _currentTtsParagraphs() {
     final text = _readerProvider.content;
-    if (text == null || text.isEmpty) return;
-    final paragraphs = text
+    if (text == null || text.isEmpty) return const [];
+    return text
+        .replaceAll(readerInlineImgPattern, '')
         .split('\n')
         .map((p) => p.trim())
-        .where((p) => p.isNotEmpty && !readerInlineImgPattern.hasMatch(p))
+        .where((p) => p.isNotEmpty)
         .toList();
+  }
+
+  void _startListeningWithVoice(TtsVoiceStyle style, {int? fromIndex}) {
+    final paragraphs = _currentTtsParagraphs();
     if (paragraphs.isEmpty) return;
+
+    final targetIndex = (fromIndex ??
+            (_speakingParagraphIndex >= 0 ? _speakingParagraphIndex : 0))
+        .clamp(0, paragraphs.length - 1);
 
     final session = ++_ttsSessionId;
     setState(() {
+      _selectedVoiceStyle = style;
       _isListening = true;
-      _speakingParagraphIndex = 0;
+      _speakingParagraphIndex = targetIndex;
+    });
+    _speakCurrentParagraph(paragraphs, session);
+  }
+
+  void _stepSpeakingParagraph(int delta) {
+    final paragraphs = _currentTtsParagraphs();
+    if (paragraphs.isEmpty) return;
+    final nextIdx =
+        (_speakingParagraphIndex + delta).clamp(0, paragraphs.length - 1);
+    final session = ++_ttsSessionId;
+    setState(() {
+      _isListening = true;
+      _speakingParagraphIndex = nextIdx;
     });
     _speakCurrentParagraph(paragraphs, session);
   }
@@ -459,6 +623,7 @@ class _ReaderScreenState extends State<ReaderScreen>
 
     // Cuộn tới vị trí thật của đoạn văn đang đọc bằng GlobalKey
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || session != _ttsSessionId) return;
       final ctx = _paragraphKeys[_speakingParagraphIndex]?.currentContext;
       if (ctx != null) {
         Scrollable.ensureVisible(
@@ -470,8 +635,28 @@ class _ReaderScreenState extends State<ReaderScreen>
       }
     });
 
+    final effectiveRate =
+        (_selectedVoiceStyle.baseRate * _ttsSpeedMultiplier).clamp(0.5, 2.0);
+    final apiKey = context.read<SettingsProvider>().geminiApiKey;
+
+    final style = _selectedVoiceStyle;
     speakTextPlatform(
       currentText,
+      rate: effectiveRate,
+      pitch: style.pitch,
+      preferredGender: style.preferredGender,
+      voiceId: style.geminiVoiceId,
+      stylePrompt: style.stylePrompt,
+      apiKey: apiKey,
+      onStarted: () {
+        if (!mounted || session != _ttsSessionId) return;
+        if (_speakingParagraphIndex + 1 < paragraphs.length) {
+          prefetchTextPlatform(paragraphs[_speakingParagraphIndex + 1],
+              voiceId: style.geminiVoiceId, stylePrompt: style.stylePrompt,
+              apiKey: apiKey);
+        }
+      },
+      onError: (error) => _handleTtsFailure(error, session, style),
       onComplete: () {
         if (!mounted || !_isListening || session != _ttsSessionId) return;
         setState(() => _speakingParagraphIndex++);
@@ -480,15 +665,281 @@ class _ReaderScreenState extends State<ReaderScreen>
     );
   }
 
+  void _previewTtsVoice(TtsVoiceStyle style, {void Function(String)? onError}) {
+    _stopListen();
+    final session = ++_ttsSessionId;
+    setState(() => _selectedVoiceStyle = style);
+    speakTextPlatform(
+      'Xin chào độc giả, đây là ${style.title}, rất hân hạnh đọc truyện "${widget.novel.title}" cùng bạn.',
+      rate: (style.baseRate * _ttsSpeedMultiplier).clamp(0.5, 2.0),
+      voiceId: style.geminiVoiceId, stylePrompt: style.stylePrompt,
+      apiKey: context.read<SettingsProvider>().geminiApiKey,
+      onError: (error) {
+        if (!mounted || session != _ttsSessionId) return;
+        if (onError != null) { onError(error); }
+        else { _handleTtsFailure(error, session, style, preview: true); }
+      },
+    );
+  }
+
+  void _handleTtsFailure(String error, int session, TtsVoiceStyle style,
+      {bool preview = false}) {
+    if (!mounted || session != _ttsSessionId) return;
+    final index = _speakingParagraphIndex;
+    final chapterId = _readerProvider.currentChapter?.id;
+    setState(() => _isListening = false);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(error),
+      action: SnackBarAction(label: 'Thử lại', onPressed: () {
+        if (!mounted || session != _ttsSessionId || !_readerRouteActive ||
+            _readerProvider.currentChapter?.id != chapterId) { return; }
+        if (preview) { _previewTtsVoice(style); }
+        else { _startListeningWithVoice(style, fromIndex: index); }
+      }),
+    ));
+  }
+
   void _stopListen() {
     _ttsSessionId++;
-    if (_isListening) stopSpeechPlatform();
+    stopSpeechPlatform();
     if (mounted && (_isListening || _speakingParagraphIndex != -1)) {
       setState(() {
         _isListening = false;
         _speakingParagraphIndex = -1;
       });
     }
+  }
+
+  void _showVoiceStyleSheet() {
+    String? previewError;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.record_voice_over_rounded),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            'Chọn Thể Loại Giọng Đọc (AI TTS)',
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        if (_isListening)
+                          TextButton.icon(
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              _stopListen();
+                            },
+                            icon: const Icon(
+                              Icons.stop_circle_outlined,
+                              color: Colors.redAccent,
+                            ),
+                            label: const Text(
+                              'Dừng đọc',
+                              style: TextStyle(color: Colors.redAccent),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Nghe thử và đọc truyện dùng cùng giọng AI đã chọn trên Web và Android. Nếu tải âm thanh lỗi, app sẽ báo để thử lại, không tự đổi sang giọng máy.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    Align(alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.key_outlined, size: 18),
+                        label: const Text('Khóa giọng AI'),
+                        onPressed: () async {
+                          _stopListen();
+                          final saved = await showDialog<bool>(context: ctx,
+                              builder: (_) => const TtsApiKeyDialog());
+                          if (saved == true && ctx.mounted) {
+                            setModalState(() => previewError = null);
+                          }
+                        },
+                      )),
+                    const SizedBox(height: 10),
+                    if (previewError != null)
+                      Padding(padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(previewError!,
+                          style: TextStyle(color: Theme.of(ctx).colorScheme.error))),
+                    Row(
+                      children: [
+                        const Icon(Icons.speed_rounded, size: 18),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Tốc độ đọc: ${_ttsSpeedMultiplier.toStringAsFixed(2)}x',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Expanded(
+                          child: Slider(
+                            value: _ttsSpeedMultiplier,
+                            min: 0.75,
+                            max: 1.50,
+                            divisions: 15,
+                            label: '${_ttsSpeedMultiplier.toStringAsFixed(2)}x',
+                            onChanged: (v) {
+                              setModalState(() => _ttsSpeedMultiplier = v);
+                              setState(() => _ttsSpeedMultiplier = v);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 8),
+                    Flexible(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 380),
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: TtsVoiceStyle.presets.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 6),
+                          itemBuilder: (_, i) {
+                            final style = TtsVoiceStyle.presets[i];
+                            final selected =
+                                style.id == _selectedVoiceStyle.id;
+                            return Material(
+                              key: ValueKey('tts-voice-${style.geminiVoiceId}'),
+                              color: selected
+                                  ? Theme.of(ctx)
+                                      .colorScheme
+                                      .primaryContainer
+                                      .withValues(alpha: 0.55)
+                                  : Theme.of(ctx)
+                                      .colorScheme
+                                      .surfaceContainerHighest
+                                      .withValues(alpha: 0.4),
+                              borderRadius: BorderRadius.circular(12),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(12),
+                                onTap: () {
+                                  Navigator.pop(ctx);
+                                  _startListeningWithVoice(style);
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Text(
+                                        style.emoji,
+                                        style: const TextStyle(fontSize: 24),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    style.title,
+                                                    style: TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      fontSize: 14,
+                                                      color: selected
+                                                          ? Theme.of(ctx)
+                                                              .colorScheme
+                                                              .primary
+                                                          : null,
+                                                    ),
+                                                  ),
+                                                ),
+                                                if (selected)
+                                                  Icon(
+                                                    Icons.check_circle_rounded,
+                                                    size: 18,
+                                                    color: Theme.of(ctx)
+                                                        .colorScheme
+                                                        .primary,
+                                                  ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              'Hợp với: ${style.genreHint}',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Theme.of(ctx)
+                                                    .colorScheme
+                                                    .onSurfaceVariant,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      IconButton(
+                                        tooltip: 'Nghe thử giọng này',
+                                        icon: const Icon(
+                                          Icons.volume_up_rounded,
+                                          size: 20,
+                                        ),
+                                        onPressed: () {
+                                          setModalState(() {
+                                            previewError = null;
+                                            _selectedVoiceStyle = style;
+                                          });
+                                          _previewTtsVoice(style, onError: (error) {
+                                            if (ctx.mounted) { setModalState(() => previewError = error); }
+                                          });
+                                        },
+                                      ),
+                                      FilledButton.tonal(
+                                        onPressed: () {
+                                          Navigator.pop(ctx);
+                                          _startListeningWithVoice(style);
+                                        },
+                                        child: const Text('Đọc ngay'),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    ).whenComplete(() {
+      if (mounted && !_isListening) {
+        _ttsSessionId++;
+        stopSpeechPlatform();
+      }
+    });
   }
 
   Future<void> _showSearchInChapterDialog() async {
@@ -1000,6 +1451,99 @@ class _ReaderScreenState extends State<ReaderScreen>
                       ),
                     ),
                   ),
+                if (_isListening)
+                  Positioned(
+                    bottom: _showToolbar ? 76 : 24,
+                    left: 16,
+                    right: 16,
+                    child: Material(
+                      elevation: 6,
+                      borderRadius: BorderRadius.circular(24),
+                      color: Theme.of(context).colorScheme.surface
+                          .withValues(alpha: 0.96),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        child: Row(
+                          children: [
+                            Text(
+                              _selectedVoiceStyle.emoji,
+                              style: const TextStyle(fontSize: 20),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    _selectedVoiceStyle.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Đang đọc đoạn ${_speakingParagraphIndex + 1}/${_currentTtsParagraphs().length} • ${_ttsSpeedMultiplier.toStringAsFixed(2)}x',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Đoạn trước',
+                              icon: const Icon(
+                                Icons.skip_previous_rounded,
+                                size: 20,
+                              ),
+                              onPressed: () => _stepSpeakingParagraph(-1),
+                            ),
+                            IconButton(
+                              tooltip: 'Đoạn tiếp theo',
+                              icon: const Icon(
+                                Icons.skip_next_rounded,
+                                size: 20,
+                              ),
+                              onPressed: () => _stepSpeakingParagraph(1),
+                            ),
+                            if (MediaQuery.sizeOf(context).width < 480)
+                              IconButton(
+                                tooltip: 'Đổi giọng',
+                                onPressed: _showVoiceStyleSheet,
+                                icon: const Icon(Icons.record_voice_over_rounded, size: 20),
+                              )
+                            else TextButton.icon(
+                              onPressed: _showVoiceStyleSheet,
+                              icon: const Icon(
+                                Icons.record_voice_over_rounded,
+                                size: 16,
+                              ),
+                              label: const Text('Đổi giọng'),
+                            ),
+                            IconButton(
+                              tooltip: 'Dừng đọc',
+                              icon: const Icon(
+                                Icons.stop_circle_rounded,
+                                color: Colors.redAccent,
+                              ),
+                              onPressed: _stopListen,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 if (_isAutoScrolling)
                   Positioned(
                     bottom: 24,
@@ -1115,6 +1659,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                 // Bong bóng Trợ lý AI Đọc Truyện (Draggable Chat Bubble)
                 if (settings.showAiBubble && chapter != null)
                   AiChatBubble(
+                    key: const ValueKey('reader-ai-chat-bubble'),
                     novel: widget.novel,
                     chapter: chapter,
                     chapterContent: rp.content,
@@ -1269,34 +1814,33 @@ class _ReaderScreenState extends State<ReaderScreen>
             userKey: context.watch<AuthProvider?>()?.currentUser.id ?? '',
           ),
           const SizedBox(height: 12),
-          for (final p in paragraphs)
-            Builder(
-              builder: (_) {
-                final isImg = readerInlineImgPattern.hasMatch(p);
-                int? currentTextIdx;
-                if (!isImg) {
-                  textParagraphIdx++;
-                  currentTextIdx = textParagraphIdx;
-                }
-                final key = currentTextIdx == null
-                    ? null
-                    : (_paragraphKeys[currentTextIdx] ??= GlobalKey());
-                final isSpeakingThis =
-                    _isListening &&
-                    currentTextIdx != null &&
-                    currentTextIdx == _speakingParagraphIndex;
-                return ReaderParagraphView(
-                  key: key,
-                  chapter: chapter,
-                  paragraph: p,
-                  settings: settings,
-                  isSpeaking: isSpeakingThis,
-                  searchKeyword: _searchKeyword,
-                  onLongPressQuote: () => _showQuoteCardSheet(chapter, p),
-                  onTapImage: _openImageViewer,
-                );
-              },
-            ),
+          for (final p in paragraphs) ...[
+            () {
+              final isImg = readerInlineImgPattern.hasMatch(p);
+              int? currentTextIdx;
+              if (!isImg) {
+                textParagraphIdx++;
+                currentTextIdx = textParagraphIdx;
+              }
+              final key = currentTextIdx == null
+                  ? null
+                  : (_paragraphKeys[currentTextIdx] ??= GlobalKey());
+              final isSpeakingThis =
+                  _isListening &&
+                  currentTextIdx != null &&
+                  currentTextIdx == _speakingParagraphIndex;
+              return ReaderParagraphView(
+                key: key,
+                chapter: chapter,
+                paragraph: p,
+                settings: settings,
+                isSpeaking: isSpeakingThis,
+                searchKeyword: _searchKeyword,
+                onLongPressQuote: () => _showQuoteCardSheet(chapter, p),
+                onTapImage: _openImageViewer,
+              );
+            }(),
+          ],
           const SizedBox(height: 24),
           footer,
         ],
@@ -1423,6 +1967,15 @@ class _ReaderScreenState extends State<ReaderScreen>
       spacing: 8,
       runSpacing: 6,
       children: [
+        ActionChip(
+          avatar: const Icon(Icons.record_voice_over_rounded, size: 16),
+          label: Text(
+            _isListening
+                ? 'Đang đọc: ${_selectedVoiceStyle.emoji} ${_selectedVoiceStyle.shortLabel}'
+                : 'Giọng đọc: ${_selectedVoiceStyle.emoji} ${_selectedVoiceStyle.shortLabel}',
+          ),
+          onPressed: _showVoiceStyleSheet,
+        ),
         ActionChip(
           avatar: const Icon(Icons.menu_book_outlined, size: 16),
           label: const Text('Từ điển thuật ngữ'),

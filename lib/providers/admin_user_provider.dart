@@ -60,9 +60,7 @@ class AdminUserProvider extends ChangeNotifier {
       banUntil: until,
     );
     await _authRepo.updateUser(updated);
-    final db = await _appDb.database;
-    await V2DatabaseStore.writeAuditLog(
-      db,
+    await _tryWriteAuditLog(
       admin: admin,
       action: 'BAN_USER',
       target: 'user#${target.id} (${target.email})',
@@ -80,13 +78,10 @@ class AdminUserProvider extends ChangeNotifier {
     RoleGuard.requireAdmin(admin);
     final updated = target.copyWith(
       status: UserStatus.active,
-      banReason: null,
-      banUntil: null,
+      clearBanInfo: true,
     );
     await _authRepo.updateUser(updated);
-    final db = await _appDb.database;
-    await V2DatabaseStore.writeAuditLog(
-      db,
+    await _tryWriteAuditLog(
       admin: admin,
       action: 'UNBAN_USER',
       target: 'user#${target.id} (${target.email})',
@@ -102,11 +97,12 @@ class AdminUserProvider extends ChangeNotifier {
     required bool isAuthor,
   }) async {
     RoleGuard.requireAdmin(admin);
-    final updated = target.copyWith(isAuthor: isAuthor);
+    final nextRole = (!isAuthor && target.role == UserRole.author)
+        ? UserRole.user
+        : target.role;
+    final updated = target.copyWith(isAuthor: isAuthor, role: nextRole);
     await _authRepo.updateUser(updated);
-    final db = await _appDb.database;
-    await V2DatabaseStore.writeAuditLog(
-      db,
+    await _tryWriteAuditLog(
       admin: admin,
       action: isAuthor ? 'GRANT_AUTHOR' : 'REVOKE_AUTHOR',
       target: 'user#${target.id} (${target.email})',
@@ -115,7 +111,7 @@ class AdminUserProvider extends ChangeNotifier {
     await loadUsers();
   }
 
-  /// Đổi vai trò `user` / `admin` (chặn tự hạ quyền hoặc làm mất Admin cuối cùng).
+  /// Đổi vai trò `user` / `author` / `admin` (chặn tự hạ quyền hoặc làm mất Admin cuối cùng).
   Future<void> changeUserRole({
     required AppUser admin,
     required AppUser target,
@@ -130,11 +126,12 @@ class AdminUserProvider extends ChangeNotifier {
         _countActiveAdmins() <= 1) {
       throw StateError('Hệ thống phải luôn còn ít nhất 1 Admin.');
     }
-    final updated = target.copyWith(role: newRole);
+    final nextIsAuthor = (newRole == UserRole.author || newRole == UserRole.admin)
+        ? true
+        : (target.role == UserRole.author ? false : target.isAuthor);
+    final updated = target.copyWith(role: newRole, isAuthor: nextIsAuthor);
     await _authRepo.updateUser(updated);
-    final db = await _appDb.database;
-    await V2DatabaseStore.writeAuditLog(
-      db,
+    await _tryWriteAuditLog(
       admin: admin,
       action: 'CHANGE_ROLE',
       target: 'user#${target.id} (${target.email})',
@@ -143,23 +140,51 @@ class AdminUserProvider extends ChangeNotifier {
     await loadUsers();
   }
 
-  /// Đặt lại mật khẩu cho tài khoản người dùng qua email.
+  /// Đặt lại mật khẩu cho tài khoản người dùng.
   Future<void> resetTemporaryPassword({
     required AppUser admin,
     required AppUser target,
     String? tempPassword,
   }) async {
     RoleGuard.requireAdmin(admin);
-    await _authRepo.resetPassword(target.email);
-    final db = await _appDb.database;
-    await V2DatabaseStore.writeAuditLog(
-      db,
+    final newPass = (tempPassword == null || tempPassword.trim().isEmpty)
+        ? 'Temp@1234'
+        : tempPassword.trim();
+    try {
+      await (_authRepo as dynamic).resetPassword(
+        target.email,
+        newPassword: newPass,
+      );
+    } on NoSuchMethodError {
+      await _authRepo.resetPassword(target.email);
+    }
+    await _tryWriteAuditLog(
       admin: admin,
       action: 'RESET_PASSWORD',
       target: 'user#${target.id} (${target.email})',
-      detail: 'Gửi yêu cầu đặt lại mật khẩu qua email',
+      detail: 'Đặt lại mật khẩu mới ($newPass)',
     );
     await loadUsers();
+  }
+
+  Future<void> _tryWriteAuditLog({
+    required AppUser admin,
+    required String action,
+    required String target,
+    required String detail,
+  }) async {
+    try {
+      final db = await _appDb.database;
+      await V2DatabaseStore.writeAuditLog(
+        db,
+        admin: admin,
+        action: action,
+        target: target,
+        detail: detail,
+      );
+    } catch (e) {
+      debugPrint('Không ghi được audit log ($action): $e');
+    }
   }
 
   /// Xuất danh sách người dùng hiện tại ra chuỗi CSV.

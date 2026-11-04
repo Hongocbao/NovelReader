@@ -40,6 +40,7 @@ dependencies:
   # Hỗ trợ Web Speech API trên trình duyệt
   web: ^1.1.1
   flutter_tts: ^4.2.5
+  audioplayers: ^6.8.1
   # Băm mật khẩu SHA-256 + salt
   crypto: ^3.0.8
   supabase_flutter: ^2.18.3
