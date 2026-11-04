@@ -47,6 +47,11 @@ class LibraryProvider extends ChangeNotifier {
         ({int identity, String userId, String day, int novelId, int chapterId}),
         int
       >{};
+  final _chapterWordLimits =
+      <
+        ({int identity, String userId, String day, int novelId, int chapterId}),
+        int
+      >{};
 
   /// Thử đồng bộ lịch sử đang chờ khi mạng trở lại, kể cả lúc đang đọc.
   void updateConnectivity(bool online) {
@@ -76,6 +81,7 @@ class LibraryProvider extends ChangeNotifier {
     _activeWords.clear();
     _chapterActiveTime.clear();
     _chapterActiveWords.clear();
+    _chapterWordLimits.clear();
     _autoStartAttempts.clear();
     _loaded = false;
     _loading = false;
@@ -568,7 +574,10 @@ class LibraryProvider extends ChangeNotifier {
     _chapterActiveTime[chapterKey] = elapsed;
     final estimatedWords = (elapsed.inMilliseconds * 220 ~/ 60000).clamp(
       0,
-      _readableWordCount(content),
+      _chapterWordLimits.putIfAbsent(
+        chapterKey,
+        () => _readableWordCount(content),
+      ),
     );
     final newWords = (estimatedWords - (_chapterActiveWords[chapterKey] ?? 0))
         .clamp(0, estimatedWords);

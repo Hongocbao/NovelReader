@@ -291,7 +291,6 @@ void main() {
       for (var attempt = 0; attempt < 200; attempt++) {
         final history = lp.historyFor(novel.id);
         if (history != null && history.scrollOffset > 0 &&
-            lp.sessions.isNotEmpty &&
             (newerThan == null || history.lastReadAt.isAfter(newerThan))) {
           return;
         }
@@ -302,7 +301,7 @@ void main() {
           const Duration(milliseconds: 20),
         ));
       }
-      fail('Reading progress and session were not saved before closing the DB.');
+      fail('Reading progress was not saved before closing the DB.');
     }
 
     Widget buildReader({double initialOffset = 0}) {
@@ -343,6 +342,7 @@ void main() {
     final savedHistory = lp.historyFor(novel.id);
     expect(savedHistory, isNotNull);
     expect(savedHistory!.scrollOffset, greaterThan(0));
+    expect(lp.sessions, isEmpty, reason: 'Opening a chapter briefly must not add a reading minute.');
 
     // 3. Bật chế độ Lật trang ngang (PageView) và mở lại ở đúng vị trí đã lưu
     await tester.runAsync(() async {

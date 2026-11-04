@@ -18,6 +18,8 @@ import '../providers/library_provider.dart';
 import '../providers/reader_provider.dart';
 import '../providers/settings_provider.dart';
 import '../utils/constants.dart';
+import '../utils/active_reading_clock.dart';
+import '../utils/app_route_observer.dart';
 import '../utils/format.dart';
 import '../utils/tts_helper.dart';
 import '../widgets/chapter_tile.dart';
@@ -41,19 +43,23 @@ class ReaderScreen extends StatefulWidget {
   final Novel novel;
   final int? initialChapterId;
   final double initialScrollOffset;
+  @visibleForTesting
+  final ActiveReadingClock? activityClock;
 
   const ReaderScreen({
     super.key,
     required this.novel,
     this.initialChapterId,
     this.initialScrollOffset = 0,
+    this.activityClock,
   });
 
   @override
   State<ReaderScreen> createState() => _ReaderScreenState();
 }
 
-class _ReaderScreenState extends State<ReaderScreen> {
+class _ReaderScreenState extends State<ReaderScreen>
+    with WidgetsBindingObserver, RouteAware {
   final ScrollController _scrollCtrl = ScrollController();
   final PageController _pageCtrl = PageController();
   final FocusNode _keyFocusNode = FocusNode();
@@ -61,6 +67,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
   final Map<int, ({Chapter chapter, double offset})> _pendingProgressSaves = {};
   Timer? _saveDebounce;
   Timer? _autoScrollTimer;
+  Timer? _activityTimer;
+  late final ActiveReadingClock _activityClock;
+  late AppLifecycleState _appState;
+  ModalRoute<dynamic>? _activityRoute;
+  bool _routeVisible = true;
+  Chapter? _activityChapter;
+  String? _activityContent;
+  String _activityUserId = '';
 
   bool _showToolbar = true;
   bool _isAutoScrolling = false;
@@ -82,6 +96,15 @@ class _ReaderScreenState extends State<ReaderScreen> {
   @override
   void initState() {
     super.initState();
+    _activityClock = widget.activityClock ?? ActiveReadingClock();
+    _appState =
+        WidgetsBinding.instance.lifecycleState ?? AppLifecycleState.resumed;
+    WidgetsBinding.instance.addObserver(this);
+    _activityTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!mounted) return;
+      _syncReadingActivity(_readerProvider, _currentReadingUserId());
+      _flushActiveReading();
+    });
     _currentRatio = widget.initialScrollOffset.clamp(0, 1).toDouble();
     _pendingRestoreRatio = _currentRatio;
     _scrollCtrl.addListener(_onScroll);
@@ -98,7 +121,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
           );
         }
       }
-      if (_readerProvider.currentChapter?.id != widget.initialChapterId ||
+      if (_readerProvider.currentChapter?.novelId != widget.novel.id ||
+          _readerProvider.currentChapter?.id != widget.initialChapterId ||
           _readerProvider.content == null) {
         await _readerProvider.openNovel(
           widget.novel,
@@ -114,6 +138,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
     super.didChangeDependencies();
     _readerProvider = context.read<ReaderProvider>();
     _libraryProvider = context.read<LibraryProvider>();
+    final route = ModalRoute.of(context);
+    if (_activityRoute != route) {
+      appRouteObserver.unsubscribe(this);
+      _activityRoute = route;
+      if (route != null) appRouteObserver.subscribe(this, route);
+    }
     final keepOn = context.read<SettingsProvider>().reader.keepScreenOn;
     if (keepOn != _lastKeepOn) {
       _applyWakelock(keepOn);
@@ -151,21 +181,89 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
-  Future<void> _recordChapterSession(Chapter chapter, String content) async {
+  String _currentReadingUserId() {
     final user = Provider.of<AuthProvider?>(
       context,
       listen: false,
     )?.currentUser;
-    try {
-      await _libraryProvider.recordChapterReadSession(
-        chapter.id,
-        content,
-        novelId: widget.novel.id,
-        userId: user == null || user.isGuest ? '' : user.id,
-      );
-    } catch (error) {
-      debugPrint('Không ghi được thống kê đọc chương: $error');
+    return user == null || user.isGuest ? '' : user.id;
+  }
+
+  bool get _readingVisible =>
+      _appState == AppLifecycleState.resumed &&
+      _routeVisible &&
+      (_activityRoute?.isCurrent ?? true);
+
+  void _syncReadingActivity(ReaderProvider reader, String userId) {
+    final chapter = reader.currentChapter;
+    final content = reader.content;
+    final ready =
+        chapter?.novelId == widget.novel.id &&
+        content != null &&
+        content.trim().isNotEmpty &&
+        !reader.isLoadingContent;
+    final nextChapter = ready ? chapter : null;
+    final nextContent = ready ? content : null;
+    if (_activityChapter?.id != nextChapter?.id ||
+        _activityContent != nextContent ||
+        _activityUserId != userId) {
+      _activityClock.setActive(false);
+      _flushActiveReading();
+      _activityChapter = nextChapter;
+      _activityContent = nextContent;
+      _activityUserId = userId;
     }
+    _activityClock.setActive(nextChapter != null && _readingVisible);
+  }
+
+  void _flushActiveReading() {
+    final duration = _activityClock.take();
+    final chapter = _activityChapter;
+    final content = _activityContent;
+    if (duration <= Duration.zero || chapter == null || content == null) return;
+    unawaited(
+      _libraryProvider
+          .recordActiveReading(
+            novelId: widget.novel.id,
+            chapterId: chapter.id,
+            content: content,
+            activeDuration: duration,
+            userId: _activityUserId,
+          )
+          .catchError((Object error) {
+            debugPrint('Chưa ghi được thời gian đọc: $error');
+          }),
+    );
+  }
+
+  void _pauseReadingActivity() {
+    _activityClock.setActive(false);
+    _flushActiveReading();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _pauseReadingActivity();
+    _appState = state;
+    if (mounted) _syncReadingActivity(_readerProvider, _currentReadingUserId());
+  }
+
+  @override
+  void didPushNext() {
+    _routeVisible = false;
+    _pauseReadingActivity();
+  }
+
+  @override
+  void didPopNext() {
+    _routeVisible = true;
+    _syncReadingActivity(_readerProvider, _currentReadingUserId());
+  }
+
+  @override
+  void didPop() {
+    _routeVisible = false;
+    _pauseReadingActivity();
   }
 
   void _toggleAutoScroll() {
@@ -605,6 +703,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   @override
   void dispose() {
+    _activityTimer?.cancel();
+    _pauseReadingActivity();
+    appRouteObserver.unsubscribe(this);
+    WidgetsBinding.instance.removeObserver(this);
     _stopListen();
     _autoScrollTimer?.cancel();
     _saveDebounce?.cancel();
@@ -619,6 +721,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
   @override
   Widget build(BuildContext context) {
     final rp = context.watch<ReaderProvider>();
+    final user = context.watch<AuthProvider?>()?.currentUser;
+    _syncReadingActivity(rp, user == null || user.isGuest ? '' : user.id);
     final settings = context.watch<SettingsProvider>().reader;
     final chapter = rp.currentChapter;
     final bg = settings.background;
@@ -637,11 +741,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
       _scheduleRestoreIfNeeded(chapter, settings.horizontalPageMode, pageCount);
       if (_loadedCommentsForChapterId != chapter.id) {
         _loadedCommentsForChapterId = chapter.id;
-        final contentSnapshot = rp.content!;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           _loadCommentsForChapter(chapter.id);
-          unawaited(_recordChapterSession(chapter, contentSnapshot));
         });
       }
     }
