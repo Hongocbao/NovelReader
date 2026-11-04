@@ -17,6 +17,7 @@ import '../utils/format.dart';
 import 'supabase_database.dart';
 import 'reading_history_cache.dart';
 import 'v2_database_store.dart';
+import 'custom_novel_backup.dart';
 
 /// Lớp truy cập SQLite của ứng dụng: tạo bảng, CRUD và nạp dữ liệu mẫu.
 ///
@@ -646,13 +647,19 @@ class AppDatabase {
         ...novel.toMap(),
         'search_text': Format.normalize('${novel.title} ${novel.author}'),
       });
+      var nextChapterId =
+          (Sqflite.firstIntValue(
+                await txn.rawQuery('SELECT MIN(id) FROM chuong WHERE id < 0'),
+              ) ??
+              0) -
+          1;
       for (var i = 0; i < chapters.length; i++) {
         final idx = i + 1;
         final ch = chapters[i];
         await txn.insert(
           'chuong',
           Chapter(
-            id: newId * 10000 + idx,
+            id: nextChapterId--,
             novelId: newId,
             chapterIndex: idx,
             title: ch.title.trim(),
@@ -707,15 +714,20 @@ class AppDatabase {
         : normalizedTitle.startsWith('Chương')
         ? normalizedTitle
         : 'Chương $nextIdx: $normalizedTitle';
-    final chapter = Chapter(
-      id: novelId * 10000 + nextIdx,
-      novelId: novelId,
-      chapterIndex: nextIdx,
-      title: chapterTitle,
-      content: normalizedContent,
-      isDownloaded: true,
-    );
-    await db.transaction((txn) async {
+    return db.transaction((txn) async {
+      final chapter = Chapter(
+        id:
+            (Sqflite.firstIntValue(
+                  await txn.rawQuery('SELECT MIN(id) FROM chuong WHERE id < 0'),
+                ) ??
+                0) -
+            1,
+        novelId: novelId,
+        chapterIndex: nextIdx,
+        title: chapterTitle,
+        content: normalizedContent,
+        isDownloaded: true,
+      );
       await txn.insert('chuong', chapter.toMap());
       await txn.update(
         'truyen',
@@ -726,8 +738,8 @@ class AppDatabase {
         where: 'id = ?',
         whereArgs: [novelId],
       );
+      return chapter;
     });
-    return chapter;
   }
 
   // ---------------------------------------------------------------------------
@@ -1553,31 +1565,43 @@ class AppDatabase {
   Future<String> exportUserBackupJson({String? userId}) async {
     final uid = _historyUserId(userId);
     final db = await database;
-    final libraryRows = await db.query('tu_sach');
-    final historyRows = await db.query('lich_su_doc');
-    final bookmarkRows = await db.query('dau_trang');
-    final quoteRows = await db.query('trich_dan');
-    final sessionRows = await db.query('phien_doc');
-    final localSessionRows = await db.query('phien_doc_cuc_bo');
-    final cachedHistoryRows = await db.query(
-      ReadingHistoryCache.table,
-      where: 'user_id = ?',
-      whereArgs: [uid],
-    );
+    return db.transaction((db) async {
+      final libraryRows = await db.query('tu_sach');
+      final historyRows = await db.query('lich_su_doc');
+      final bookmarkRows = await db.query('dau_trang');
+      final quoteRows = await db.query('trich_dan');
+      final sessionRows = await db.query('phien_doc');
+      final localSessionRows = await db.query('phien_doc_cuc_bo');
+      final cachedHistoryRows = await db.query(
+        ReadingHistoryCache.table,
+        where: 'user_id = ?',
+        whereArgs: [uid],
+      );
 
-    return const JsonEncoder.withIndent('  ').convert({
-      'backup_version': 3,
-      'exported_at': DateTime.now().toIso8601String(),
-      'library': libraryRows,
-      'reading_history': historyRows,
-      'bookmarks': bookmarkRows,
-      'quotes': quoteRows,
-      'reading_sessions': sessionRows,
-      'local_reading_sessions': localSessionRows,
-      'cached_reading_history': [
-        for (final row in cachedHistoryRows)
-          Map<String, Object?>.from(row)..remove('user_id'),
-      ],
+      return const JsonEncoder.withIndent('  ').convert({
+        'backup_version': 4,
+        'custom_novels': await db.query(
+          'truyen',
+          where: 'id < 0',
+          orderBy: 'id',
+        ),
+        'custom_chapters': await db.query(
+          'chuong',
+          where: 'novel_id < 0',
+          orderBy: 'novel_id, chapter_index',
+        ),
+        'exported_at': DateTime.now().toIso8601String(),
+        'library': libraryRows,
+        'reading_history': historyRows,
+        'bookmarks': bookmarkRows,
+        'quotes': quoteRows,
+        'reading_sessions': sessionRows,
+        'local_reading_sessions': localSessionRows,
+        'cached_reading_history': [
+          for (final row in cachedHistoryRows)
+            Map<String, Object?>.from(row)..remove('user_id'),
+        ],
+      });
     });
   }
 
@@ -1590,6 +1614,7 @@ class AppDatabase {
     }
     final db = await database;
     await db.transaction((txn) async {
+      final imported = await CustomNovelBackup.restore(txn, decoded);
       const backupTables = <String, String>{
         'library': 'tu_sach',
         'reading_history': 'lich_su_doc',
@@ -1603,9 +1628,34 @@ class AppDatabase {
         if (list is! List) continue;
         for (final item in list) {
           if (item is Map<String, dynamic>) {
+            final row = imported.remap(item);
+            // ID bookmark/quote tự tăng thuộc máy nguồn, không thay thế mục
+            // không liên quan đang dùng cùng ID trên máy đích.
+            if (entry.key == 'bookmarks' || entry.key == 'quotes') {
+              row.remove('id');
+              final keys = row.keys.toList();
+              final existing = await txn.query(
+                entry.value,
+                columns: ['id'],
+                where: keys.map((k) => '$k IS ?').join(' AND '),
+                whereArgs: keys.map((k) => row[k]).toList(),
+                limit: 1,
+              );
+              if (existing.isNotEmpty) continue;
+              if (entry.key == 'bookmarks' && (row['novel_id'] as int) < 0) {
+                row['id'] =
+                    (Sqflite.firstIntValue(
+                          await txn.rawQuery(
+                            'SELECT MIN(id) FROM dau_trang WHERE id < 0',
+                          ),
+                        ) ??
+                        0) -
+                    1;
+              }
+            }
             await txn.insert(
               entry.value,
-              item,
+              row,
               conflictAlgorithm: ConflictAlgorithm.replace,
             );
           }
