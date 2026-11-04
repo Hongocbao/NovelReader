@@ -105,3 +105,5 @@ Dấu trang Khách lưu vị trí và tên chương trên thiết bị; dấu tr
 Khi bắt đầu đọc truyện trong mục Muốn đọc, ứng dụng lưu vị trí trước rồi chuyển danh mục sang Đang đọc ở nền. Mạng chậm/lỗi ở bước đổi danh mục không chặn các lần lưu vị trí tiếp theo; yêu cầu lỗi được thử lại sau khi tải lại dữ liệu hoặc kết nối lại.
 
 Trích dẫn Khách và trích dẫn từ truyện tự nhập được lưu trên thiết bị, theo tài khoản đang dùng. Trích dẫn thành viên của truyện trên máy chủ có bản đệm để xem khi mất mạng. Bản sao lưu phiên bản 7 chỉ xuất trích dẫn của tài khoản được chọn; dữ liệu trích dẫn cũ chưa gắn tài khoản được giữ trong chế độ Khách.
+
+Thống kê cục bộ gộp các lần ghi trùng cùng tài khoản/truyện/chương khi yêu cầu trước còn chờ. Tổng theo ngày, log đọc và cập nhật tiến độ nhiệm vụ dùng giao dịch SQLite để tránh mất số cộng dồn khi ghi đồng thời. Phút đọc hiện là ước tính theo số từ, chưa phải thời gian đo bằng đồng hồ hoạt động.

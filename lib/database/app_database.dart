@@ -1396,85 +1396,94 @@ class AppDatabase {
     final db = await database;
     final now = date ?? DateTime.now();
     final key = _dateKeyOf(now);
-    final existing = await db.query(
-      'phien_doc',
-      where: 'date_key = ?',
-      whereArgs: [key],
-    );
-    if (existing.isEmpty) {
-      await db.insert('phien_doc', {
-        'date_key': key,
-        'words_read': words,
-        'minutes_read': minutes,
-      });
-    } else {
-      final prevWords = (existing.first['words_read'] as int?) ?? 0;
-      final prevMinutes = (existing.first['minutes_read'] as int?) ?? 0;
-      await db.update(
-        'phien_doc',
-        {
-          'words_read': prevWords + words,
-          'minutes_read': prevMinutes + minutes,
-        },
-        where: 'date_key = ?',
-        whereArgs: [key],
-      );
-    }
-
-    // Keep a separate, mergeable aggregate for device-only and offline
-    // sessions. The main local aggregate also contains cloud-synced sessions
-    // and must not be blindly added to cloud totals.
-    if (novelId < 0 ||
-        (isSupabaseReady && novelId >= 0 && !recordedInCloud) ||
-        !isSupabaseReady) {
-      final localSession = await db.query(
-        'phien_doc_cuc_bo',
-        where: 'date_key = ?',
-        whereArgs: [key],
-        limit: 1,
-      );
-      final localWords = (localSession.firstOrNull?['words_read'] as int?) ?? 0;
-      final localMinutes =
-          (localSession.firstOrNull?['minutes_read'] as int?) ?? 0;
-      await db.insert('phien_doc_cuc_bo', {
-        'date_key': key,
-        'words_read': localWords + words,
-        'minutes_read': localMinutes + minutes,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
-    }
-
+    final activeChapterQuests =
+        userId.isNotEmpty && novelId > 0 && chapterId > 0
+        ? (await V2DatabaseStore.getActiveQuests(db))
+              .where((quest) => quest.goalType == 'read_chapters')
+              .toList()
+        : null;
     final newlyReadQuestIds = <int>[];
-    if (userId.isNotEmpty && novelId > 0 && chapterId > 0) {
-      final activeChapterQuests = (await V2DatabaseStore.getActiveQuests(db))
-          .where((quest) => quest.goalType == 'read_chapters');
-      for (final quest in activeChapterQuests) {
-        final seenInQuestWindow = await db.query(
-          'nhat_ky_phien_doc',
-          columns: ['id'],
-          where: 'user_id = ? AND novel_id = ? AND chapter_id = ? AND ended_at >= ? AND ended_at <= ?',
-          whereArgs: [
-            userId,
-            novelId,
-            chapterId,
-            quest.startsAt.millisecondsSinceEpoch,
-            quest.endsAt.millisecondsSinceEpoch,
-          ],
+    // Không giữ khóa SQLite khi đang gọi máy chủ. Các tổng ngày, log và
+    // kiểm tra chương đã đọc được cập nhật cùng một giao dịch cục bộ.
+    await db.transaction((txn) async {
+      final existing = await txn.query(
+        'phien_doc',
+        where: 'date_key = ?',
+        whereArgs: [key],
+      );
+      if (existing.isEmpty) {
+        await txn.insert('phien_doc', {
+          'date_key': key,
+          'words_read': words,
+          'minutes_read': minutes,
+        });
+      } else {
+        final prevWords = (existing.first['words_read'] as int?) ?? 0;
+        final prevMinutes = (existing.first['minutes_read'] as int?) ?? 0;
+        await txn.update(
+          'phien_doc',
+          {
+            'words_read': prevWords + words,
+            'minutes_read': prevMinutes + minutes,
+          },
+          where: 'date_key = ?',
+          whereArgs: [key],
+        );
+      }
+
+      // Keep a separate, mergeable aggregate for device-only and offline
+      // sessions. The main local aggregate also contains cloud-synced sessions
+      // and must not be blindly added to cloud totals.
+      if (novelId < 0 ||
+          (isSupabaseReady && novelId >= 0 && !recordedInCloud) ||
+          !isSupabaseReady) {
+        final localSession = await txn.query(
+          'phien_doc_cuc_bo',
+          where: 'date_key = ?',
+          whereArgs: [key],
           limit: 1,
         );
-        if (seenInQuestWindow.isEmpty) newlyReadQuestIds.add(quest.id);
+        final localWords =
+            (localSession.firstOrNull?['words_read'] as int?) ?? 0;
+        final localMinutes =
+            (localSession.firstOrNull?['minutes_read'] as int?) ?? 0;
+        await txn.insert('phien_doc_cuc_bo', {
+          'date_key': key,
+          'words_read': localWords + words,
+          'minutes_read': localMinutes + minutes,
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
       }
-    }
 
-    await db.insert('nhat_ky_phien_doc', {
-      'user_id': userId,
-      'novel_id': novelId,
-      'chapter_id': chapterId,
-      'started_at': now
-          .subtract(Duration(minutes: minutes.clamp(1, 120)))
-          .millisecondsSinceEpoch,
-      'ended_at': now.millisecondsSinceEpoch,
-      'words_read': words,
-      'hour_of_day': now.hour,
+      if (activeChapterQuests != null) {
+        for (final quest in activeChapterQuests) {
+          final seenInQuestWindow = await txn.query(
+            'nhat_ky_phien_doc',
+            columns: ['id'],
+            where: 'user_id = ? AND novel_id = ? AND chapter_id = ? AND ended_at >= ? AND ended_at <= ?',
+            whereArgs: [
+              userId,
+              novelId,
+              chapterId,
+              quest.startsAt.millisecondsSinceEpoch,
+              quest.endsAt.millisecondsSinceEpoch,
+            ],
+            limit: 1,
+          );
+          if (seenInQuestWindow.isEmpty) newlyReadQuestIds.add(quest.id);
+        }
+      }
+
+      await txn.insert('nhat_ky_phien_doc', {
+        'user_id': userId,
+        'novel_id': novelId,
+        'chapter_id': chapterId,
+        'started_at': now
+            .subtract(Duration(minutes: minutes.clamp(1, 120)))
+            .millisecondsSinceEpoch,
+        'ended_at': now.millisecondsSinceEpoch,
+        'words_read': words,
+        'hour_of_day': now.hour,
+      });
     });
 
     if (userId.isNotEmpty) {

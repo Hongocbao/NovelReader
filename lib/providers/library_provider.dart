@@ -13,6 +13,13 @@ import '../utils/constants.dart';
 /// Kiểu sắp xếp tủ sách.
 enum LibrarySort { time, name }
 
+typedef _ChapterSessionKey = ({
+  int identity,
+  String userId,
+  int novelId,
+  int chapterId,
+});
+
 /// Quản lý tủ sách, lịch sử đọc (kèm vị trí cuộn) và bookmark.
 class LibraryProvider extends ChangeNotifier {
   LibraryProvider(this._db);
@@ -80,7 +87,8 @@ class LibraryProvider extends ChangeNotifier {
   List<ReadingSessionStat> _sessions = [];
   final Map<int, List<Bookmark>> _bookmarks = {};
   final Map<int, List<ChapterComment>> _comments = {};
-  final Set<int> _recordedChapterSessions = {};
+  final _recordedChapterSessions = <_ChapterSessionKey>{};
+  final _recordingChapterSessions = <_ChapterSessionKey, Future<void>>{};
   bool _loading = false;
   bool _loaded = false;
   String? _error;
@@ -506,9 +514,27 @@ class LibraryProvider extends ChangeNotifier {
     String content, {
     String userId = '',
     int novelId = 0,
-  }) async {
-    final revision = _identityRevision;
-    if (_recordedChapterSessions.contains(chapterId)) return;
+  }) {
+    if (_userId != null && userId != _userId) return Future<void>.value();
+    final key = (
+      identity: _identityRevision,
+      userId: userId,
+      novelId: novelId,
+      chapterId: chapterId,
+    );
+    if (_recordedChapterSessions.contains(key)) return Future<void>.value();
+    return _recordingChapterSessions[key] ??= _recordChapterSession(
+      key,
+      content,
+    ).whenComplete(() {
+      _recordingChapterSessions.remove(key);
+    });
+  }
+
+  Future<void> _recordChapterSession(
+    _ChapterSessionKey key,
+    String content,
+  ) async {
     // Bỏ thẻ ảnh để không đếm base64/đường dẫn ảnh thành "từ" của truyện tranh.
     final readable = content.replaceAll(
       RegExp(r'\[img\].*?\[/img\]', dotAll: true),
@@ -521,16 +547,18 @@ class LibraryProvider extends ChangeNotifier {
     await _db.recordReadingSession(
       words: words,
       minutes: minutes,
-      userId: userId,
-      novelId: novelId,
-      chapterId: chapterId,
+      userId: key.userId,
+      novelId: key.novelId,
+      chapterId: key.chapterId,
     );
     // Chỉ đánh dấu sau khi đã ghi local/cloud thành công để có thể thử lại
     // nếu ghi phiên đọc gặp lỗi tạm thời.
-    if (revision != _identityRevision) return;
-    _recordedChapterSessions.add(chapterId);
-    final sessions = await _db.getReadingSessions(userId: _userId);
-    if (revision != _identityRevision) return;
+    if (key.identity != _identityRevision) return;
+    _recordedChapterSessions.add(key);
+    final sessions = await _db.getReadingSessions(
+      userId: _userId ?? key.userId,
+    );
+    if (key.identity != _identityRevision) return;
     _sessions = sessions;
     notifyListeners();
   }

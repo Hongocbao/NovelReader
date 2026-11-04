@@ -483,43 +483,45 @@ class V2DatabaseStore {
       // client-controlled progress increment to authenticated users.
     }
     final quests = await getActiveQuests(db);
-    for (final q in quests.where(
-      (e) =>
-          e.goalType == goalType &&
-          e.startsAt.millisecondsSinceEpoch <=
-              DateTime.now().millisecondsSinceEpoch &&
-          e.endsAt.millisecondsSinceEpoch >=
-              DateTime.now().millisecondsSinceEpoch &&
-          (questIds == null || questIds.contains(e.id)),
-    )) {
-      final rows = await db.query(
-        'nhiem_vu_nguoi_dung',
-        where: 'user_id = ? AND quest_id = ?',
-        whereArgs: [userId, q.id],
-      );
-      final current = rows.isEmpty ? null : UserQuest.fromMap(rows.first);
-      if (current?.claimed ?? false) continue;
-      final newProgress = ((current?.progress ?? 0) + delta).clamp(
-        0,
-        q.goalValue,
-      );
-      final progressMap = {
-        'user_id': userId,
-        'quest_id': q.id,
-        'progress': newProgress,
-        'claimed': current?.claimed == true ? 1 : 0,
-      };
-      if (current == null) {
-        await db.insert('nhiem_vu_nguoi_dung', progressMap);
-      } else {
-        await db.update(
+    await db.transaction((txn) async {
+      for (final q in quests.where(
+        (e) =>
+            e.goalType == goalType &&
+            e.startsAt.millisecondsSinceEpoch <=
+                DateTime.now().millisecondsSinceEpoch &&
+            e.endsAt.millisecondsSinceEpoch >=
+                DateTime.now().millisecondsSinceEpoch &&
+            (questIds == null || questIds.contains(e.id)),
+      )) {
+        final rows = await txn.query(
           'nhiem_vu_nguoi_dung',
-          {'progress': newProgress},
           where: 'user_id = ? AND quest_id = ?',
           whereArgs: [userId, q.id],
         );
+        final current = rows.isEmpty ? null : UserQuest.fromMap(rows.first);
+        if (current?.claimed ?? false) continue;
+        final newProgress = ((current?.progress ?? 0) + delta).clamp(
+          0,
+          q.goalValue,
+        );
+        final progressMap = {
+          'user_id': userId,
+          'quest_id': q.id,
+          'progress': newProgress,
+          'claimed': current?.claimed == true ? 1 : 0,
+        };
+        if (current == null) {
+          await txn.insert('nhiem_vu_nguoi_dung', progressMap);
+        } else {
+          await txn.update(
+            'nhiem_vu_nguoi_dung',
+            {'progress': newProgress},
+            where: 'user_id = ? AND quest_id = ?',
+            whereArgs: [userId, q.id],
+          );
+        }
       }
-    }
+    });
   }
 
   static Future<void> cacheQuestClaim(
