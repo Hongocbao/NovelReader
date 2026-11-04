@@ -28,11 +28,25 @@ class LibraryProvider extends ChangeNotifier {
   String? _userId;
   int _identityRevision = 0;
   int _historyRevision = 0;
+  int _statsRevision = 0;
   bool _disposed = false;
   bool? _wasOnline;
   final _autoStartAttempts = <({int identity, int novelId})>{};
   final _autoStartsInFlight = <({int identity, int novelId})>{};
   final _shelfRemovalsInFlight = <({int identity, int novelId})>{};
+  final _activeRemainders =
+      <({int identity, String userId, String day}), Duration>{};
+  final _activeWords = <({int identity, String userId, String day}), int>{};
+  final _chapterActiveTime =
+      <
+        ({int identity, String userId, String day, int novelId, int chapterId}),
+        Duration
+      >{};
+  final _chapterActiveWords =
+      <
+        ({int identity, String userId, String day, int novelId, int chapterId}),
+        int
+      >{};
 
   /// Thử đồng bộ lịch sử đang chờ khi mạng trở lại, kể cả lúc đang đọc.
   void updateConnectivity(bool online) {
@@ -58,6 +72,10 @@ class LibraryProvider extends ChangeNotifier {
     _bookmarks.clear();
     _comments.clear();
     _recordedChapterSessions.clear();
+    _activeRemainders.clear();
+    _activeWords.clear();
+    _chapterActiveTime.clear();
+    _chapterActiveWords.clear();
     _autoStartAttempts.clear();
     _loaded = false;
     _loading = false;
@@ -148,6 +166,7 @@ class LibraryProvider extends ChangeNotifier {
     final uid = userId ?? _userId;
     final requestId = ++_loadRequestId;
     final historyRevision = _historyRevision;
+    final statsRevision = _statsRevision;
     _loading = true;
     _error = null;
     notifyListeners();
@@ -165,7 +184,9 @@ class LibraryProvider extends ChangeNotifier {
       }
       _items = _withProgress(_items);
       _quotes = results[2] as List<QuoteItem>;
-      _sessions = results[3] as List<ReadingSessionStat>;
+      if (statsRevision == _statsRevision) {
+        _sessions = results[3] as List<ReadingSessionStat>;
+      }
       _loaded = true;
     } catch (e) {
       if (requestId == _loadRequestId) {
@@ -508,6 +529,94 @@ class LibraryProvider extends ChangeNotifier {
   // Thống kê đọc sách & Sao lưu / Khôi phục JSON
   // ---------------------------------------------------------------------------
 
+  static int _readableWordCount(String content) {
+    final text = content
+        .replaceAll(RegExp(r'\[img\].*?\[/img\]', dotAll: true), ' ')
+        .trim();
+    return text.isEmpty ? 0 : text.split(RegExp(r'\s+')).length;
+  }
+
+  /// Gộp thời gian hoạt động, giữ phần lẻ giữa các chương/truyện trong ngày.
+  Future<void> recordActiveReading({
+    required int novelId,
+    required int chapterId,
+    required String content,
+    required Duration activeDuration,
+    String userId = '',
+    DateTime? date,
+  }) async {
+    if (_disposed ||
+        activeDuration <= Duration.zero ||
+        novelId == 0 ||
+        chapterId == 0 ||
+        (_userId != null && userId != _userId))
+      return;
+    final identity = _identityRevision;
+    final now = date ?? DateTime.now();
+    final day = '${now.year}-${now.month}-${now.day}';
+    final key = (identity: identity, userId: userId, day: day);
+    final chapterKey = (
+      identity: identity,
+      userId: userId,
+      day: day,
+      novelId: novelId,
+      chapterId: chapterId,
+    );
+    final elapsed =
+        (_chapterActiveTime[chapterKey] ?? Duration.zero) + activeDuration;
+    _chapterActiveTime[chapterKey] = elapsed;
+    final estimatedWords = (elapsed.inMilliseconds * 220 ~/ 60000).clamp(
+      0,
+      _readableWordCount(content),
+    );
+    final newWords = (estimatedWords - (_chapterActiveWords[chapterKey] ?? 0))
+        .clamp(0, estimatedWords);
+    _chapterActiveWords[chapterKey] = estimatedWords;
+    _activeWords[key] = (_activeWords[key] ?? 0) + newWords;
+    final accumulated =
+        (_activeRemainders[key] ?? Duration.zero) + activeDuration;
+    final minutes = accumulated.inMinutes.clamp(0, 120);
+    _activeRemainders[key] = accumulated - Duration(minutes: minutes);
+    if (minutes == 0) return;
+    final words = (_activeWords[key] ?? 0).clamp(0, 100000);
+    _activeWords[key] = (_activeWords[key] ?? 0) - words;
+    try {
+      await _db.recordReadingSession(
+        words: words,
+        minutes: minutes,
+        date: now,
+        userId: userId,
+        novelId: novelId,
+        chapterId: chapterId,
+      );
+    } catch (_) {
+      if (identity == _identityRevision && !_disposed) {
+        _activeRemainders[key] =
+            (_activeRemainders[key] ?? Duration.zero) +
+            Duration(minutes: minutes);
+        _activeWords[key] = (_activeWords[key] ?? 0) + words;
+      }
+      rethrow;
+    }
+    await _refreshReadingSessions(identity, userId);
+  }
+
+  Future<void> _refreshReadingSessions(int identity, String userId) async {
+    if (identity != _identityRevision || _disposed) return;
+    final request = ++_statsRevision;
+    try {
+      final sessions = await _db.getReadingSessions(userId: _userId ?? userId);
+      if (identity != _identityRevision ||
+          request != _statsRevision ||
+          _disposed)
+        return;
+      _sessions = sessions;
+      notifyListeners();
+    } catch (error) {
+      debugPrint('Phiên đọc đã ghi, chưa tải lại được thống kê: $error');
+    }
+  }
+
   /// Ghi nhận 1 chương vừa được mở đọc vào bảng `reading_sessions` (mỗi chương tính 1 lần/phiên).
   Future<void> recordChapterReadSession(
     int chapterId,
@@ -523,12 +632,10 @@ class LibraryProvider extends ChangeNotifier {
       chapterId: chapterId,
     );
     if (_recordedChapterSessions.contains(key)) return Future<void>.value();
-    return _recordingChapterSessions[key] ??= _recordChapterSession(
-      key,
-      content,
-    ).whenComplete(() {
-      _recordingChapterSessions.remove(key);
-    });
+    return _recordingChapterSessions[key] ??=
+        _recordChapterSession(key, content).whenComplete(() {
+          _recordingChapterSessions.remove(key);
+        });
   }
 
   Future<void> _recordChapterSession(
@@ -536,13 +643,7 @@ class LibraryProvider extends ChangeNotifier {
     String content,
   ) async {
     // Bỏ thẻ ảnh để không đếm base64/đường dẫn ảnh thành "từ" của truyện tranh.
-    final readable = content.replaceAll(
-      RegExp(r'\[img\].*?\[/img\]', dotAll: true),
-      ' ',
-    );
-    final words = readable.trim().isEmpty
-        ? 0
-        : readable.trim().split(RegExp(r'\s+')).length;
+    final words = _readableWordCount(content);
     final minutes = (words / 220).ceil().clamp(1, 60);
     await _db.recordReadingSession(
       words: words,
@@ -555,12 +656,7 @@ class LibraryProvider extends ChangeNotifier {
     // nếu ghi phiên đọc gặp lỗi tạm thời.
     if (key.identity != _identityRevision) return;
     _recordedChapterSessions.add(key);
-    final sessions = await _db.getReadingSessions(
-      userId: _userId ?? key.userId,
-    );
-    if (key.identity != _identityRevision) return;
-    _sessions = sessions;
-    notifyListeners();
+    await _refreshReadingSessions(key.identity, key.userId);
   }
 
   /// Xuất dữ liệu cá nhân ra chuỗi JSON.

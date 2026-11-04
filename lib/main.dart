@@ -28,6 +28,7 @@ import 'screens/auth/splash_gate.dart';
 import 'screens/config_error_screen.dart';
 import 'utils/constants.dart';
 import 'utils/theme.dart';
+import 'utils/app_route_observer.dart';
 
 /// Điểm khởi chạy ứng dụng NovelReader: kết nối Cloud Supabase làm Database chính.
 Future<void> main() async {
@@ -143,6 +144,7 @@ class NovelReaderApp extends StatelessWidget {
           darkTheme: AppTheme.dark,
           themeMode: settings.themeMode,
           home: const SplashGate(),
+          navigatorObservers: [appRouteObserver],
         ),
       ),
     );
