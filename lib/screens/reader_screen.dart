@@ -93,6 +93,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   int _ttsSessionId = 0;
   String _searchKeyword = '';
   double _currentRatio = 0;
+  bool _metricsRestoreScheduled = false;
   double? _pendingRestoreRatio;
   int? _restoredForChapterId;
   int? _loadedCommentsForChapterId;
@@ -162,6 +163,42 @@ class _ReaderScreenState extends State<ReaderScreen>
     }
     _saveDebounce?.cancel();
     _saveDebounce = Timer(const Duration(milliseconds: 400), _persistNow);
+  }
+
+  bool _onReaderMetricsChanged(ScrollMetricsNotification notification) {
+    if (notification.depth != 0 ||
+        !_readerRouteActive ||
+        _restoredHorizontalMode != false ||
+        _metricsRestoreScheduled) {
+      return false;
+    }
+    final chapterId = _readerProvider.currentChapter?.id;
+    if (chapterId == null ||
+        chapterId != _restoredForChapterId ||
+        _readerProvider.isLoadingContent) {
+      return false;
+    }
+    _metricsRestoreScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _metricsRestoreScheduled = false;
+      if (!mounted ||
+          !_readerRouteActive ||
+          !_scrollCtrl.hasClients ||
+          _restoredHorizontalMode != false ||
+          _readerProvider.currentChapter?.id != chapterId ||
+          _restoredForChapterId != chapterId) {
+        return;
+      }
+      // Async recap/images can change the scroll extent without notifying
+      // ScrollController. Keep the same logical reading position after layout.
+      final position = _scrollCtrl.position;
+      final target = (_currentRatio * position.maxScrollExtent).clamp(
+        0.0,
+        position.maxScrollExtent,
+      );
+      if ((position.pixels - target).abs() > .5) _scrollCtrl.jumpTo(target);
+    });
+    return false;
   }
 
   Future<void> _loadCommentsForChapter(int chapterId) async {
@@ -918,7 +955,10 @@ class _ReaderScreenState extends State<ReaderScreen>
                     }
                   },
                   child: SafeArea(
-                    child: _buildBody(rp, chapter, paragraphs, settings),
+                    child: NotificationListener<ScrollMetricsNotification>(
+                      onNotification: _onReaderMetricsChanged,
+                      child: _buildBody(rp, chapter, paragraphs, settings),
+                    ),
                   ),
                 ),
                 // Nút Quay lại nổi cố định ở góc trên trái khi thanh công cụ đang ẩn
@@ -1224,6 +1264,9 @@ class _ReaderScreenState extends State<ReaderScreen>
           RecapBannerCard(
             novelId: widget.novel.id,
             currentChapterIndex: chapter.chapterIndex,
+            source: context.read<ReaderProvider>(),
+            version: widget.novel.updatedAt.millisecondsSinceEpoch,
+            userKey: context.watch<AuthProvider?>()?.currentUser.id ?? '',
           ),
           const SizedBox(height: 12),
           for (final p in paragraphs)
@@ -1385,9 +1428,13 @@ class _ReaderScreenState extends State<ReaderScreen>
           label: const Text('Từ điển thuật ngữ'),
           onPressed: () => showModalBottomSheet<void>(
             context: context,
-            builder: (_) => GlossarySheet(
+            builder: (sheetContext) => GlossarySheet(
               novelId: widget.novel.id,
               currentChapterIndex: chapter.chapterIndex,
+              source: context.read<ReaderProvider>(),
+              version: widget.novel.updatedAt.millisecondsSinceEpoch,
+              userKey:
+                  sheetContext.watch<AuthProvider?>()?.currentUser.id ?? '',
             ),
           ),
         ),

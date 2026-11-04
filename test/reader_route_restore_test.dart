@@ -5,12 +5,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:novel_reader/database/app_database.dart';
 import 'package:novel_reader/models/bookmark.dart';
 import 'package:novel_reader/models/chapter.dart';
+import 'package:novel_reader/models/chapter_summary.dart';
 import 'package:novel_reader/models/library_item.dart';
 import 'package:novel_reader/models/novel.dart';
 import 'package:novel_reader/models/reading_history.dart';
 import 'package:novel_reader/providers/library_provider.dart';
 import 'package:novel_reader/providers/reader_provider.dart';
 import 'package:novel_reader/providers/settings_provider.dart';
+import 'package:novel_reader/repositories/reader_extras_source.dart';
 import 'package:novel_reader/screens/reader_screen.dart';
 import 'package:novel_reader/utils/app_route_observer.dart';
 import 'package:novel_reader/utils/constants.dart';
@@ -46,6 +48,21 @@ Chapter chapter(int novel, int index) => Chapter(
 );
 
 class _Database extends AppDatabase {
+  Completer<ReaderExtrasPage<ChapterSummary>>? recapReply;
+  @override
+  Future<ReaderExtrasPage<ChapterSummary>> getSummariesForReader(
+    int novelId,
+    int chapterIndex, {
+    int version = 0,
+    bool offline = false,
+  }) => novelId == 1 && recapReply != null
+      ? recapReply!.future
+      : super.getSummariesForReader(
+          novelId,
+          chapterIndex,
+          version: version,
+          offline: offline,
+        );
   final histories = <int, ReadingHistory>{};
   Completer<void>? bookmarksGate;
   int chapterReads = 0;
@@ -146,6 +163,37 @@ void main() {
     );
     await tester.pumpAndSettle();
   }
+
+  testWidgets(
+    'A delayed recap preserves reading ratio when its height changes',
+    (tester) async {
+      db.recapReply = Completer<ReaderExtrasPage<ChapterSummary>>();
+      await open(tester);
+      final scroll = tester
+          .state<ScrollableState>(find.byType(Scrollable).first)
+          .position;
+      final before = scroll.pixels / scroll.maxScrollExtent;
+      final oldExtent = scroll.maxScrollExtent;
+      db.recapReply!.complete(
+        ReaderExtrasPage([
+          ChapterSummary(
+            chapterId: 11,
+            novelId: 1,
+            chapterIndex: 1,
+            summary: List.filled(120, 'Tóm tắt đã tải từ tác giả').join(' '),
+          ),
+        ]),
+      );
+      await tester.pumpAndSettle();
+      expect(scroll.maxScrollExtent, greaterThan(oldExtent));
+      expect(scroll.pixels / scroll.maxScrollExtent, closeTo(before, .001));
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      expect(library.historyFor(1)!.scrollOffset, closeTo(before, .001));
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   for (final horizontal in [false, true]) {
     for (final sameBook in [false, true]) {

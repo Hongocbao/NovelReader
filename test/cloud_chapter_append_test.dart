@@ -318,7 +318,9 @@ void main() {
       expect(requests, hasLength(2));
       expect(requests[1].url.queryParameters['offset'], '1000');
       expect(
-        requests.every((r) => r.url.queryParameters['order'] == 'id.asc.nullslast'),
+        requests.every(
+          (r) => r.url.queryParameters['order'] == 'id.asc.nullslast',
+        ),
         isTrue,
       );
       expect(
@@ -332,4 +334,57 @@ void main() {
       );
     },
   );
+
+  test(
+    'Reader glossary query filters by book/chapter and pages past 1000 terms',
+    () async {
+      reply = (_) async => jsonReply([
+        for (
+          var i = requests.length == 1 ? 1 : 1001;
+          i <= (requests.length == 1 ? 1000 : 1001);
+          i++
+        )
+          {
+            'id': i,
+            'novel_id': 9,
+            'first_chapter_index': 1,
+            'term': 'Thuật ngữ $i',
+            'meaning': 'Giải nghĩa',
+          },
+      ]);
+      final result = await db.getReaderGlossary(9, 2);
+      expect(result, hasLength(1001));
+      expect(requests, hasLength(2));
+      expect(
+        requests
+            .singleWhere((r) => r.url.queryParameters['offset'] == '1000')
+            .url
+            .path,
+        '/rest/v1/thuat_ngu',
+      );
+      for (final request in requests) {
+        expect(request.url.queryParameters['novel_id'], 'eq.9');
+        expect(request.url.queryParameters['first_chapter_index'], 'lte.2');
+      }
+      expect(db.extrasUserId, '');
+    },
+  );
+
+  test('Reader recap query requests only the three latest summaries within the chapter', () async {
+    reply = (_) async => jsonReply([
+      for (var i = 3; i >= 1; i--)
+        {
+          'chapter_id': 900 + i,
+          'novel_id': 9,
+          'chapter_index': i,
+          'summary': 'Tóm tắt $i',
+        },
+    ]);
+    final result = await db.getReaderSummaries(9, 3);
+    expect(result.map((s) => s.chapterIndex), [3, 2, 1]);
+    expect(requests.single.url.path, '/rest/v1/tom_tat_chuong');
+    expect(requests.single.url.queryParameters['novel_id'], 'eq.9');
+    expect(requests.single.url.queryParameters['chapter_index'], 'lte.3');
+    expect(requests.single.url.queryParameters['limit'], '3');
+  });
 }

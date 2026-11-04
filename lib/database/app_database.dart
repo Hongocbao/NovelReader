@@ -8,6 +8,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/bookmark.dart';
 import '../models/chapter.dart';
+import '../models/chapter_summary.dart';
+import '../models/glossary_term.dart';
 import '../models/library_item.dart';
 import '../models/novel.dart';
 import '../models/reading_history.dart';
@@ -16,6 +18,7 @@ import '../repositories/library_remote.dart';
 import '../repositories/bookmark_remote.dart';
 import '../repositories/quote_remote.dart';
 import '../repositories/reading_stats_remote.dart';
+import '../repositories/reader_extras_source.dart';
 import '../utils/constants.dart';
 import '../utils/format.dart';
 import '../utils/portable_backup_images.dart';
@@ -27,6 +30,7 @@ import 'library_cache.dart';
 import 'bookmark_cache.dart';
 import 'quote_store.dart';
 import 'reading_stats_cache.dart';
+import 'reader_extras_cache.dart';
 
 /// Lớp truy cập SQLite của ứng dụng: tạo bảng, CRUD và nạp dữ liệu mẫu.
 ///
@@ -37,7 +41,7 @@ import 'reading_stats_cache.dart';
 ///
 /// GHI CHÚ: Khi có backend thật (Firebase/Firestore, REST API...), chỉ cần
 /// thay phần thân của [fetchChapterContent] và [_loadSampleData].
-class AppDatabase {
+class AppDatabase implements ReaderExtrasSource {
   /// [factory]: cho phép truyền factory khác (ví dụ ffi khi chạy test).
   /// [path]: đường dẫn DB, mặc định nằm trong thư mục databases của máy.
   /// [sampleJsonLoader]: hàm đọc chuỗi JSON mẫu (mặc định đọc từ assets).
@@ -49,12 +53,14 @@ class AppDatabase {
     BookmarkRemote? bookmarkRemote,
     QuoteRemote? quoteRemote,
     ReadingStatsRemote? statsRemote,
+    ReaderExtrasRemote? extrasRemote,
     Future<String> Function()? sampleJsonLoader,
   }) : _historyRemoteOverride = historyRemote,
        _libraryRemoteOverride = libraryRemote,
        _bookmarkRemoteOverride = bookmarkRemote,
        _quoteRemoteOverride = quoteRemote,
        _statsRemoteOverride = statsRemote,
+       _extrasRemoteOverride = extrasRemote,
        _sampleJsonLoader =
            sampleJsonLoader ??
            (() => rootBundle.loadString(AppInfo.sampleDataAsset));
@@ -74,6 +80,112 @@ class AppDatabase {
   final QuoteRemote? _quoteRemoteOverride;
   QuoteStore? _quotes;
   final ReadingStatsRemote? _statsRemoteOverride;
+  final ReaderExtrasRemote? _extrasRemoteOverride;
+  ReaderExtrasCache? _extrasCache;
+  ReaderExtrasRemote? get _extrasRemote =>
+      _extrasRemoteOverride ??
+      (isSupabaseReady ? SupabaseDatabase.instance : null);
+
+  @override
+  Future<ReaderExtrasPage<GlossaryTerm>> getGlossaryForReader(
+    int novelId,
+    int chapterIndex, {
+    int version = 0,
+    bool offline = false,
+  }) async {
+    if (chapterIndex < 1) return ReaderExtrasPage([]);
+    final remote = novelId > 0 ? _extrasRemote : null;
+    final db = await database;
+    if (remote == null) {
+      return ReaderExtrasPage(
+        await V2DatabaseStore.getGlossaryForNovel(
+          db,
+          novelId,
+          maxChapterIndex: chapterIndex,
+        ),
+      );
+    }
+    final uid = remote.extrasUserId;
+    List<GlossaryTerm> safe(Iterable<GlossaryTerm> terms) =>
+        terms
+            .where(
+              (t) =>
+                  t.novelId == novelId &&
+                  t.firstChapterIndex >= 1 &&
+                  t.firstChapterIndex <= chapterIndex,
+            )
+            .toList()
+          ..sort((a, b) => a.firstChapterIndex.compareTo(b.firstChapterIndex));
+    final page = await (_extrasCache ??= ReaderExtrasCache(db)).load(
+      userId: uid,
+      novelId: novelId,
+      kind: 'glossary',
+      chapterIndex: chapterIndex,
+      version: version,
+      offline: offline,
+      isCurrentUser: () => remote.extrasUserId == uid,
+      fetch: () async => [
+        for (final t in safe(
+          await remote.getReaderGlossary(novelId, chapterIndex),
+        ))
+          t.toMap(),
+      ],
+    );
+    return ReaderExtrasPage(
+      safe(page.items.map(GlossaryTerm.fromMap)),
+      fromCache: page.fromCache,
+    );
+  }
+
+  @override
+  Future<ReaderExtrasPage<ChapterSummary>> getSummariesForReader(
+    int novelId,
+    int chapterIndex, {
+    int version = 0,
+    bool offline = false,
+  }) async {
+    if (chapterIndex < 1) return ReaderExtrasPage([]);
+    final remote = novelId > 0 ? _extrasRemote : null;
+    final db = await database;
+    if (remote == null) {
+      return ReaderExtrasPage(
+        await V2DatabaseStore.getSummariesUpTo(db, novelId, chapterIndex),
+      );
+    }
+    final uid = remote.extrasUserId;
+    List<ChapterSummary> safe(Iterable<ChapterSummary> summaries) =>
+        (summaries
+                .where(
+                  (s) =>
+                      s.novelId == novelId &&
+                      s.chapterIndex >= 1 &&
+                      s.chapterIndex <= chapterIndex,
+                )
+                .toList()
+              ..sort((a, b) => b.chapterIndex.compareTo(a.chapterIndex)))
+            .take(3)
+            .toList();
+    final page = await (_extrasCache ??= ReaderExtrasCache(db)).load(
+      userId: uid,
+      novelId: novelId,
+      kind: 'recap',
+      chapterIndex: chapterIndex,
+      version: version,
+      offline: offline,
+      isCurrentUser: () => remote.extrasUserId == uid,
+      fetch: () async => [
+        for (final s in safe(
+          await remote.getReaderSummaries(novelId, chapterIndex),
+        ))
+          s.toMap(),
+      ],
+    );
+    return ReaderExtrasPage(
+      safe(page.items.map(ChapterSummary.fromMap)),
+      fromCache: page.fromCache,
+    );
+  }
+
   ReadingStatsCache? _statsCache;
   ReadingStatsRemote? get _statsRemote =>
       _statsRemoteOverride ??
@@ -289,6 +401,7 @@ class AppDatabase {
     await ReadingHistoryCache.ensureSchema(db);
     await LibraryCache.ensureSchema(db);
     await BookmarkCache.ensureSchema(db);
+    await ReaderExtrasCache.ensureSchema(db);
     await db.execute('''
       CREATE TABLE IF NOT EXISTS trich_dan (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1755,5 +1868,6 @@ class AppDatabase {
     _bookmarkCache = null;
     _quotes = null;
     _statsCache = null;
+    _extrasCache = null;
   }
 }

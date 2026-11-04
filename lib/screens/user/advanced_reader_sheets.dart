@@ -7,21 +7,26 @@ import '../../database/app_database.dart';
 import '../../database/v2_database_store.dart';
 import '../../models/chapter_summary.dart';
 import '../../models/glossary_term.dart';
+import '../../repositories/reader_extras_source.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/quest_provider.dart';
 
-/// Thẻ tóm tắt "Previously on..." (Recap) khi độc giả quay lại đọc truyện (Mục 5.3).
-/// Cam kết chống Spoil: Chỉ hiển thị tóm tắt của các chương `<= currentChapterIndex`.
+/// Tóm tắt và thuật ngữ chỉ sử dụng dữ liệu trong phạm vi chương đang đọc.
 class RecapBannerCard extends StatefulWidget {
   final int novelId;
   final int currentChapterIndex;
+  final int version;
+  final String userKey;
+  final ReaderExtrasSource? source;
 
   const RecapBannerCard({
     super.key,
     required this.novelId,
     required this.currentChapterIndex,
+    this.version = 0,
+    this.userKey = '',
+    this.source,
   });
-
   @override
   State<RecapBannerCard> createState() => _RecapBannerCardState();
 }
@@ -29,6 +34,10 @@ class RecapBannerCard extends StatefulWidget {
 class _RecapBannerCardState extends State<RecapBannerCard> {
   List<ChapterSummary> _summaries = [];
   bool _dismissed = false;
+  bool _loading = true;
+  bool _error = false;
+  bool _cached = false;
+  int _request = 0;
 
   @override
   void initState() {
@@ -39,32 +48,58 @@ class _RecapBannerCardState extends State<RecapBannerCard> {
   @override
   void didUpdateWidget(covariant RecapBannerCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.currentChapterIndex != widget.currentChapterIndex) {
+    final changedBook =
+        oldWidget.novelId != widget.novelId ||
+        oldWidget.userKey != widget.userKey;
+    if (changedBook) _dismissed = false;
+    if (changedBook ||
+        oldWidget.currentChapterIndex != widget.currentChapterIndex ||
+        oldWidget.version != widget.version ||
+        oldWidget.source != widget.source) {
       _loadSummaries();
     }
   }
 
   Future<void> _loadSummaries() async {
+    final request = ++_request;
+    final book = widget.novelId;
+    final index = widget.currentChapterIndex;
+    setState(() {
+      _summaries = [];
+      _loading = true;
+      _error = false;
+    });
     try {
-      final db = await AppDatabase.instance.database;
-      final list = await V2DatabaseStore.getSummariesUpTo(
-        db,
-        widget.novelId,
-        widget.currentChapterIndex,
-      );
-      if (mounted) {
-        setState(() => _summaries = list);
-      }
+      final page = await (widget.source ?? AppDatabase.instance)
+          .getSummariesForReader(book, index, version: widget.version);
+      if (!mounted || request != _request) return;
+      final items =
+          page.items
+              .where(
+                (s) =>
+                    s.novelId == book &&
+                    s.chapterIndex >= 1 &&
+                    s.chapterIndex <= index,
+              )
+              .toList()
+            ..sort((a, b) => b.chapterIndex.compareTo(a.chapterIndex));
+      setState(() {
+        _summaries = items.take(3).toList();
+        _cached = page.fromCache;
+      });
     } catch (_) {
-      // Bỏ qua trong môi trường widget test cô lập không khởi tạo singleton DB
+      if (mounted && request == _request) setState(() => _error = true);
+    } finally {
+      if (mounted && request == _request) setState(() => _loading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_dismissed || _summaries.isEmpty) return const SizedBox.shrink();
+    if (_dismissed || _loading || (!_error && _summaries.isEmpty)) {
+      return const SizedBox.shrink();
+    }
     final cs = Theme.of(context).colorScheme;
-
     return Card(
       margin: const EdgeInsets.only(bottom: 14),
       color: cs.secondaryContainer.withValues(alpha: 0.65),
@@ -79,7 +114,7 @@ class _RecapBannerCardState extends State<RecapBannerCard> {
                 const SizedBox(width: 6),
                 const Expanded(
                   child: Text(
-                    'Previously on... (Tóm tắt các chương đã đọc)',
+                    'Tóm tắt các chương đã đọc',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                   ),
                 ),
@@ -89,14 +124,29 @@ class _RecapBannerCardState extends State<RecapBannerCard> {
                 ),
               ],
             ),
-            for (final s in _summaries)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  '• Chương ${s.chapterIndex}: ${s.summary}',
-                  style: const TextStyle(fontSize: 13),
-                ),
+            if (_error) ...[
+              const Text(
+                'Chưa tải được tóm tắt. Bạn vẫn có thể đọc truyện bình thường.',
               ),
+              TextButton(
+                onPressed: _loadSummaries,
+                child: const Text('Thử lại'),
+              ),
+            ] else ...[
+              if (_cached)
+                const Text(
+                  'Bản tóm tắt đã lưu trên thiết bị',
+                  style: TextStyle(fontSize: 12),
+                ),
+              for (final s in _summaries)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '• Chương ${s.chapterIndex}: ${s.summary}',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ),
+            ],
           ],
         ),
       ),
@@ -104,63 +154,111 @@ class _RecapBannerCardState extends State<RecapBannerCard> {
   }
 }
 
-/// Bottom sheet Từ điển Thuật ngữ theo truyện (Glossary Sheet - Mục 5.3).
-/// Chỉ hiển thị các thuật ngữ có `firstChapterIndex <= currentChapterIndex` để chống lộ cốt truyện.
 class GlossarySheet extends StatefulWidget {
   final int novelId;
   final int currentChapterIndex;
-
+  final int version;
+  final String userKey;
+  final ReaderExtrasSource? source;
   const GlossarySheet({
     super.key,
     required this.novelId,
     required this.currentChapterIndex,
+    this.version = 0,
+    this.userKey = '',
+    this.source,
   });
-
   @override
   State<GlossarySheet> createState() => _GlossarySheetState();
 }
 
 class _GlossarySheetState extends State<GlossarySheet> {
   List<GlossaryTerm> _terms = [];
-
+  bool _loading = true;
+  bool _error = false;
+  bool _cached = false;
+  int _request = 0;
   @override
   void initState() {
     super.initState();
     _loadTerms();
   }
 
+  @override
+  void didUpdateWidget(covariant GlossarySheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.novelId != widget.novelId ||
+        oldWidget.currentChapterIndex != widget.currentChapterIndex ||
+        oldWidget.version != widget.version ||
+        oldWidget.userKey != widget.userKey ||
+        oldWidget.source != widget.source) {
+      _loadTerms();
+    }
+  }
+
   Future<void> _loadTerms() async {
+    final request = ++_request;
+    final book = widget.novelId;
+    final index = widget.currentChapterIndex;
+    setState(() {
+      _terms = [];
+      _loading = true;
+      _error = false;
+    });
     try {
-      final db = await AppDatabase.instance.database;
-      final list = await V2DatabaseStore.getGlossaryForNovel(
-        db,
-        widget.novelId,
-        maxChapterIndex: widget.currentChapterIndex,
-      );
-      if (mounted) setState(() => _terms = list);
-    } catch (_) {}
+      final page = await (widget.source ?? AppDatabase.instance)
+          .getGlossaryForReader(book, index, version: widget.version);
+      if (!mounted || request != _request) return;
+      setState(() {
+        _terms = page.items
+            .where(
+              (t) =>
+                  t.novelId == book &&
+                  t.firstChapterIndex >= 1 &&
+                  t.firstChapterIndex <= index,
+            )
+            .toList();
+        _cached = page.fromCache;
+      });
+    } catch (_) {
+      if (mounted && request == _request) setState(() => _error = true);
+    } finally {
+      if (mounted && request == _request) setState(() => _loading = false);
+    }
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '📖 Từ điển Thuật ngữ (đến Chương ${widget.currentChapterIndex})',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Các thuật ngữ thuộc chương sau được ẩn tự động để bảo vệ trải nghiệm không Spoil.',
-            style: TextStyle(fontSize: 12),
-          ),
-          const SizedBox(height: 12),
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.all(20),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Từ điển thuật ngữ (đến Chương ${widget.currentChapterIndex})',
+          style: Theme.of(context).textTheme.titleMedium
+              ?.copyWith(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Thuật ngữ của chương sau được ẩn để tránh lộ cốt truyện.',
+          style: TextStyle(fontSize: 12),
+        ),
+        const SizedBox(height: 12),
+        if (_loading)
+          const SizedBox(
+            height: 80,
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else if (_error) ...[
+          const Text('Chưa tải được từ điển. Kiểm tra kết nối rồi thử lại.'),
+          TextButton(onPressed: _loadTerms, child: const Text('Thử lại')),
+        ] else ...[
+          if (_cached)
+            const Text(
+              'Bản đã lưu trên thiết bị',
+              style: TextStyle(fontSize: 12),
+            ),
           if (_terms.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 20),
@@ -177,21 +275,24 @@ class _GlossarySheetState extends State<GlossarySheet> {
                     contentPadding: EdgeInsets.zero,
                     title: Text(
                       t.term,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        decoration: TextDecoration.underline,
-                        decorationStyle: TextDecorationStyle.dotted,
-                      ),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     subtitle: Text(t.meaning),
                   );
                 },
               ),
             ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: _loadTerms,
+              child: const Text('Làm mới'),
+            ),
+          ),
         ],
-      ),
-    );
-  }
+      ],
+    ),
+  );
 }
 
 /// Hộp thoại Đọc nhanh RSVP (Rapid Serial Visual Presentation - Mục 5.3):

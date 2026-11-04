@@ -5,7 +5,10 @@ import 'package:flutter/foundation.dart';
 
 import '../database/app_database.dart';
 import '../models/chapter.dart';
+import '../models/chapter_summary.dart';
+import '../models/glossary_term.dart';
 import '../models/novel.dart';
+import '../repositories/reader_extras_source.dart';
 import '../utils/constants.dart';
 
 /// Tiến trình tải xuống của một truyện.
@@ -66,11 +69,37 @@ class ReaderSnapshot {
 
 /// Quản lý việc đọc: danh sách chương, nội dung chương hiện tại,
 /// trạng thái mạng và tải chương để đọc offline.
-class ReaderProvider extends ChangeNotifier {
+class ReaderProvider extends ChangeNotifier implements ReaderExtrasSource {
   /// [connectivityStream]/[checkConnectivity] cho phép thay thế khi test.
   ReaderProvider(this._db, {this.connectivityStream, this.checkConnectivity});
 
   final AppDatabase _db;
+
+  @override
+  Future<ReaderExtrasPage<GlossaryTerm>> getGlossaryForReader(
+    int novelId,
+    int chapterIndex, {
+    int version = 0,
+    bool offline = false,
+  }) => _db.getGlossaryForReader(
+    novelId,
+    chapterIndex,
+    version: version,
+    offline: offline || !isOnline,
+  );
+
+  @override
+  Future<ReaderExtrasPage<ChapterSummary>> getSummariesForReader(
+    int novelId,
+    int chapterIndex, {
+    int version = 0,
+    bool offline = false,
+  }) => _db.getSummariesForReader(
+    novelId,
+    chapterIndex,
+    version: version,
+    offline: offline || !isOnline,
+  );
   final Stream<bool>? connectivityStream;
   final Future<bool> Function()? checkConnectivity;
   StreamSubscription<bool>? _connSub;

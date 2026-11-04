@@ -5,6 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/bookmark.dart';
 import '../models/chapter.dart';
+import '../models/chapter_summary.dart';
+import '../models/glossary_term.dart';
 import '../models/library_item.dart';
 import '../models/novel.dart';
 import '../models/reading_history.dart';
@@ -13,6 +15,7 @@ import '../repositories/library_remote.dart';
 import '../repositories/bookmark_remote.dart';
 import '../repositories/quote_remote.dart';
 import '../repositories/reading_stats_remote.dart';
+import '../repositories/reader_extras_source.dart';
 import '../utils/constants.dart';
 import '../utils/format.dart';
 
@@ -23,7 +26,8 @@ class SupabaseDatabase
         LibraryRemote,
         BookmarkRemote,
         QuoteRemote,
-        ReadingStatsRemote {
+        ReadingStatsRemote,
+        ReaderExtrasRemote {
   SupabaseDatabase._() : _clientOverride = null;
   SupabaseDatabase.withClient(SupabaseClient client) : _clientOverride = client;
 
@@ -34,6 +38,44 @@ class SupabaseDatabase
       '${DateTime.now().microsecondsSinceEpoch}-${Object().hashCode}';
 
   SupabaseClient get _client => _clientOverride ?? Supabase.instance.client;
+
+  @override
+  String get extrasUserId => _client.auth.currentUser?.id ?? '';
+
+  @override
+  Future<List<GlossaryTerm>> getReaderGlossary(
+    int novelId,
+    int chapterIndex,
+  ) async {
+    const pageSize = 1000;
+    final terms = <GlossaryTerm>[];
+    for (var offset = 0; ; offset += pageSize) {
+      final rows = await _client
+          .from('thuat_ngu')
+          .select()
+          .eq('novel_id', novelId)
+          .lte('first_chapter_index', chapterIndex)
+          .order('id', ascending: true)
+          .range(offset, offset + pageSize - 1);
+      terms.addAll(rows.map(GlossaryTerm.fromMap));
+      if (rows.length < pageSize) return terms;
+    }
+  }
+
+  @override
+  Future<List<ChapterSummary>> getReaderSummaries(
+    int novelId,
+    int chapterIndex,
+  ) async {
+    final rows = await _client
+        .from('tom_tat_chuong')
+        .select()
+        .eq('novel_id', novelId)
+        .lte('chapter_index', chapterIndex)
+        .order('chapter_index', ascending: false)
+        .limit(3);
+    return rows.map(ChapterSummary.fromMap).toList();
+  }
 
   // ---------------------------------------------------------------------------
   // TRUYỆN (novels)
