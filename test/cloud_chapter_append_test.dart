@@ -237,4 +237,99 @@ void main() {
     expect(requests, hasLength(1));
     expect(requests.single.method, 'PATCH');
   });
+
+  test('Reordering sends desired and original orders in one RPC', () async {
+    reply = (_) async => jsonReply(true);
+    final parts = [
+      for (var i = 1; i <= 3; i++)
+        Chapter(
+          id: 900 + i,
+          novelId: 9,
+          chapterIndex: i * 10,
+          title: 'Chương $i',
+        ),
+    ];
+    await SupabaseNovelRepository(client: client)
+        .saveChaptersOrder(9, [parts[2], parts[0], parts[1]]);
+    expect(requests, hasLength(1));
+    expect(requests.single.url.path, '/rest/v1/rpc/reorder_novel_chapters');
+    expect(jsonDecode(requests.single.body), {
+      'p_novel_id': 9,
+      'p_chapter_ids': [903, 901, 902],
+      'p_expected_ids': [901, 902, 903],
+    });
+  });
+
+  test('Malformed reorder lists fail before sending partial writes', () async {
+    final first = Chapter.fromMap(chapter);
+    final other = first.copyWith(id: 96002, novelId: 8, chapterIndex: 2);
+    final sameIndex = first.copyWith(id: 96003);
+    final repo = SupabaseNovelRepository(client: client);
+    for (final parts in [
+      [first, first],
+      [first, other],
+      [first, sameIndex],
+    ]) {
+      await expectLater(repo.saveChaptersOrder(9, parts), throwsArgumentError);
+    }
+    expect(requests, isEmpty);
+  });
+
+  test('Unsupported or unconfirmed reorder never falls back to per-chapter updates', () async {
+    final repo = SupabaseNovelRepository(client: client);
+    reply = (_) async => jsonReply({
+      'code': 'PGRST202',
+      'message': 'Missing RPC',
+      'details': null,
+      'hint': null,
+    }, 404);
+    await expectLater(
+      repo.saveChaptersOrder(9, [Chapter.fromMap(chapter)]),
+      throwsStateError,
+    );
+    reply = (_) async => jsonReply(false);
+    await expectLater(
+      repo.saveChaptersOrder(9, [Chapter.fromMap(chapter)]),
+      throwsStateError,
+    );
+    expect(requests, hasLength(2));
+    expect(
+      requests.every((r) => r.url.path.endsWith('/rpc/reorder_novel_chapters')),
+      isTrue,
+    );
+  });
+
+  test(
+    'Admin chapter loading pages past 1000 rows without fetching all content',
+    () async {
+      reply = (_) async => jsonReply([
+        for (
+          var i = requests.length == 1 ? 1 : 1001;
+          i <= (requests.length == 1 ? 1000 : 1001);
+          i++
+        )
+          {...chapter, 'id': 96000 + i, 'chapter_index': 1002 - i},
+      ]);
+      final parts = await SupabaseNovelRepository(client: client)
+          .getChapters(9);
+      expect(parts, hasLength(1001));
+      expect(parts.first.id, 97001);
+      expect(parts.last.chapterIndex, 1001);
+      expect(requests, hasLength(2));
+      expect(requests[1].url.queryParameters['offset'], '1000');
+      expect(
+        requests.every((r) => r.url.queryParameters['order'] == 'id.asc.nullslast'),
+        isTrue,
+      );
+      expect(
+        requests.every(
+          (r) => !r.url.queryParameters['select']!
+              .split(',')
+              .map((s) => s.trim())
+              .contains('content'),
+        ),
+        isTrue,
+      );
+    },
+  );
 }

@@ -6,11 +6,13 @@ Dự án Supabase của bạn:
 - **Region**: EU West 1 (Ireland)
 - **Direct Pooler**: `aws-0-eu-west-1.pooler.supabase.com:5432`
 
-## Cập nhật luồng thêm chương
+## Cập nhật tạo, thêm và sắp xếp chương
+
+**Đổi thứ tự chương:** sau file 13, chạy **`14_atomic_chapter_reorder.sql`** trong SQL Editor. File 14 không đổi mã/nội dung chương; lưu toàn bộ thứ tự trong một giao dịch, kiểm tra danh sách gốc để tránh ghi đè lần sửa khác, và cập nhật mốc xuất hiện thuật ngữ/tóm tắt theo đúng chương. Nếu phản hồi bị mất, gửi lại cùng thứ tự đã lưu không thay đổi các mốc lần nữa. Bản cài mới cũng cần chạy 14 cuối cùng sau các migration trước. Chưa chạy file này thì app sẽ báo cần cập nhật máy chủ khi kéo thả, không gửi nhiều cập nhật riêng lẻ.
 
 Với database đang sử dụng, chỉ cần chạy toàn bộ **`13_atomic_chapter_append.sql`** trong SQL Editor, sau migration 10. Không cần chạy lại các migration cũ hoặc nạp lại dữ liệu mẫu. File 13 giữ nguyên mã và nội dung chương hiện có; tạo chương và cập nhật tổng số chương trong cùng một giao dịch. Cùng mã lần gửi sẽ trả về chương đã lưu khi thử lại, kể cả nhiều yêu cầu đồng thời. Mã chương mới được cấp từ một sequence chung cho tạo truyện và thêm chương.
 
-Chạy file 13 cuối cùng nếu đang cài mới theo các bước bên dưới, vì migration 10 định nghĩa phiên bản cũ của hàm tạo truyện. Database chưa cập nhật sẽ được app thông báo cần cập nhật; app không quay lại cách lưu hai bước có thể tạo dữ liệu dở dang. Nếu nạp truyện mẫu bằng file 03 sau này, file seed sẽ đồng bộ lại sequence chương.
+Nếu cài mới theo các bước bên dưới, chạy 13 sau migration 10 rồi chạy 14, vì migration 10 định nghĩa phiên bản cũ của hàm tạo truyện. Database chưa cập nhật sẽ được app thông báo cần cập nhật; app không quay lại cách lưu hai bước có thể tạo dữ liệu dở dang. Nếu nạp truyện mẫu bằng file 03 sau này, file seed sẽ đồng bộ lại sequence chương.
 
 Kiểm thử cục bộ với PostgreSQL riêng, không dùng tài khoản hoặc dữ liệu Supabase thật: xem lệnh ở đầu `test/postgres/atomic_chapter_append.py`. Các ca thử gồm nhiều kết nối gửi đồng thời, thử lại cùng mã, rollback khi cập nhật tổng số chương bị lỗi, giữ dữ liệu cũ và chạy lại migration.
 

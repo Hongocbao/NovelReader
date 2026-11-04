@@ -226,26 +226,48 @@ class SupabaseNovelRepository implements NovelRepository {
 
   @override
   Future<List<Chapter>> getChapters(int novelId) async {
-    final res = await _client
-        .from('chuong')
-        .select()
-        .eq('novel_id', novelId)
-        .order('chapter_index', ascending: true);
-
-    return (res as List).map((r) => Chapter.fromMap(r as Map<String, dynamic>)).toList();
+    const pageSize = 1000;
+    final chapters = <Chapter>[];
+    for (var offset = 0; ; offset += pageSize) {
+      final rows = await _client.from('chuong')
+          .select('id, novel_id, chapter_index, title, is_downloaded, publish_at')
+          .eq('novel_id', novelId)
+          // IDs remain stable while another editor changes chapter indexes.
+          .order('id', ascending: true)
+          .range(offset, offset + pageSize - 1);
+      chapters.addAll(rows.map(Chapter.fromMap));
+      if (rows.length < pageSize) {
+        chapters.sort((a, b) => a.chapterIndex.compareTo(b.chapterIndex));
+        return chapters;
+      }
+    }
   }
 
   @override
   Future<void> saveChaptersOrder(int novelId, List<Chapter> orderedChapters) async {
-    for (var i = 0; i < orderedChapters.length; i++) {
-      await _client.from('chuong').update({
-        'chapter_index': -(i + 1),
-      }).eq('id', orderedChapters[i].id);
+    final ordered = List<Chapter>.of(orderedChapters);
+    if (novelId <= 0 || ordered.any((c) => c.novelId != novelId || c.id <= 0) ||
+        ordered.map((c) => c.id).toSet().length != ordered.length ||
+        ordered.map((c) => c.chapterIndex).toSet().length != ordered.length) {
+      throw ArgumentError('Danh sách chương không hợp lệ.');
     }
-    for (var i = 0; i < orderedChapters.length; i++) {
-      await _client.from('chuong').update({
-        'chapter_index': i + 1,
-      }).eq('id', orderedChapters[i].id);
+    final previous = List<Chapter>.of(ordered)
+      ..sort((a, b) => a.chapterIndex.compareTo(b.chapterIndex));
+    dynamic result;
+    try {
+      result = await _client.rpc('reorder_novel_chapters', params: {
+        'p_novel_id': novelId,
+        'p_chapter_ids': [for (final chapter in ordered) chapter.id],
+        'p_expected_ids': [for (final chapter in previous) chapter.id],
+      });
+    } on PostgrestException catch (error) {
+      if (error.code == 'PGRST202') {
+        throw StateError('Máy chủ chưa hỗ trợ đổi thứ tự chương. Vui lòng cập nhật cơ sở dữ liệu của ứng dụng.');
+      }
+      rethrow;
+    }
+    if (result != true) {
+      throw StateError('Chưa xác nhận được thứ tự chương mới. Hãy tải lại danh sách.');
     }
   }
 

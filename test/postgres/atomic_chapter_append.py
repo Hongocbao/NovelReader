@@ -92,7 +92,8 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 ''')
 schema = (ROOT / 'supabase/01_schema.sql').read_text(encoding='utf-8')
 upgrade = (ROOT / 'supabase/13_atomic_chapter_append.sql').read_text(encoding='utf-8')
-assert schema.endswith(upgrade), 'Fresh schema and upgrade must use the same functions'
+reorder_upgrade = (ROOT / 'supabase/14_atomic_chapter_reorder.sql').read_text(encoding='utf-8')
+assert upgrade in schema and schema.endswith(reorder_upgrade), 'Fresh schema and upgrades must use the same functions'
 sql(schema[:schema.index('-- Tạo truyện và thêm chương trong các giao dịch nguyên tử.')])
 sql((ROOT / 'supabase/10_atomic_novel_import.sql').read_text(encoding='utf-8'))
 sql(f'''
@@ -189,3 +190,88 @@ sql(schema)
 assert append(2, 'after-schema')['id'] > last_id
 print('PASS migration and full schema can be rerun without rewinding IDs')
 print('All 8 PostgreSQL integration groups passed.')
+
+
+def order_ids(book):
+    return json.loads(sql(f'SELECT COALESCE(json_agg(id ORDER BY chapter_index),\'[]\'::json) FROM chuong WHERE novel_id={book};'))
+
+
+def reorder(book, desired, expected, *, expect_error=False, user=OWNER):
+    def array(ids):
+        return 'ARRAY[' + ','.join(str(x) for x in ids) + ']::BIGINT[]'
+    return sql(f'SELECT reorder_novel_chapters({book},{array(desired)},{array(expected)});',
+               user=user, expect_error=expect_error)
+
+
+book = create('reorder-book')['id']
+append(book, 'third')
+original = order_ids(book)
+desired = original[1:] + original[:1]
+sql(f"INSERT INTO thuat_ngu(novel_id,term,meaning,first_chapter_index) VALUES ({book},'Tên nhân vật','Giới thiệu',1);")
+sql(f"INSERT INTO tom_tat_chuong(chapter_id,novel_id,chapter_index,summary) VALUES ({original[0]},{book},1,'Tóm tắt đầu');")
+assert reorder(book, desired, original) == 't'
+assert order_ids(book) == desired
+assert sql(f'SELECT first_chapter_index FROM thuat_ngu WHERE novel_id={book};') == '3'
+assert sql(f'SELECT chapter_index FROM tom_tat_chuong WHERE novel_id={book};') == '3'
+assert reorder(book, desired, original) == 't'
+assert sql(f'SELECT first_chapter_index FROM thuat_ngu WHERE novel_id={book};') == '3'
+print('PASS reorder preserves IDs and moves recap/first-appearance indexes; retry is idempotent')
+
+for invalid in [desired[:2], [desired[0]] * 3, [999999999] + desired[1:], [0] + desired[1:]]:
+    reorder(book, invalid, desired, expect_error=True)
+assert 'Thứ tự chương đã thay đổi' in reorder(book, original, original, expect_error=True)
+reorder(book, original, desired, user=OTHER, expect_error=True)
+assert order_ids(book) == desired
+print('PASS missing/duplicate/foreign chapters, stale editor and different owner do not change order')
+
+sql(f'''
+CREATE FUNCTION fail_test_reorder() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.novel_id={book} AND NEW.chapter_index=2 THEN
+    RAISE EXCEPTION 'Simulated reorder failure';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER fail_test_reorder BEFORE UPDATE OF chapter_index ON chuong
+FOR EACH ROW EXECUTE FUNCTION fail_test_reorder();
+''')
+assert 'Simulated reorder failure' in reorder(book, original, desired, expect_error=True)
+assert order_ids(book) == desired
+assert sql(f'SELECT first_chapter_index FROM thuat_ngu WHERE novel_id={book};') == '3'
+assert sql(f'SELECT chapter_index FROM tom_tat_chuong WHERE novel_id={book};') == '3'
+assert sql(f'SELECT MIN(chapter_index) FROM chuong WHERE novel_id={book};') == '1'
+sql('DROP TRIGGER fail_test_reorder ON chuong; DROP FUNCTION fail_test_reorder();')
+print('PASS failure during final indexes rolls back chapter order and spoiler metadata together')
+
+def attempt_reorder(book_id, target, before):
+    try:
+        reorder(book_id, target, before)
+        return True
+    except AssertionError as error:
+        assert 'đã thay đổi' in str(error), error
+        return False
+
+
+for i in range(4):
+    race_book = create(f'reorder-race-{i}')['id']
+    append(race_book, 'third')
+    baseline = order_ids(race_book)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a = pool.submit(attempt_reorder, race_book, baseline[1:] + baseline[:1], baseline)
+        b = pool.submit(attempt_reorder, race_book, list(reversed(baseline)), baseline)
+        assert sum([a.result(), b.result()]) == 1
+    assert set(order_ids(race_book)) == set(baseline)
+    before_append = order_ids(race_book)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a = pool.submit(attempt_reorder, race_book, list(reversed(before_append)), before_append)
+        b = pool.submit(append, race_book, 'racing-append')
+        a.result()
+        appended = b.result()
+    assert appended['id'] in order_ids(race_book)
+    assert sql(f'SELECT total_chapters FROM truyen WHERE id={race_book};') == '4'
+    assert sql(f'SELECT string_agg(chapter_index::text,\',\' ORDER BY chapter_index) FROM chuong WHERE novel_id={race_book};') == '1,2,3,4'
+sql(reorder_upgrade)
+assert reorder(book, original, desired) == 't'
+print('PASS independent sessions serialize reorder/append; stale requests cannot overwrite newer order or drop chapters')
+print('All 4 PostgreSQL reorder integration groups passed.')

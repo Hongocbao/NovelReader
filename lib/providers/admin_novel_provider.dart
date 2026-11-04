@@ -158,6 +158,9 @@ class AdminNovelProvider extends ChangeNotifier {
     await loadNovels(includeDeleted: true);
   }
 
+  Future<List<Chapter>> getChaptersForNovel(int novelId) => _novelRepo.getChapters(novelId);
+  Future<List<GlossaryTerm>> getGlossaryForNovel(int novelId) => _novelRepo.getGlossaryTerms(novelId);
+
   /// Đổi thứ tự danh sách chương bằng kéo thả.
   Future<void> reorderChapters(
     AppUser actor,
@@ -165,7 +168,7 @@ class AdminNovelProvider extends ChangeNotifier {
     List<Chapter> ordered,
   ) async {
     RoleGuard.requireAuthorOrAdmin(actor);
-    await _novelRepo.saveChaptersOrder(novelId, ordered);
+    await _novelRepo.saveChaptersOrder(novelId, List<Chapter>.unmodifiable(ordered));
     notifyListeners();
   }
 

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../database/app_database.dart';
-import '../../database/v2_database_store.dart';
 import '../../models/chapter.dart';
 import '../../models/glossary_term.dart';
 import '../../models/novel.dart';
@@ -25,6 +24,7 @@ class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
   List<Chapter> _chapters = [];
   List<GlossaryTerm> _glossary = [];
   bool _loading = true;
+  bool _reordering = false;
 
   @override
   void initState() {
@@ -35,12 +35,11 @@ class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
   Future<void> _loadData() async {
     setState(() => _loading = true);
     try {
-      final db = await AppDatabase.instance.database;
-      final chs = await AppDatabase.instance.getChapters(widget.novel.id);
-      final terms = await V2DatabaseStore.getGlossaryForNovel(
-        db,
-        widget.novel.id,
-      );
+      final provider = context.read<AdminNovelProvider>();
+      final (chs, terms) = await (
+        provider.getChaptersForNovel(widget.novel.id),
+        provider.getGlossaryForNovel(widget.novel.id),
+      ).wait;
       if (mounted) {
         setState(() {
           _chapters = chs;
@@ -55,6 +54,41 @@ class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
       }
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _reorderChapters(int oldIndex, int newIndex) async {
+    if (_loading || _reordering || oldIndex == newIndex) return;
+    final provider = context.read<AdminNovelProvider>();
+    final actor = context.read<AuthProvider>().currentUser;
+    final previous = List<Chapter>.of(_chapters);
+    final ordered = List<Chapter>.of(previous);
+    ordered.insert(newIndex, ordered.removeAt(oldIndex));
+    setState(() {
+      _reordering = true;
+      _chapters = ordered;
+    });
+    try {
+      await provider.reorderChapters(actor, widget.novel.id, ordered);
+      if (mounted) {
+        setState(
+          () => _chapters = [
+            for (var i = 0; i < ordered.length; i++)
+              ordered[i].copyWith(chapterIndex: i + 1),
+          ],
+        );
+        await _loadData();
+      }
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _chapters = previous);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Chưa xác nhận được thứ tự mới: $error')),
+      );
+      // The request may have committed before its response was lost.
+      await _loadData();
+    } finally {
+      if (mounted) setState(() => _reordering = false);
     }
   }
 
@@ -161,15 +195,14 @@ class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
               }
               final actor = context.read<AuthProvider>().currentUser;
               await context.read<AdminNovelProvider>().addGlossaryTerm(
-                    actor,
-                    GlossaryTerm(
-                      novelId: widget.novel.id,
-                      term: termCtrl.text.trim(),
-                      meaning: meaningCtrl.text.trim(),
-                      firstChapterIndex:
-                          int.tryParse(chapIdxCtrl.text.trim()) ?? 1,
-                    ),
-                  );
+                actor,
+                GlossaryTerm(
+                  novelId: widget.novel.id,
+                  term: termCtrl.text.trim(),
+                  meaning: meaningCtrl.text.trim(),
+                  firstChapterIndex: int.tryParse(chapIdxCtrl.text.trim()) ?? 1,
+                ),
+              );
               if (ctx.mounted) Navigator.pop(ctx);
               await _loadData();
             },
@@ -184,133 +217,139 @@ class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
   Widget build(BuildContext context) {
     final actor = context.watch<AuthProvider>().currentUser;
 
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text('Chương & Thuật ngữ: ${widget.novel.title}'),
-          bottom: const TabBar(
-            tabs: [
-              Tab(
-                icon: Icon(Icons.reorder),
-                text: 'Danh sách chương (Kéo thả)',
-              ),
-              Tab(
-                icon: Icon(Icons.menu_book_outlined),
-                text: 'Từ điển thuật ngữ',
+    return PopScope(
+      canPop: !_reordering,
+      child: DefaultTabController(
+        length: 2,
+        child: Scaffold(
+          appBar: AppBar(
+            title: Text('Chương & Thuật ngữ: ${widget.novel.title}'),
+            actions: [
+              IconButton(
+                tooltip: 'Tải lại danh sách',
+                onPressed: _loading || _reordering ? null : _loadData,
+                icon: const Icon(Icons.refresh),
               ),
             ],
+            bottom: const TabBar(
+              tabs: [
+                Tab(
+                  icon: Icon(Icons.reorder),
+                  text: 'Danh sách chương (Kéo thả)',
+                ),
+                Tab(
+                  icon: Icon(Icons.menu_book_outlined),
+                  text: 'Từ điển thuật ngữ',
+                ),
+              ],
+            ),
           ),
-        ),
-        body: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : TabBarView(
-                children: [
-                  Column(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Tổng cộng: ${_chapters.length} chương (nhấn giữ để kéo thả đổi thứ tự)',
-                            ),
-                            FilledButton.icon(
-                              onPressed: () => _openChapterDialog(),
-                              icon: const Icon(Icons.add),
-                              label: const Text('Thêm chương mới'),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Expanded(
-                        child: ReorderableListView.builder(
-                          itemCount: _chapters.length,
-                          onReorderItem: (oldIndex, newIndex) async {
-                            final item = _chapters.removeAt(oldIndex);
-                            _chapters.insert(newIndex, item);
-                            setState(() {});
-                            await context
-                                .read<AdminNovelProvider>()
-                                .reorderChapters(
-                                  actor,
-                                  widget.novel.id,
-                                  _chapters,
-                                );
-                            await _loadData();
-                          },
-                          itemBuilder: (context, index) {
-                            final c = _chapters[index];
-                            return ListTile(
-                              key: ValueKey(c.id),
-                              leading: CircleAvatar(
-                                child: Text('${c.chapterIndex}'),
+          body: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : TabBarView(
+                  children: [
+                    Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Wrap(
+                            spacing: 12,
+                            runSpacing: 8,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                'Tổng cộng: ${_chapters.length} chương (nhấn giữ để kéo thả đổi thứ tự)',
                               ),
-                              title: Text(c.title),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.edit_outlined),
-                                onPressed: () =>
-                                    _openChapterDialog(existing: c),
+                              FilledButton.icon(
+                                onPressed: _reordering
+                                    ? null
+                                    : () => _openChapterDialog(),
+                                icon: const Icon(Icons.add),
+                                label: const Text('Thêm chương mới'),
                               ),
-                            );
-                          },
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                  Column(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Expanded(
-                              child: Text(
-                                'Thuật ngữ sẽ được gạch chân chấm trong chương đọc (chỉ hiện khi chương đọc ≥ first_chapter_index).',
-                              ),
-                            ),
-                            FilledButton.icon(
-                              onPressed: _openGlossaryDialog,
-                              icon: const Icon(Icons.add),
-                              label: const Text('Thêm thuật ngữ'),
-                            ),
-                          ],
+                        Expanded(
+                          child: ReorderableListView.builder(
+                            itemCount: _chapters.length,
+                            onReorderItem: _reorderChapters,
+                            buildDefaultDragHandles: !_reordering,
+                            itemBuilder: (context, index) {
+                              final c = _chapters[index];
+                              return ListTile(
+                                key: ValueKey(c.id),
+                                leading: CircleAvatar(
+                                  child: Text(
+                                    '${_reordering ? index + 1 : c.chapterIndex}',
+                                  ),
+                                ),
+                                title: Text(c.title),
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.edit_outlined),
+                                  onPressed: _reordering
+                                      ? null
+                                      : () => _openChapterDialog(existing: c),
+                                ),
+                              );
+                            },
+                          ),
                         ),
-                      ),
-                      Expanded(
-                        child: ListView.builder(
-                          itemCount: _glossary.length,
-                          itemBuilder: (context, index) {
-                            final g = _glossary[index];
-                            return ListTile(
-                              title: Text(
-                                '${g.term} (Từ chương ${g.firstChapterIndex})',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
+                      ],
+                    ),
+                    Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Expanded(
+                                child: Text(
+                                  'Thuật ngữ sẽ được gạch chân chấm trong chương đọc (chỉ hiện khi chương đọc ≥ first_chapter_index).',
                                 ),
                               ),
-                              subtitle: Text(g.meaning),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.delete_outline),
-                                onPressed: () async {
-                                  if (g.id != null) {
-                                    await context
-                                        .read<AdminNovelProvider>()
-                                        .deleteGlossaryTerm(actor, g.id!);
-                                    await _loadData();
-                                  }
-                                },
+                              FilledButton.icon(
+                                onPressed: _openGlossaryDialog,
+                                icon: const Icon(Icons.add),
+                                label: const Text('Thêm thuật ngữ'),
                               ),
-                            );
-                          },
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                        Expanded(
+                          child: ListView.builder(
+                            itemCount: _glossary.length,
+                            itemBuilder: (context, index) {
+                              final g = _glossary[index];
+                              return ListTile(
+                                title: Text(
+                                  '${g.term} (Từ chương ${g.firstChapterIndex})',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                subtitle: Text(g.meaning),
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.delete_outline),
+                                  onPressed: () async {
+                                    if (g.id != null) {
+                                      await context
+                                          .read<AdminNovelProvider>()
+                                          .deleteGlossaryTerm(actor, g.id!);
+                                      await _loadData();
+                                    }
+                                  },
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+        ),
       ),
     );
   }
