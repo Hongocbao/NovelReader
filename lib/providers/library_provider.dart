@@ -30,6 +30,10 @@ class LibraryProvider extends ChangeNotifier {
   int _historyRevision = 0;
   int _statsRevision = 0;
   int _lastProgressTime = 0;
+  int _pendingProgressWrites = 0;
+
+  /// Các lần lưu cục bộ còn chờ, bao gồm lần lưu cuối khi rời màn đọc.
+  bool get hasPendingProgressSaves => _pendingProgressWrites > 0;
 
   /// Giữ thứ tự thao tác kể cả khi nhiều màn đọc lưu trong cùng mili giây.
   DateTime captureProgressTime() {
@@ -335,39 +339,45 @@ class LibraryProvider extends ChangeNotifier {
     if (_disposed || (userId != null && _userId != null && userId != _userId)) {
       return;
     }
-    final revision = _identityRevision;
-    final uid = userId ?? _userId;
-    _historyRevision++;
-    final now = readAt ?? captureProgressTime();
-    if (historyFor(novel.id)?.lastReadAt.isAfter(now) == true) return;
-    final updated = ReadingHistory(
-      novelId: novel.id,
-      lastChapterId: chapter.id,
-      scrollOffset: offset.clamp(0, 1).toDouble(),
-      lastReadAt: now,
-      novel: novel,
-      chapterIndex: chapter.chapterIndex,
-      chapterTitle: chapter.title,
-    );
-    await _db.saveHistory(updated, userId: uid);
-    if (revision != _identityRevision) return;
-    if (historyFor(novel.id)?.lastReadAt.isAfter(now) == true) return;
-    _history = [updated, ..._history.where((h) => h.novelId != novel.id)];
+    _pendingProgressWrites++;
+    try {
+      final revision = _identityRevision;
+      final uid = userId ?? _userId;
+      _historyRevision++;
+      final now = readAt ?? captureProgressTime();
+      if (historyFor(novel.id)?.lastReadAt.isAfter(now) == true) return;
+      final updated = ReadingHistory(
+        novelId: novel.id,
+        lastChapterId: chapter.id,
+        scrollOffset: offset.clamp(0, 1).toDouble(),
+        lastReadAt: now,
+        novel: novel,
+        chapterIndex: chapter.chapterIndex,
+        chapterTitle: chapter.title,
+      );
+      await _db.saveHistory(updated, userId: uid);
+      if (revision != _identityRevision) return;
+      if (historyFor(novel.id)?.lastReadAt.isAfter(now) == true) return;
+      _history = [updated, ..._history.where((h) => h.novelId != novel.id)];
 
-    // Cập nhật tiến độ trong tủ sách mà không cần đọc lại DB.
-    _items = [
-      for (final item in _items)
-        item.novelId == novel.id
-            ? item.copyWith(
-                lastChapterIndex: chapter.chapterIndex,
-                lastReadAt: now,
-              )
-            : item,
-    ];
-    if (categoryOf(novel.id) == LibraryCategory.want) {
-      _startReadingInBackground(novel, revision);
+      // Cập nhật tiến độ trong tủ sách mà không cần đọc lại DB.
+      _items = [
+        for (final item in _items)
+          item.novelId == novel.id
+              ? item.copyWith(
+                  lastChapterIndex: chapter.chapterIndex,
+                  lastReadAt: now,
+                )
+              : item,
+      ];
+      if (categoryOf(novel.id) == LibraryCategory.want) {
+        _startReadingInBackground(novel, revision);
+      }
+      notifyListeners();
+    } finally {
+      _pendingProgressWrites--;
+      if (!_disposed) notifyListeners();
     }
-    notifyListeners();
   }
 
   void _startReadingInBackground(Novel novel, int identity) {

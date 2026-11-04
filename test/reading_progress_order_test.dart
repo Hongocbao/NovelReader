@@ -81,6 +81,7 @@ void main() {
         readAt: firstTime,
         userId: 'A',
       );
+      expect(library.hasPendingProgressSaves, isTrue);
       await library.saveProgress(
         novel,
         chapter,
@@ -88,8 +89,10 @@ void main() {
         readAt: laterTime,
         userId: 'A',
       );
+      expect(library.hasPendingProgressSaves, isTrue);
       db.oldSave!.complete();
       await first;
+      expect(library.hasPendingProgressSaves, isFalse);
       expect(library.historyFor(1)!.scrollOffset, .8);
       await library.saveProgress(
         novel,

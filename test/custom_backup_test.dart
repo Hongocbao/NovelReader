@@ -190,6 +190,47 @@ void main() {
     );
   });
 
+  test('Restoring older or equal-time history keeps the current position; newer history still restores', () async {
+    final sourceBook = await add(source, 'Cùng truyện', 'Nội dung');
+    final targetBook = await add(target, 'Cùng truyện', 'Nội dung');
+    final sourceChapter = (await source.getChapters(sourceBook.id)).single;
+    final targetChapter = (await target.getChapters(targetBook.id)).single;
+    final old = await source.exportUserBackupJson();
+    await target.saveHistory(
+      ReadingHistory(
+        novelId: targetBook.id,
+        lastChapterId: targetChapter.id,
+        scrollOffset: .9,
+        lastReadAt: DateTime(2026, 2),
+      ),
+    );
+    await target.importUserBackupJson(old);
+    expect((await target.getHistoryFor(targetBook.id))!.scrollOffset, .9);
+    await source.saveHistory(
+      ReadingHistory(
+        novelId: sourceBook.id,
+        lastChapterId: sourceChapter.id,
+        scrollOffset: .25,
+        lastReadAt: DateTime(2026, 3),
+      ),
+    );
+    final newer = await source.exportUserBackupJson();
+    await target.importUserBackupJson(newer);
+    expect((await target.getHistoryFor(targetBook.id))!.scrollOffset, .25);
+    await target.saveHistory(
+      ReadingHistory(
+        novelId: targetBook.id,
+        lastChapterId: targetChapter.id,
+        scrollOffset: .8,
+        lastReadAt: DateTime(2026, 3),
+      ),
+    );
+    await target.importUserBackupJson(newer);
+    await target.close();
+    expect((await target.getHistoryFor(targetBook.id))!.scrollOffset, .8);
+    expect((await target.getLibrary()).length, 1);
+  });
+
   test('An invalid archive rolls back restored stories and leaves destination unchanged', () async {
     final original = await add(target, 'Bản gốc', 'Không đổi');
     await add(source, 'Sao lưu', 'Nội dung');

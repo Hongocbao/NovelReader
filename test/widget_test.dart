@@ -291,6 +291,7 @@ void main() {
       for (var attempt = 0; attempt < 200; attempt++) {
         final history = lp.historyFor(novel.id);
         if (history != null && history.scrollOffset > 0 &&
+            !lp.hasPendingProgressSaves &&
             (newerThan == null || history.lastReadAt.isAfter(newerThan))) {
           return;
         }

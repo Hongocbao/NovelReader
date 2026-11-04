@@ -375,6 +375,44 @@ void main() {
     },
   );
 
+  test('History restore keeps newer/acknowledged progress and scopes newer imports to the selected account', () async {
+    remote.offline = true;
+    await cache.save(_history(time: 200, offset: .8), 'A');
+    await cache.save(_history(time: 500, offset: .5), 'B');
+    await cache.waitForPendingSync();
+    Map<String, dynamic> row(int time, double offset) => {
+      ..._history(time: time, offset: offset).toMap(),
+      'novel_json': jsonEncode(_novel(7001).toMap()),
+      'chapter_index': 2,
+      'chapter_title': 'Chương hai',
+    };
+    await db.transaction(
+      (txn) => ReadingHistoryCache.restore(txn, [row(100, .1)], 'A'),
+    );
+    expect((await cache.load('A', novelId: 7001)).single.scrollOffset, .8);
+    await db.transaction(
+      (txn) => ReadingHistoryCache.restore(txn, [row(300, .3)], 'A'),
+    );
+    expect((await cache.load('A', novelId: 7001)).single.scrollOffset, .3);
+    expect((await cache.load('B', novelId: 7001)).single.scrollOffset, .5);
+    await db.update(
+      ReadingHistoryCache.table,
+      {'pending': 0},
+      where: 'user_id = ?',
+      whereArgs: ['A'],
+    );
+    await db.transaction(
+      (txn) => ReadingHistoryCache.restore(txn, [row(300, .1)], 'A'),
+    );
+    final saved = (await db.query(
+      ReadingHistoryCache.table,
+      where: 'user_id = ?',
+      whereArgs: ['A'],
+    )).single;
+    expect(saved['scroll_offset'], .3);
+    expect(saved['pending'], 0);
+  });
+
   test('Reconnecting retries the current account library once', () async {
     final database = _LibraryDatabase()..firstLoad.complete([]);
     final library = LibraryProvider(database);

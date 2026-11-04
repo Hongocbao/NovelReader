@@ -667,33 +667,38 @@ class AppDatabase {
     String moderationStatus = ModerationStatus.approved,
     String ownerId = '',
   }) async {
+    final parts = [
+      for (final chapter in chapters)
+        (title: chapter.title.trim(), content: chapter.content.trim()),
+    ];
+    final copiedGenres = List<String>.unmodifiable(genres);
     final db = await database;
     // ID âm dành riêng cho truyện chỉ lưu trên máy, tránh va chạm với ID cloud.
-    final minLocalId = Sqflite.firstIntValue(
-      await db.rawQuery('SELECT MIN(id) FROM truyen WHERE id < 0'),
-    );
-    final newId = (minLocalId ?? 0) - 1;
-    final now = DateTime.now();
-    final novel = Novel(
-      id: newId,
-      title: title.trim(),
-      author: author.trim(),
-      coverUrl: (coverUrl != null && coverUrl.trim().isNotEmpty)
-          ? coverUrl.trim()
-          : 'https://picsum.photos/seed/custom-novel-$newId/300/450',
-      description: description.trim(),
-      status: status,
-      type: type,
-      genres: genres,
-      totalChapters: chapters.length,
-      rating: 0.0,
-      views: 0,
-      updatedAt: now,
-      moderationStatus: moderationStatus,
-      ownerId: ownerId,
-    );
+    return db.transaction((txn) async {
+      final minLocalId = Sqflite.firstIntValue(
+        await txn.rawQuery('SELECT MIN(id) FROM truyen WHERE id < 0'),
+      );
+      final newId = (minLocalId ?? 0) - 1;
+      final now = DateTime.now();
+      final novel = Novel(
+        id: newId,
+        title: title.trim(),
+        author: author.trim(),
+        coverUrl: (coverUrl != null && coverUrl.trim().isNotEmpty)
+            ? coverUrl.trim()
+            : 'https://picsum.photos/seed/custom-novel-$newId/300/450',
+        description: description.trim(),
+        status: status,
+        type: type,
+        genres: copiedGenres,
+        totalChapters: parts.length,
+        rating: 0.0,
+        views: 0,
+        updatedAt: now,
+        moderationStatus: moderationStatus,
+        ownerId: ownerId,
+      );
 
-    await db.transaction((txn) async {
       await txn.insert('truyen', {
         ...novel.toMap(),
         'search_text': Format.normalize('${novel.title} ${novel.author}'),
@@ -704,23 +709,23 @@ class AppDatabase {
               ) ??
               0) -
           1;
-      for (var i = 0; i < chapters.length; i++) {
+      for (var i = 0; i < parts.length; i++) {
         final idx = i + 1;
-        final ch = chapters[i];
+        final ch = parts[i];
         await txn.insert(
           'chuong',
           Chapter(
             id: nextChapterId--,
             novelId: newId,
             chapterIndex: idx,
-            title: ch.title.trim(),
-            content: ch.content.trim(),
+            title: ch.title,
+            content: ch.content,
             isDownloaded: true,
           ).toMap(),
         );
       }
+      return novel;
     });
-    return novel;
   }
 
   /// Thêm 1 chương mới vào bộ truyện đã có.
@@ -751,21 +756,39 @@ class AppDatabase {
     }
 
     final db = await database;
-    final maxIdx =
-        Sqflite.firstIntValue(
-          await db.rawQuery(
-            'SELECT MAX(chapter_index) FROM chuong WHERE novel_id = ?',
-            [novelId],
-          ),
-        ) ??
-        0;
-    final nextIdx = maxIdx + 1;
-    final chapterTitle = normalizedTitle.isEmpty
-        ? 'Chương $nextIdx: Mới'
-        : normalizedTitle.startsWith('Chương')
-        ? normalizedTitle
-        : 'Chương $nextIdx: $normalizedTitle';
     return db.transaction((txn) async {
+      final books = await txn.query(
+        'truyen',
+        columns: ['id'],
+        where: 'id = ?',
+        whereArgs: [novelId],
+        limit: 1,
+      );
+      if (books.isEmpty) {
+        throw StateError('Không tìm thấy truyện để thêm chương.');
+      }
+      final maxIdx =
+          Sqflite.firstIntValue(
+            await txn.rawQuery(
+              'SELECT MAX(chapter_index) FROM chuong WHERE novel_id = ?',
+              [novelId],
+            ),
+          ) ??
+          0;
+      final nextIdx = maxIdx + 1;
+      final count =
+          Sqflite.firstIntValue(
+            await txn.rawQuery(
+              'SELECT COUNT(*) FROM chuong WHERE novel_id = ?',
+              [novelId],
+            ),
+          ) ??
+          0;
+      final chapterTitle = normalizedTitle.isEmpty
+          ? 'Chương $nextIdx: Mới'
+          : normalizedTitle.startsWith('Chương')
+          ? normalizedTitle
+          : 'Chương $nextIdx: $normalizedTitle';
       final chapter = Chapter(
         id:
             (Sqflite.firstIntValue(
@@ -783,7 +806,7 @@ class AppDatabase {
       await txn.update(
         'truyen',
         {
-          'total_chapters': nextIdx,
+          'total_chapters': count + 1,
           'updated_at': DateTime.now().millisecondsSinceEpoch,
         },
         where: 'id = ?',
@@ -1158,12 +1181,20 @@ class AppDatabase {
       return;
     }
     final db = await database;
+    await _saveLocalHistory(db, history);
+  }
+
+  Future<void> _saveLocalHistory(
+    DatabaseExecutor db,
+    ReadingHistory history, {
+    bool keepExistingOnTie = false,
+  }) async {
     final timestamp = history.lastReadAt.millisecondsSinceEpoch;
     await db.rawInsert(
       '''
       INSERT OR REPLACE INTO lich_su_doc (novel_id, last_chapter_id, scroll_offset, last_read_at)
       SELECT ?, ?, ?, ? WHERE NOT EXISTS (
-        SELECT 1 FROM lich_su_doc WHERE novel_id = ? AND last_read_at > ?
+        SELECT 1 FROM lich_su_doc WHERE novel_id = ? AND last_read_at ${keepExistingOnTie ? '>=' : '>'} ?
       )
     ''',
       [
@@ -1641,6 +1672,14 @@ class AppDatabase {
         for (final item in list) {
           if (item is Map<String, dynamic>) {
             final row = imported.remap(item);
+            if (entry.key == 'reading_history') {
+              await _saveLocalHistory(
+                txn,
+                ReadingHistory.fromMap(row),
+                keepExistingOnTie: true,
+              );
+              continue;
+            }
             // ID bookmark tự tăng thuộc máy nguồn, không thay thế mục
             // không liên quan đang dùng cùng ID trên máy đích.
             if (entry.key == 'bookmarks') {
@@ -1698,13 +1737,7 @@ class AppDatabase {
         }
       }
       if (cachedHistory is List) {
-        for (final item in cachedHistory.whereType<Map<String, dynamic>>()) {
-          await txn.insert(ReadingHistoryCache.table, {
-            ...item,
-            'user_id': uid,
-            'pending': 1,
-          }, conflictAlgorithm: ConflictAlgorithm.replace);
-        }
+        await ReadingHistoryCache.restore(txn, cachedHistory, uid);
       }
     });
   }

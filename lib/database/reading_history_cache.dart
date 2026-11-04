@@ -58,6 +58,32 @@ class ReadingHistoryCache {
         orderBy: 'last_read_at DESC',
       );
 
+  static Future<void> restore(
+    DatabaseExecutor db,
+    List rows,
+    String userId,
+  ) async {
+    for (final row in rows.whereType<Map<String, dynamic>>()) {
+      final history = ReadingHistory.fromMap(row);
+      final existing = await db.query(
+        table,
+        columns: ['last_read_at'],
+        where: 'user_id = ? AND novel_id = ?',
+        whereArgs: [userId, history.novelId],
+        limit: 1,
+      );
+      final prior = existing.firstOrNull?['last_read_at'] as int?;
+      if (prior != null && prior >= history.lastReadAt.millisecondsSinceEpoch) {
+        continue;
+      }
+      await db.insert(table, {
+        ...row,
+        'user_id': userId,
+        'pending': 1,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+  }
+
   ReadingHistory _decode(Map<String, Object?> row) {
     final json = row['novel_json'] as String?;
     final novel = json == null

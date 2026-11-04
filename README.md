@@ -94,6 +94,8 @@ Cấu hình client dùng `SUPABASE_URL` và `SUPABASE_PUBLISHABLE_KEY` qua `--da
 
 Nhập truyện chữ bằng file TXT; nhập Manga trên web bằng ZIP/CBZ chứa ảnh hoặc các thư mục chương. Ảnh và chương được sắp theo số tự nhiên. Truyện tự nhập lưu trên thiết bị và được giữ lại khi xóa bộ nhớ tải xuống.
 
+Khi nhập truyện hoặc thêm chương trên thiết bị, việc cấp mã và số chương nằm trong cùng giao dịch SQLite; các thao tác đồng thời không dùng chung mã hoặc số thứ tự. Nếu ghi lỗi giữa chừng, toàn bộ thao tác đó được hoàn tác. Dữ liệu đã chọn để nhập được giữ ổn định trong lúc chờ lưu. Khi khôi phục sao lưu, lịch sử mới hơn trên máy được giữ lại; lịch sử trong file chỉ thay thế khi có thời điểm đọc mới hơn.
+
 Yêu cầu tải chương cùng truyện được xử lý nối tiếp, bỏ qua bản lưu đã có thực tế và giữ các chương hoàn tất nếu lượt tải bị lỗi giữa chừng. Xóa một bản tải/truyện/toàn bộ sẽ dừng các lượt tải cũ tương ứng để phản hồi mạng trả về trễ không tự tạo lại dữ liệu đã xóa. Khi đọc offline, ứng dụng kiểm tra nội dung trong bộ nhớ thiết bị thay vì chỉ dựa vào dấu “đã tải” trên màn hình. Chương rỗng hoặc lỗi ghi bộ nhớ không được báo tải thành công.
 
 Mỗi màn đọc giữ chương, nội dung và vị trí riêng khi mở thêm màn đọc khác. Khi quay lại, ứng dụng dùng nội dung còn trong bộ nhớ để khôi phục, kể cả khi đã mất mạng; tự cuộn và nghe đọc dừng khi chuyển màn. Tiến độ được gắn thời điểm thao tác và tài khoản để lần lưu cũ trả về trễ không ghi đè vị trí mới. Thanh công cụ và khu bình luận co giãn cho màn hình điện thoại, kể cả tên độc giả dài hoặc trống.
