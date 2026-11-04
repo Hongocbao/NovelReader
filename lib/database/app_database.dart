@@ -11,9 +11,11 @@ import '../models/chapter.dart';
 import '../models/library_item.dart';
 import '../models/novel.dart';
 import '../models/reading_history.dart';
+import '../repositories/reading_history_remote.dart';
 import '../utils/constants.dart';
 import '../utils/format.dart';
 import 'supabase_database.dart';
+import 'reading_history_cache.dart';
 import 'v2_database_store.dart';
 
 /// Lớp truy cập SQLite của ứng dụng: tạo bảng, CRUD và nạp dữ liệu mẫu.
@@ -32,8 +34,10 @@ class AppDatabase {
   AppDatabase({
     this.factory,
     this.path,
+    ReadingHistoryRemote? historyRemote,
     Future<String> Function()? sampleJsonLoader,
-  }) : _sampleJsonLoader =
+  }) : _historyRemoteOverride = historyRemote,
+       _sampleJsonLoader =
            sampleJsonLoader ??
            (() => rootBundle.loadString(AppInfo.sampleDataAsset));
 
@@ -43,6 +47,23 @@ class AppDatabase {
   final DatabaseFactory? factory;
   final String? path;
   final Future<String> Function() _sampleJsonLoader;
+  final ReadingHistoryRemote? _historyRemoteOverride;
+  ReadingHistoryCache? _historyCache;
+
+  ReadingHistoryRemote? get _historyRemote =>
+      _historyRemoteOverride ??
+      (isSupabaseReady ? SupabaseDatabase.instance : null);
+
+  String _historyUserId(String? userId) {
+    if (userId != null) return userId;
+    if (!isSupabaseReady) return '';
+    return Supabase.instance.client.auth.currentUser?.id ?? '';
+  }
+
+  Future<ReadingHistoryCache> _historyStore(ReadingHistoryRemote remote) async {
+    final db = await database;
+    return _historyCache ??= ReadingHistoryCache(db, remote);
+  }
 
   Database? _db;
   Future<Database>? _opening;
@@ -203,6 +224,7 @@ class AppDatabase {
 
   /// Tạo các bảng mở rộng (trích dẫn yêu thích & bình luận chương).
   Future<void> _ensureExtraTables(Database db) async {
+    await ReadingHistoryCache.ensureSchema(db);
     await db.execute('''
       CREATE TABLE IF NOT EXISTS trich_dan (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -962,6 +984,7 @@ class AppDatabase {
     );
     final localItems = localRows.map(LibraryItem.fromMap).toList();
     if (isSupabaseReady) {
+      if (userId == '') return localItems;
       try {
         final cloudItems = await SupabaseDatabase.instance.getLibrary(
           userId: userId,
@@ -970,8 +993,7 @@ class AppDatabase {
           ..sort((a, b) => b.addedAt.compareTo(a.addedAt));
       } catch (e) {
         debugPrint('Supabase getLibrary error: $e');
-        if (localItems.isNotEmpty) return localItems;
-        rethrow;
+        return localItems;
       }
     }
     final rows = await db.rawQuery('$_librarySelect ORDER BY l.added_at DESC');
@@ -1034,23 +1056,17 @@ class AppDatabase {
 
   /// Lịch sử đọc, mới nhất trước.
   Future<List<ReadingHistory>> getHistory({String? userId}) async {
+    final uid = _historyUserId(userId);
+    final remote = _historyRemote;
     final db = await database;
     final localRows = await db.rawQuery(
       '$_historySelect WHERE h.novel_id < 0 ORDER BY h.last_read_at DESC',
     );
     final localHistory = localRows.map(ReadingHistory.fromMap).toList();
-    if (isSupabaseReady) {
-      try {
-        final cloudHistory = await SupabaseDatabase.instance.getHistory(
-          userId: userId,
-        );
-        return [...cloudHistory, ...localHistory]
-          ..sort((a, b) => b.lastReadAt.compareTo(a.lastReadAt));
-      } catch (e) {
-        debugPrint('Supabase getHistory error: $e');
-        if (localHistory.isNotEmpty) return localHistory;
-        rethrow;
-      }
+    if (remote != null) {
+      final cloudHistory = await (await _historyStore(remote)).load(uid);
+      return [...cloudHistory, ...localHistory]
+        ..sort((a, b) => b.lastReadAt.compareTo(a.lastReadAt));
     }
     final rows = await db.rawQuery(
       '$_historySelect ORDER BY h.last_read_at DESC',
@@ -1060,27 +1076,13 @@ class AppDatabase {
 
   /// Lịch sử đọc của 1 truyện.
   Future<ReadingHistory?> getHistoryFor(int novelId, {String? userId}) async {
-    if (novelId < 0) {
-      final db = await database;
-      final rows = await db.rawQuery('$_historySelect WHERE h.novel_id = ?', [
-        novelId,
-      ]);
-      return rows.isEmpty ? null : ReadingHistory.fromMap(rows.first);
+    final uid = _historyUserId(userId);
+    final remote = _historyRemote;
+    if (novelId >= 0 && remote != null) {
+      final rows = await (await _historyStore(remote))
+          .load(uid, novelId: novelId);
+      return rows.firstOrNull;
     }
-    if (isSupabaseReady) {
-      try {
-        final h = await SupabaseDatabase.instance.getHistoryFor(
-          novelId,
-          userId: userId,
-        );
-        if (h != null) return h;
-      } catch (e) {
-        debugPrint('Supabase getHistoryFor error: $e');
-        if (kIsWeb) return null;
-      }
-      if (kIsWeb) return null;
-    }
-    if (kIsWeb) return null;
     final db = await database;
     final rows = await db.rawQuery('$_historySelect WHERE h.novel_id = ?', [
       novelId,
@@ -1089,25 +1091,13 @@ class AppDatabase {
   }
 
   /// Ghi (hoặc ghi đè) lịch sử đọc.
-  Future<void> saveHistory(ReadingHistory history) async {
-    if (history.novelId < 0) {
-      final db = await database;
-      await db.insert(
-        'lich_su_doc',
-        history.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+  Future<void> saveHistory(ReadingHistory history, {String? userId}) async {
+    final uid = _historyUserId(userId);
+    final remote = _historyRemote;
+    if (history.novelId >= 0 && remote != null) {
+      await (await _historyStore(remote)).save(history, uid);
       return;
     }
-    if (isSupabaseReady) {
-      try {
-        await SupabaseDatabase.instance.saveHistory(history);
-      } catch (e) {
-        debugPrint('Supabase saveHistory error: $e');
-      }
-      if (kIsWeb) return;
-    }
-    if (kIsWeb) return;
     final db = await database;
     await db.insert(
       'lich_su_doc',
@@ -1117,18 +1107,22 @@ class AppDatabase {
   }
 
   /// Xóa lịch sử của 1 truyện.
-  Future<void> deleteHistory(int novelId) async {
-    if (novelId >= 0 && isSupabaseReady) {
-      await SupabaseDatabase.instance.deleteHistory(novelId);
+  Future<void> deleteHistory(int novelId, {String? userId}) async {
+    final uid = _historyUserId(userId);
+    final remote = _historyRemote;
+    if (novelId >= 0 && remote != null) {
+      await (await _historyStore(remote)).remove(novelId, uid);
     }
     final db = await database;
     await db.delete('lich_su_doc', where: 'novel_id = ?', whereArgs: [novelId]);
   }
 
   /// Xóa toàn bộ lịch sử.
-  Future<void> clearHistory() async {
-    if (isSupabaseReady) {
-      await SupabaseDatabase.instance.clearHistory();
+  Future<void> clearHistory({String? userId}) async {
+    final uid = _historyUserId(userId);
+    final remote = _historyRemote;
+    if (remote != null) {
+      await (await _historyStore(remote)).clear(uid);
     }
     final db = await database;
     await db.delete('lich_su_doc');
@@ -1238,7 +1232,7 @@ class AppDatabase {
 
   /// Danh sách trích dẫn đã lưu (mới nhất trước).
   Future<List<QuoteItem>> getQuotes({String? userId}) async {
-    if (isSupabaseReady) {
+    if (isSupabaseReady && userId != '') {
       try {
         return await SupabaseDatabase.instance.getQuotes(userId: userId);
       } catch (e) {
@@ -1247,11 +1241,9 @@ class AppDatabase {
           'trich_dan',
           orderBy: 'created_at DESC',
         );
-        if (rows.isNotEmpty) return rows.map(QuoteItem.fromMap).toList();
-        rethrow;
+        return rows.map(QuoteItem.fromMap).toList();
       }
     }
-    if (kIsWeb) return [];
     final db = await database;
     final rows = await db.query('trich_dan', orderBy: 'created_at DESC');
     return rows.map(QuoteItem.fromMap).toList();
@@ -1524,7 +1516,7 @@ class AppDatabase {
   /// Lấy toàn bộ lịch sử phiên đọc theo ngày (tăng dần theo ngày).
   Future<List<ReadingSessionStat>> getReadingSessions({String? userId}) async {
     List<ReadingSessionStat> cloudSessions = [];
-    if (isSupabaseReady) {
+    if (isSupabaseReady && userId != '') {
       try {
         cloudSessions = await SupabaseDatabase.instance.getReadingSessions(
           userId: userId,
@@ -1558,7 +1550,8 @@ class AppDatabase {
   }
 
   /// Xuất toàn bộ dữ liệu cá nhân (tủ sách, lịch sử, bookmark, quotes, reading_sessions) ra JSON.
-  Future<String> exportUserBackupJson() async {
+  Future<String> exportUserBackupJson({String? userId}) async {
+    final uid = _historyUserId(userId);
     final db = await database;
     final libraryRows = await db.query('tu_sach');
     final historyRows = await db.query('lich_su_doc');
@@ -1566,9 +1559,14 @@ class AppDatabase {
     final quoteRows = await db.query('trich_dan');
     final sessionRows = await db.query('phien_doc');
     final localSessionRows = await db.query('phien_doc_cuc_bo');
+    final cachedHistoryRows = await db.query(
+      ReadingHistoryCache.table,
+      where: 'user_id = ?',
+      whereArgs: [uid],
+    );
 
     return const JsonEncoder.withIndent('  ').convert({
-      'backup_version': 2,
+      'backup_version': 3,
       'exported_at': DateTime.now().toIso8601String(),
       'library': libraryRows,
       'reading_history': historyRows,
@@ -1576,11 +1574,16 @@ class AppDatabase {
       'quotes': quoteRows,
       'reading_sessions': sessionRows,
       'local_reading_sessions': localSessionRows,
+      'cached_reading_history': [
+        for (final row in cachedHistoryRows)
+          Map<String, Object?>.from(row)..remove('user_id'),
+      ],
     });
   }
 
   /// Khôi phục dữ liệu cá nhân từ chuỗi JSON đã sao lưu.
-  Future<void> importUserBackupJson(String jsonString) async {
+  Future<void> importUserBackupJson(String jsonString, {String? userId}) async {
+    final uid = _historyUserId(userId);
     final decoded = jsonDecode(jsonString);
     if (decoded is! Map<String, dynamic>) {
       throw const FormatException(AppStrings.restoreInvalid);
@@ -1608,13 +1611,25 @@ class AppDatabase {
           }
         }
       }
+      final cachedHistory = decoded['cached_reading_history'];
+      if (cachedHistory is List) {
+        for (final item in cachedHistory.whereType<Map<String, dynamic>>()) {
+          await txn.insert(ReadingHistoryCache.table, {
+            ...item,
+            'user_id': uid,
+            'pending': 1,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+      }
     });
   }
 
   /// Đóng kết nối (dùng trong test).
   Future<void> close() async {
+    await _historyCache?.waitForPendingSync();
     await _db?.close();
     _db = null;
     _opening = null;
+    _historyCache = null;
   }
 }

@@ -4,7 +4,7 @@
 ![Dart](https://img.shields.io/badge/Dart-3.x-0175C2?logo=dart&logoColor=white)
 ![Material 3](https://img.shields.io/badge/UI-Material_3-6750A4)
 ![SQLite](https://img.shields.io/badge/Database-SQLite_v6_&_WebAssembly-003B57?logo=sqlite&logoColor=white)
-![Tests](https://img.shields.io/badge/Tests-11%2F11_Passed-2EA043)
+![Tests](https://img.shields.io/badge/Tests-flutter_test-2EA043)
 
 **NovelReader v2.0** là ứng dụng đọc **Truyện chữ (Novel)**, **Light Novel** và **Truyện tranh (Manga / Webtoon / Manhwa)** đa nền tảng (**Android, Web, Windows Desktop**) tích hợp **Hệ thống Phân quyền Đa vai trò (Khách / Độc giả / Tác giả / Admin)**, **Khu Quản Trị Admin (Dashboard, Heatmap, Drop-off Analyzer, Kiểm duyệt, Audit Log)**, **Gamification (Nhiệm vụ, Streak Shield, Linh Thạch, 20 Huy hiệu)** và các tính năng sáng tạo (**Spoiler Shield, Recap, Từ điển thuật ngữ, RSVP Speed Reader, Ambient Mixer, Hộp thư thời gian, Tủ sách 3D, Reading Wrapped PNG, Sơ đồ nhân vật kéo thả**).
 
@@ -12,18 +12,18 @@
 
 ## 1. Tài Khoản Demo Khởi Tạo Sẵn (Giai Đoạn A — Local SQLite)
 
-> **Lưu ý Bảo mật:**Ở Giai đoạn A (Demo cục bộ không cần mạng), mật khẩu được băm một chiều bằng **SHA-256 kết hợp chuỗi muối (Salt) ngẫu nhiên** (`lib/utils/password_hasher.dart`), tuyệt đối không lưu mật khẩu thô. Khi triển khai môi trường thật (Giai đoạn B), ứng dụng chuyển sang `FirebaseAuthRepository` + `FirestoreNovelRepository` kèm quy tắc bảo mật tại `firestore.rules`.
+Ứng dụng hiện dùng **Supabase Auth và PostgreSQL** qua `SupabaseAuthRepository` và `SupabaseNovelRepository`. SQLite lưu truyện tự nhập, chương tải xuống và bộ nhớ đệm tiến độ đọc. Các tài khoản trong bảng dưới thuộc dữ liệu demo SQLite dùng cho kiểm thử; khi chạy bản Supabase, dùng tài khoản đã đăng ký trên dự án của bạn. Các file thiết lập database nằm trong thư mục `supabase/`.
 
 | Vai trò | Email đăng nhập | Mật khẩu khởi tạo | Câu trả lời bí mật | Đặc quyền nổi bật |
 | :--- | :--- | :--- | :--- | :--- |
 | **👑 Admin** | `admin@novelreader.local` | `Admin@123` | `tien hiep` | Bắt buộc đổi mật khẩu ở lần đăng nhập đầu; vào `AdminShell` (Dashboard, Duyệt truyện, Khóa user, Audit Log, Bảo trì) + nút chuyển nhanh sang giao diện Độc giả. |
 | **🪶 Author** | `author@novelreader.local` | `Author@123` | `fantasy` | Có cờ `is_author = true`; mở **Author Studio (Truyện của tôi)**, tự lưu nháp mỗi 5 giây, gửi duyệt tác phẩm, xem thống kê. |
 | **🦊 User** | `user@novelreader.local` | `User@1234` | `isekai` | Độc giả thành viên: làm Nhiệm vụ ngày/tuần/sự kiện, nhận Linh Thạch, mở khóa khung Avatar, bình luận, báo cáo vi phạm. |
-| **👤 Khách** | *(Bấm "Đọc ngay ở Chế độ Khách")* | — | — | Đọc truyện, tìm kiếm, tải offline, lưu tủ sách/lịch sử/bookmark cục bộ; khi đăng ký tài khoản mới sẽ tự động gộp toàn bộ dữ liệu trên máy. |
+| **👤 Khách** | *(Bấm "Đọc ngay ở Chế độ Khách")* | — | — | Đọc truyện, tìm kiếm, nhập truyện cá nhân và lưu tiến độ trên thiết bị. |
 
 ---
 
-## 2. Ma Trận Phân Quyền 3 Lớp (Route Guard • Provider Guard • DB/Firestore Rules)
+## 2. Ma Trận Phân Quyền (Route Guard • Provider Guard • Supabase RLS)
 
 | Chức năng | Khách | User | Author (`is_author`) | Admin |
 | :--- | :---: | :---: | :---: | :---: |
@@ -81,9 +81,17 @@
 # 1. Phân tích tĩnh mã nguồn (0 lỗi, 0 cảnh báo)
 dart analyze lib test
 
-# 2. Chạy toàn bộ 11 bài Unit Test & Widget Test (v1 + v2)
+# 2. Chạy toàn bộ Unit Test & Widget Test
 flutter test --no-pub
 
 # 3. Khởi chạy ứng dụng
 flutter run
 ```
+
+Để chạy Android, khởi động máy ảo Android hoặc kết nối điện thoại đã bật USB debugging, chạy `flutter devices`, sau đó dùng `flutter run -d <device-id>`. Có thể tạo APK debug bằng `flutter build apk --debug`.
+
+Cấu hình client dùng `SUPABASE_URL` và `SUPABASE_PUBLISHABLE_KEY` qua `--dart-define`; ứng dụng cũng hỗ trợ tên `NEXT_PUBLIC_SUPABASE_URL` và `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Khóa secret chỉ dùng phía máy chủ.
+
+Nhập truyện chữ bằng file TXT; nhập Manga trên web bằng ZIP/CBZ chứa ảnh hoặc các thư mục chương. Ảnh và chương được sắp theo số tự nhiên. Truyện tự nhập lưu trên thiết bị và được giữ lại khi xóa bộ nhớ tải xuống.
+
+Tiến độ đọc được ghi SQLite trước khi đồng bộ Supabase, có bộ nhớ đệm riêng theo tài khoản và chế độ Khách. Khi mạng trở lại hoặc tải lại lịch sử, ứng dụng thử gửi các mốc còn chờ và so sánh thời điểm đọc với máy chủ. Bản sao lưu JSON phiên bản 3 bổ sung phần lịch sử đang lưu trên thiết bị.

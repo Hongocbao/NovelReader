@@ -35,10 +35,12 @@ Future<void> main() async {
 
   // Hỗ trợ SUPABASE_* và NEXT_PUBLIC_SUPABASE_* khi build bằng dart-define.
   if (SupabaseConfig.isMissing) {
-    runApp(const MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: ConfigErrorScreen(),
-    ));
+    runApp(
+      const MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: ConfigErrorScreen(),
+      ),
+    );
     return;
   }
 
@@ -50,10 +52,12 @@ Future<void> main() async {
     );
   } catch (e) {
     debugPrint('Supabase init error: $e');
-    runApp(MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: ConfigErrorScreen(message: 'Không thể khởi tạo Supabase.\n\n$e'),
-    ));
+    runApp(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: ConfigErrorScreen(message: 'Không thể khởi tạo Supabase.\n\n$e'),
+      ),
+    );
     return;
   }
 
@@ -70,11 +74,7 @@ Future<void> main() async {
   final readerProvider = ReaderProvider(db)..init();
 
   runApp(
-    NovelReaderApp(
-      prefs: prefs,
-      database: db,
-      readerProvider: readerProvider,
-    ),
+    NovelReaderApp(prefs: prefs, database: db, readerProvider: readerProvider),
   );
 }
 
@@ -104,12 +104,27 @@ class NovelReaderApp extends StatelessWidget {
           create: (_) => AuthProvider(authRepo, prefs)..restoreSession(),
         ),
         ChangeNotifierProvider(create: (_) => NovelProvider(database, prefs)),
-        ChangeNotifierProvider(create: (_) => LibraryProvider(database)),
+        ChangeNotifierProxyProvider<SettingsProvider, ReaderProvider>(
+          create: (_) => readerProvider,
+          update: (_, settings, reader) {
+            final r = reader ?? readerProvider;
+            r.forceOffline = settings.forceOffline;
+            return r;
+          },
+        ),
+        ChangeNotifierProxyProvider2<
+          AuthProvider,
+          ReaderProvider,
+          LibraryProvider
+        >(
+          create: (_) => LibraryProvider(database),
+          update: (_, auth, reader, library) => library!
+            ..bindUser(auth.isGuest ? '' : auth.currentUser.id)
+            ..updateConnectivity(reader.isOnline),
+        ),
         ChangeNotifierProvider(create: (_) => QuestProvider(database)),
         ChangeNotifierProvider(create: (_) => NotificationProvider(database)),
-        ChangeNotifierProvider(
-          create: (_) => AdminDashboardProvider(database),
-        ),
+        ChangeNotifierProvider(create: (_) => AdminDashboardProvider(database)),
         ChangeNotifierProvider(
           create: (_) => AdminNovelProvider(database, novelRepo),
         ),
@@ -118,14 +133,6 @@ class NovelReaderApp extends StatelessWidget {
         ),
         ChangeNotifierProvider(
           create: (_) => ModerationProvider(database)..loadAll(),
-        ),
-        ChangeNotifierProxyProvider<SettingsProvider, ReaderProvider>(
-          create: (_) => readerProvider,
-          update: (_, settings, reader) {
-            final r = reader ?? readerProvider;
-            r.forceOffline = settings.forceOffline;
-            return r;
-          },
         ),
       ],
       child: Consumer<SettingsProvider>(

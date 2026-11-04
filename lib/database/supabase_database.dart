@@ -8,11 +8,12 @@ import '../models/chapter.dart';
 import '../models/library_item.dart';
 import '../models/novel.dart';
 import '../models/reading_history.dart';
+import '../repositories/reading_history_remote.dart';
 import '../utils/constants.dart';
 import '../utils/format.dart';
 
 /// Lớp truy cập Cloud Database Supabase thay thế hoàn toàn cho SQLite.
-class SupabaseDatabase {
+class SupabaseDatabase implements ReadingHistoryRemote {
   SupabaseDatabase._();
   static final SupabaseDatabase instance = SupabaseDatabase._();
 
@@ -362,6 +363,7 @@ class SupabaseDatabase {
   // Step 5: Truyền auth.uid(), bỏ giá trị mặc định userId = 1
   // ---------------------------------------------------------------------------
 
+  @override
   Future<List<ReadingHistory>> getHistory({String? userId}) async {
     final uid = userId ?? _client.auth.currentUser?.id ?? '';
     final res = await _client
@@ -395,6 +397,7 @@ class SupabaseDatabase {
     }).toList();
   }
 
+  @override
   Future<ReadingHistory?> getHistoryFor(int novelId, {String? userId}) async {
     final uid = userId ?? _client.auth.currentUser?.id ?? '';
     final res = await _client
@@ -428,17 +431,22 @@ class SupabaseDatabase {
     );
   }
 
-  Future<void> saveHistory(ReadingHistory history, {String? userId}) async {
+  Future<void> saveHistory(ReadingHistory history, {String? userId}) =>
+      saveHistories([history], userId: userId);
+
+  @override
+  Future<void> saveHistories(
+    List<ReadingHistory> histories, {
+    String? userId,
+  }) async {
     final uid = userId ?? _client.auth.currentUser?.id ?? '';
-    await _client.from('lich_su_doc').upsert({
-      'user_id': uid,
-      'novel_id': history.novelId,
-      'last_chapter_id': history.lastChapterId,
-      'scroll_offset': history.scrollOffset,
-      'last_read_at': history.lastReadAt.millisecondsSinceEpoch,
-    });
+    if (histories.isEmpty || uid.isEmpty) return;
+    await _client.from('lich_su_doc').upsert([
+      for (final history in histories) {'user_id': uid, ...history.toMap()},
+    ]);
   }
 
+  @override
   Future<void> deleteHistory(int novelId, {String? userId}) async {
     final uid = userId ?? _client.auth.currentUser?.id ?? '';
     await _client
@@ -448,6 +456,7 @@ class SupabaseDatabase {
         .eq('novel_id', novelId);
   }
 
+  @override
   Future<void> clearHistory({String? userId}) async {
     final uid = userId ?? _client.auth.currentUser?.id ?? '';
     await _client.from('lich_su_doc').delete().eq('user_id', uid);

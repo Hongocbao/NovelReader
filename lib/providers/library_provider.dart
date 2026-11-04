@@ -16,6 +16,57 @@ class LibraryProvider extends ChangeNotifier {
   LibraryProvider(this._db);
 
   final AppDatabase _db;
+  String? _userId;
+  int _identityRevision = 0;
+  int _historyRevision = 0;
+  bool _disposed = false;
+  bool? _wasOnline;
+
+  /// Thử đồng bộ lịch sử đang chờ khi mạng trở lại, kể cả lúc đang đọc.
+  void updateConnectivity(bool online) {
+    final reconnecting = _wasOnline == false && online;
+    _wasOnline = online;
+    if (!reconnecting || _userId == null || _userId!.isEmpty) return;
+    final revision = _identityRevision;
+    Future.microtask(() async {
+      if (!_disposed && revision == _identityRevision) await load();
+    });
+  }
+
+  /// Gọi từ ProxyProvider khi đăng nhập/đăng xuất; không giữ dữ liệu tài khoản cũ.
+  void bindUser(String userId) {
+    if (_userId == userId) return;
+    _userId = userId;
+    final revision = ++_identityRevision;
+    _loadRequestId++;
+    _items = [];
+    _history = [];
+    _quotes = [];
+    _sessions = [];
+    _bookmarks.clear();
+    _comments.clear();
+    _recordedChapterSessions.clear();
+    _loaded = false;
+    _loading = false;
+    _error = null;
+    // update của ProxyProvider chạy trong build; thông báo ở microtask kế tiếp.
+    Future.microtask(() async {
+      if (!_disposed &&
+          revision == _identityRevision &&
+          !_loading &&
+          !_loaded) {
+        await load();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _identityRevision++;
+    _loadRequestId++;
+    super.dispose();
+  }
 
   List<LibraryItem> _items = [];
   List<ReadingHistory> _history = [];
@@ -78,20 +129,24 @@ class LibraryProvider extends ChangeNotifier {
 
   /// Tải tủ sách + lịch sử + trích dẫn từ DB.
   Future<void> load({String? userId}) async {
+    final uid = userId ?? _userId;
     final requestId = ++_loadRequestId;
+    final historyRevision = _historyRevision;
     _loading = true;
     _error = null;
     notifyListeners();
     try {
       final results = await Future.wait([
-        _db.getLibrary(userId: userId),
-        _db.getHistory(userId: userId),
-        _db.getQuotes(userId: userId),
-        _db.getReadingSessions(userId: userId),
+        _db.getLibrary(userId: uid),
+        _db.getHistory(userId: uid),
+        _db.getQuotes(userId: uid),
+        _db.getReadingSessions(userId: uid),
       ]);
       if (requestId != _loadRequestId) return;
       _items = results[0] as List<LibraryItem>;
-      _history = results[1] as List<ReadingHistory>;
+      if (historyRevision == _historyRevision) {
+        _history = results[1] as List<ReadingHistory>;
+      }
       _quotes = results[2] as List<QuoteItem>;
       _sessions = results[3] as List<ReadingSessionStat>;
       _loaded = true;
@@ -143,6 +198,8 @@ class LibraryProvider extends ChangeNotifier {
 
   /// Thêm truyện vào tủ sách hoặc chuyển danh mục.
   Future<void> setCategory(int novelId, String category) async {
+    final uid = _userId;
+    final revision = _identityRevision;
     final existing = _items.where((e) => e.novelId == novelId).firstOrNull;
     await _db.upsertLibrary(
       LibraryItem(
@@ -150,18 +207,25 @@ class LibraryProvider extends ChangeNotifier {
         category: category,
         addedAt: existing?.addedAt ?? DateTime.now(),
       ),
+      userId: uid,
     );
+    if (revision != _identityRevision) return;
     await _reloadLibrary();
   }
 
   /// Xóa truyện khỏi tủ sách.
   Future<void> remove(int novelId) async {
-    await _db.removeFromLibrary(novelId);
+    final revision = _identityRevision;
+    await _db.removeFromLibrary(novelId, userId: _userId);
+    if (revision != _identityRevision) return;
     await _reloadLibrary();
   }
 
   Future<void> _reloadLibrary() async {
-    _items = await _db.getLibrary();
+    final revision = _identityRevision;
+    final items = await _db.getLibrary(userId: _userId);
+    if (revision != _identityRevision) return;
+    _items = items;
     notifyListeners();
   }
 
@@ -181,15 +245,10 @@ class LibraryProvider extends ChangeNotifier {
   /// Tự gọi khi mở chương, khi cuộn (có debounce), khi thoát màn hình đọc.
   /// Nếu truyện đang ở "Muốn đọc" sẽ tự chuyển sang "Đang đọc".
   Future<void> saveProgress(Novel novel, Chapter chapter, double offset) async {
+    final revision = _identityRevision;
+    final uid = _userId;
+    _historyRevision++;
     final now = DateTime.now();
-    await _db.saveHistory(
-      ReadingHistory(
-        novelId: novel.id,
-        lastChapterId: chapter.id,
-        scrollOffset: offset.clamp(0, 1).toDouble(),
-        lastReadAt: now,
-      ),
-    );
     final updated = ReadingHistory(
       novelId: novel.id,
       lastChapterId: chapter.id,
@@ -199,6 +258,8 @@ class LibraryProvider extends ChangeNotifier {
       chapterIndex: chapter.chapterIndex,
       chapterTitle: chapter.title,
     );
+    await _db.saveHistory(updated, userId: uid);
+    if (revision != _identityRevision) return;
     _history = [updated, ..._history.where((h) => h.novelId != novel.id)];
 
     if (categoryOf(novel.id) == LibraryCategory.want) {
@@ -220,17 +281,27 @@ class LibraryProvider extends ChangeNotifier {
 
   /// Xóa 1 mục lịch sử.
   Future<void> deleteHistory(int novelId) async {
-    await _db.deleteHistory(novelId);
+    final revision = _identityRevision;
+    _historyRevision++;
+    await _db.deleteHistory(novelId, userId: _userId);
+    if (revision != _identityRevision) return;
     _history = _history.where((h) => h.novelId != novelId).toList();
-    _items = await _db.getLibrary();
+    final items = await _db.getLibrary(userId: _userId);
+    if (revision != _identityRevision) return;
+    _items = items;
     notifyListeners();
   }
 
   /// Xóa toàn bộ lịch sử.
   Future<void> clearHistory() async {
-    await _db.clearHistory();
+    final revision = _identityRevision;
+    _historyRevision++;
+    await _db.clearHistory(userId: _userId);
+    if (revision != _identityRevision) return;
     _history = [];
-    _items = await _db.getLibrary();
+    final items = await _db.getLibrary(userId: _userId);
+    if (revision != _identityRevision) return;
+    _items = items;
     notifyListeners();
   }
 
@@ -243,7 +314,10 @@ class LibraryProvider extends ChangeNotifier {
 
   /// Tải bookmark của 1 truyện.
   Future<void> loadBookmarks(int novelId) async {
-    _bookmarks[novelId] = await _db.getBookmarks(novelId);
+    final revision = _identityRevision;
+    final bookmarks = await _db.getBookmarks(novelId);
+    if (revision != _identityRevision) return;
+    _bookmarks[novelId] = bookmarks;
     notifyListeners();
   }
 
@@ -282,6 +356,7 @@ class LibraryProvider extends ChangeNotifier {
     required Chapter chapter,
     required String content,
   }) async {
+    final revision = _identityRevision;
     await _db.addQuote(
       QuoteItem(
         novelId: novel.id,
@@ -292,13 +367,18 @@ class LibraryProvider extends ChangeNotifier {
         createdAt: DateTime.now(),
       ),
     );
-    _quotes = await _db.getQuotes();
+    if (revision != _identityRevision) return;
+    final quotes = await _db.getQuotes(userId: _userId);
+    if (revision != _identityRevision) return;
+    _quotes = quotes;
     notifyListeners();
   }
 
   /// Xóa một trích dẫn.
   Future<void> removeQuote(int id) async {
+    final revision = _identityRevision;
     await _db.deleteQuote(id);
+    if (revision != _identityRevision) return;
     _quotes = _quotes.where((q) => q.id != id).toList();
     notifyListeners();
   }
@@ -309,7 +389,10 @@ class LibraryProvider extends ChangeNotifier {
 
   /// Tải bình luận của chương.
   Future<void> loadComments(int chapterId) async {
-    _comments[chapterId] = await _db.getComments(chapterId);
+    final revision = _identityRevision;
+    final comments = await _db.getComments(chapterId);
+    if (revision != _identityRevision) return;
+    _comments[chapterId] = comments;
     notifyListeners();
   }
 
@@ -356,6 +439,7 @@ class LibraryProvider extends ChangeNotifier {
     String userId = '',
     int novelId = 0,
   }) async {
+    final revision = _identityRevision;
     if (_recordedChapterSessions.contains(chapterId)) return;
     // Bỏ thẻ ảnh để không đếm base64/đường dẫn ảnh thành "từ" của truyện tranh.
     final readable = content.replaceAll(
@@ -375,17 +459,23 @@ class LibraryProvider extends ChangeNotifier {
     );
     // Chỉ đánh dấu sau khi đã ghi local/cloud thành công để có thể thử lại
     // nếu ghi phiên đọc gặp lỗi tạm thời.
+    if (revision != _identityRevision) return;
     _recordedChapterSessions.add(chapterId);
-    _sessions = await _db.getReadingSessions();
+    final sessions = await _db.getReadingSessions(userId: _userId);
+    if (revision != _identityRevision) return;
+    _sessions = sessions;
     notifyListeners();
   }
 
   /// Xuất dữ liệu cá nhân ra chuỗi JSON.
-  Future<String> exportBackupJson() => _db.exportUserBackupJson();
+  Future<String> exportBackupJson() =>
+      _db.exportUserBackupJson(userId: _userId);
 
   /// Nhập dữ liệu cá nhân từ chuỗi JSON và tải lại trạng thái.
   Future<void> importBackupJson(String jsonString) async {
-    await _db.importUserBackupJson(jsonString);
+    final revision = _identityRevision;
+    await _db.importUserBackupJson(jsonString, userId: _userId);
+    if (revision != _identityRevision) return;
     await load();
   }
 }
