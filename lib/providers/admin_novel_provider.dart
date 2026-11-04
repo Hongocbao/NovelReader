@@ -17,6 +17,7 @@ class AdminNovelProvider extends ChangeNotifier {
   List<Novel> _pendingNovels = [];
   bool _isLoading = false;
   String? _error;
+  String? _saveWarning;
 
   AdminNovelProvider(dynamic _, this._novelRepo);
 
@@ -24,6 +25,7 @@ class AdminNovelProvider extends ChangeNotifier {
   List<Novel> get pendingNovels => _pendingNovels;
   bool get isLoading => _isLoading;
   String? get error => _error;
+  String? get saveWarning => _saveWarning;
 
   /// Tải danh sách toàn bộ truyện (kể cả chờ duyệt/đã xóa mềm) và hàng chờ duyệt.
   Future<void> loadNovels({bool includeDeleted = false}) async {
@@ -51,8 +53,12 @@ class AdminNovelProvider extends ChangeNotifier {
   Future<Novel> saveNovel({
     required AppUser actor,
     required Novel novel,
+    String? requestId,
+    List<({String title, String content})> chapters = const [],
   }) async {
     RoleGuard.requireAuthorOrAdmin(actor);
+    _saveWarning = null;
+    final parts = List<({String title, String content})>.unmodifiable(chapters);
     var toSave = novel;
     if (novel.id <= 0) {
       // Step 3: id do Postgres tự sinh, không tính MAX(id)+1 ở client
@@ -64,14 +70,25 @@ class AdminNovelProvider extends ChangeNotifier {
         updatedAt: DateTime.now(),
       );
     }
-    final saved = await _novelRepo.saveNovel(toSave);
+    final saved = await _novelRepo.saveNovel(
+      toSave,
+      requestId: requestId,
+      chapters: parts,
+    );
     if (actor.isAdmin) {
-      await _novelRepo.writeAuditLog(
-        admin: actor,
-        action: novel.id <= 0 ? 'CREATE_NOVEL' : 'UPDATE_NOVEL',
-        target: 'novel#${saved.id} (${saved.title})',
-        detail: 'Trạng thái duyệt: ${saved.moderationStatus}',
-      );
+      try {
+        await _novelRepo.writeAuditLog(
+          admin: actor,
+          action: novel.id <= 0 ? 'CREATE_NOVEL' : 'UPDATE_NOVEL',
+          target: 'novel#${saved.id} (${saved.title})',
+          detail: 'Trạng thái duyệt: ${saved.moderationStatus}',
+        );
+      } catch (error) {
+        // The primary write already succeeded; asking the user to submit again
+        // would be misleading. Surface the secondary failure separately.
+        _saveWarning = 'Tác phẩm đã lưu, nhưng chưa ghi được nhật ký quản trị.';
+        debugPrint('Could not record novel audit log: $error');
+      }
     }
     await loadNovels();
     return saved;

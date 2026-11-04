@@ -62,7 +62,11 @@ class FakeNovelRepository implements NovelRepository {
       _novels.where((n) => n.id == novelId).firstOrNull;
 
   @override
-  Future<Novel> saveNovel(Novel novel) async {
+  Future<Novel> saveNovel(
+    Novel novel, {
+    String? requestId,
+    List<({String title, String content})> chapters = const [],
+  }) async {
     _novels.add(novel);
     return novel;
   }

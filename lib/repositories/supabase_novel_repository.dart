@@ -59,24 +59,47 @@ class SupabaseNovelRepository implements NovelRepository {
   }
 
   @override
-  Future<Novel> saveNovel(Novel novel) async {
-    final map = {
-      ...novel.toMap(),
-      'search_text': Format.normalize('${novel.title} ${novel.author}'),
-    };
-
-    if (novel.id > 0) {
-      final existing = await _client.from('truyen').select('id').eq('id', novel.id).maybeSingle();
-      if (existing != null) {
-        await _client.from('truyen').update(map).eq('id', novel.id);
-        return novel;
+  Future<Novel> saveNovel(
+    Novel novel, {
+    String? requestId,
+    List<({String title, String content})> chapters = const [],
+  }) async {
+    if (novel.id <= 0) {
+      if (requestId == null) {
+        throw ArgumentError('Cần mã lần gửi để tạo tác phẩm mới.');
       }
+      return SupabaseDatabase.withClient(_client).insertCustomNovel(
+        title: novel.title,
+        author: novel.author,
+        description: novel.description,
+        status: novel.status,
+        type: novel.type,
+        genres: novel.genres,
+        chapterTitles: [for (final chapter in chapters) chapter.title],
+        chapterContents: [for (final chapter in chapters) chapter.content],
+        requestId: requestId,
+        coverUrl: novel.coverUrl,
+        moderationStatus: novel.moderationStatus,
+        ownerId: novel.ownerId,
+      );
     }
-
-    // Step 3: id do Postgres tự sinh, không tính MAX(id)+1 ở client
-    map.remove('id');
-    final inserted = await _client.from('truyen').insert(map).select().single();
-    return Novel.fromMap(inserted);
+    if (chapters.isNotEmpty) {
+      throw ArgumentError('Nhập hàng loạt chỉ dùng khi tạo tác phẩm mới.');
+    }
+    // Only save fields shown in the editor. An old form must not overwrite
+    // new chapter totals, ratings/views, moderation, or a soft deletion.
+    final saved = await _client.from('truyen').update({
+      'title': novel.title.trim(),
+      'author': novel.author.trim(),
+      'cover_url': novel.coverUrl,
+      'description': novel.description,
+      'status': novel.status,
+      'type': novel.type,
+      'genres': novel.genres.join(','),
+      'updated_at': DateTime.now().millisecondsSinceEpoch,
+      'search_text': Format.normalize('${novel.title} ${novel.author}'),
+    }).eq('id', novel.id).filter('deleted_at', 'is', null).select().single();
+    return Novel.fromMap(saved);
   }
 
   @override

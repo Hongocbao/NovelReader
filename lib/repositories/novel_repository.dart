@@ -11,7 +11,11 @@ abstract class NovelRepository {
   Future<List<Novel>> getNovelsByOwner(String ownerId);
   Future<List<Novel>> getPendingNovels();
   Future<Novel?> getNovelById(int novelId);
-  Future<Novel> saveNovel(Novel novel);
+  Future<Novel> saveNovel(
+    Novel novel, {
+    String? requestId,
+    List<({String title, String content})> chapters = const [],
+  });
   Future<void> softDeleteNovel(int novelId, {AppUser? admin});
   Future<void> restoreNovel(int novelId, {AppUser? admin});
   Future<void> approveNovel({required int novelId, required AppUser admin, String note = 'Đạt tiêu chuẩn xuất bản'});

@@ -1,7 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../database/app_database.dart';
+import '../../database/supabase_database.dart';
 import '../../models/novel.dart';
 import '../../providers/admin_novel_provider.dart';
 import '../../providers/auth_provider.dart';
@@ -30,6 +32,12 @@ class _NovelEditorScreenState extends State<NovelEditorScreen> {
   late Set<String> _selectedGenres;
   List<({String title, String content})> _previewBulkChapters = [];
   List<String> _bulkErrors = [];
+  bool _saving = false;
+  String? _saveError;
+  String? _submissionPayload;
+  String? _requestId;
+  late final String _generatedCoverUrl =
+      'https://picsum.photos/seed/novelreader-${DateTime.now().microsecondsSinceEpoch}/300/450';
 
   @override
   void initState() {
@@ -66,7 +74,7 @@ class _NovelEditorScreenState extends State<NovelEditorScreen> {
     }
 
     final regex = RegExp(
-      r'^(Chương\s+\d+[^\n]*)',
+      r'^[ \t]*((?:Chương|Chuong|Hồi|Hoi|Phần|Phan|Quyển|Quyen|Chapter|Chap)\s+\d+[^\n]*)',
       multiLine: true,
       caseSensitive: false,
     );
@@ -74,12 +82,17 @@ class _NovelEditorScreenState extends State<NovelEditorScreen> {
     if (matches.isEmpty) {
       chapters.add((title: 'Chương 1: Mở đầu', content: raw.trim()));
     } else {
+      final preface = raw.substring(0, matches.first.start).trim();
+      if (preface.isNotEmpty) {
+        chapters.add((title: 'Mở đầu', content: preface));
+      }
       final seenTitles = <String>{};
       for (var i = 0; i < matches.length; i++) {
         final title = matches[i].group(1)!.trim();
         final start = matches[i].end;
-        final end =
-            (i + 1 < matches.length) ? matches[i + 1].start : raw.length;
+        final end = (i + 1 < matches.length)
+            ? matches[i + 1].start
+            : raw.length;
         final body = raw.substring(start, end).trim();
         if (!seenTitles.add(title.toLowerCase())) {
           errors.add('Trùng tiêu đề: "$title"');
@@ -98,236 +111,292 @@ class _NovelEditorScreenState extends State<NovelEditorScreen> {
   }
 
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (_saving || !_formKey.currentState!.validate()) return;
     if (_bulkErrors.isNotEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Vui lòng sửa lỗi: ${_bulkErrors.first}')),
-      );
+      setState(() => _saveError = 'Vui lòng sửa lỗi: ${_bulkErrors.first}');
       return;
     }
     final actor = context.read<AuthProvider>().currentUser;
     final adminNovels = context.read<AdminNovelProvider>();
-
-    if (widget.novel == null && _previewBulkChapters.isNotEmpty) {
-      await AppDatabase.instance.insertCustomNovel(
-        title: _titleCtrl.text.trim(),
-        author: _authorCtrl.text.trim(),
-        description: _descCtrl.text.trim(),
-        status: _status,
-        type: _type,
-        genres: _selectedGenres.toList(),
-        chapters: _previewBulkChapters,
-        coverUrl: _coverCtrl.text.trim(),
-        moderationStatus: actor.isAdmin
-            ? ModerationStatus.approved
-            : ModerationStatus.pending,
-        ownerId: actor.id,
-      );
-      await adminNovels.loadNovels(includeDeleted: true);
-    } else {
-      final base = widget.novel ??
-          Novel(
-            id: 0,
-            title: _titleCtrl.text.trim(),
-            author: _authorCtrl.text.trim(),
-            coverUrl: _coverCtrl.text.trim().isEmpty
-                ? 'https://picsum.photos/seed/${DateTime.now().millisecondsSinceEpoch}/300/450'
-                : _coverCtrl.text.trim(),
-            description: _descCtrl.text.trim(),
-            status: _status,
-            type: _type,
-            genres: _selectedGenres.toList(),
-            totalChapters: 0,
-            rating: 0.0,
-            views: 0,
-            updatedAt: DateTime.now(),
-          );
-      await adminNovels.saveNovel(
-        actor: actor,
-        novel: base.copyWith(
-          title: _titleCtrl.text.trim(),
-          author: _authorCtrl.text.trim(),
-          coverUrl: _coverCtrl.text.trim().isEmpty
-              ? base.coverUrl
-              : _coverCtrl.text.trim(),
-          description: _descCtrl.text.trim(),
+    final messenger = ScaffoldMessenger.of(context);
+    final genres = _selectedGenres.toList()..sort();
+    final chapters = List<({String title, String content})>.unmodifiable(
+      _previewBulkChapters,
+    );
+    final base =
+        widget.novel ??
+        Novel(
+          id: 0,
+          title: '',
+          author: '',
+          coverUrl: _generatedCoverUrl,
+          description: '',
           status: _status,
           type: _type,
-          genres: _selectedGenres.toList(),
+          genres: genres,
+          totalChapters: 0,
+          rating: 0,
+          views: 0,
           updatedAt: DateTime.now(),
-        ),
-      );
+        );
+    final novel = base.copyWith(
+      title: _titleCtrl.text.trim(),
+      author: _authorCtrl.text.trim(),
+      coverUrl: _coverCtrl.text.trim().isEmpty
+          ? base.coverUrl
+          : _coverCtrl.text.trim(),
+      description: _descCtrl.text.trim(),
+      status: _status,
+      type: _type,
+      genres: genres,
+    );
+    final payload = jsonEncode({
+      'actor': actor.id,
+      'novel': novel.toMap()..remove('updated_at'),
+      'chapters': [
+        for (final chapter in chapters)
+          {'title': chapter.title, 'content': chapter.content},
+      ],
+    });
+    if (_submissionPayload != payload) {
+      _submissionPayload = payload;
+      _requestId = SupabaseDatabase.newImportRequestId();
     }
-
-    if (!mounted) return;
-    Navigator.pop(context, true);
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _saving = true;
+      _saveError = null;
+    });
+    try {
+      await adminNovels.saveNovel(
+        actor: actor,
+        novel: novel,
+        chapters: chapters,
+        requestId: _requestId,
+      );
+      if (!mounted) return;
+      final warning = adminNovels.saveWarning;
+      Navigator.pop(context, true);
+      if (warning != null) {
+        messenger.showSnackBar(SnackBar(content: Text(warning)));
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _saveError = 'Không lưu được tác phẩm: $error');
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          widget.novel == null ? 'Thêm / Nhập Truyện mới' : 'Chỉnh sửa Truyện',
-        ),
-        actions: [
-          FilledButton.icon(
-            onPressed: _save,
-            icon: const Icon(Icons.save),
-            label: const Text('Lưu tác phẩm'),
+    return PopScope(
+      canPop: !_saving,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(
+            widget.novel == null
+                ? 'Thêm / Nhập Truyện mới'
+                : 'Chỉnh sửa Truyện',
           ),
-          const SizedBox(width: 12),
-        ],
-      ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(20),
+          actions: [
+            FilledButton.icon(
+              onPressed: _saving ? null : _save,
+              icon: const Icon(Icons.save),
+              label: Text(_saving ? 'Đang lưu…' : 'Lưu tác phẩm'),
+            ),
+            const SizedBox(width: 12),
+          ],
+        ),
+        body: Column(
           children: [
-            TextFormField(
-              controller: _titleCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Tên truyện *',
-                border: OutlineInputBorder(),
-              ),
-              validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? 'Nhập tên truyện' : null,
-            ),
-            const SizedBox(height: 14),
-            TextFormField(
-              controller: _authorCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Tác giả *',
-                border: OutlineInputBorder(),
-              ),
-              validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? 'Nhập tên tác giả' : null,
-            ),
-            const SizedBox(height: 14),
-            TextFormField(
-              controller: _coverCtrl,
-              decoration: const InputDecoration(
-                labelText: 'URL ảnh bìa (để trống sẽ tự động sinh)',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _type,
-                    decoration: const InputDecoration(
-                      labelText: 'Loại hình',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: NovelType.novel,
-                        child: Text('Truyện chữ'),
-                      ),
-                      DropdownMenuItem(
-                        value: NovelType.lightNovel,
-                        child: Text('Light Novel'),
-                      ),
-                      DropdownMenuItem(
-                        value: NovelType.comic,
-                        child: Text('Truyện tranh / Manga'),
-                      ),
-                    ],
-                    onChanged: (v) =>
-                        setState(() => _type = v ?? NovelType.novel),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _status,
-                    decoration: const InputDecoration(
-                      labelText: 'Trạng thái',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: NovelStatus.ongoing,
-                        child: Text('Đang ra'),
-                      ),
-                      DropdownMenuItem(
-                        value: NovelStatus.completed,
-                        child: Text('Hoàn thành'),
-                      ),
-                    ],
-                    onChanged: (v) =>
-                        setState(() => _status = v ?? NovelStatus.ongoing),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            const Text('Thể loại (chọn ít nhất 1):'),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: Genres.all.map((g) {
-                final sel = _selectedGenres.contains(g);
-                return FilterChip(
-                  label: Text(g),
-                  selected: sel,
-                  onSelected: (v) => setState(() {
-                    if (v) {
-                      _selectedGenres.add(g);
-                    } else if (_selectedGenres.length > 1) {
-                      _selectedGenres.remove(g);
-                    }
-                  }),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 14),
-            TextFormField(
-              controller: _descCtrl,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Mô tả / Giới thiệu cốt truyện',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            if (widget.novel == null) ...[
-              const SizedBox(height: 20),
-              Text(
-                'Nhập hàng loạt nhiều chương (tự động tách theo dòng "Chương 1: ...", "Chương 2: ..."):',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _bulkCtrl,
-                maxLines: 7,
-                onChanged: _parseBulkPreview,
-                decoration: const InputDecoration(
-                  hintText:
-                      'Chương 1: Khởi đầu\nNội dung chương 1...\n\nChương 2: Biến cố\nNội dung chương 2...',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              if (_bulkErrors.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                for (final err in _bulkErrors)
-                  Text(
-                    '⚠️ $err',
+            if (_saveError != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                child: Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    _saveError!,
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.error,
                     ),
                   ),
-              ],
-              if (_previewBulkChapters.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  'Xem trước: Đã nhận diện ${_previewBulkChapters.length} chương',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
-              ],
-            ],
+              ),
+            Expanded(
+              child: Form(
+                key: _formKey,
+                child: ListView(
+                  padding: const EdgeInsets.all(20),
+                  children: [
+                    TextFormField(
+                      key: const ValueKey('novel-editor-title'),
+                      controller: _titleCtrl,
+                      enabled: !_saving,
+                      decoration: const InputDecoration(
+                        labelText: 'Tên truyện *',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Nhập tên truyện'
+                          : null,
+                    ),
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      key: const ValueKey('novel-editor-author'),
+                      controller: _authorCtrl,
+                      enabled: !_saving,
+                      decoration: const InputDecoration(
+                        labelText: 'Tác giả *',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Nhập tên tác giả'
+                          : null,
+                    ),
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      controller: _coverCtrl,
+                      enabled: !_saving,
+                      decoration: const InputDecoration(
+                        labelText: 'URL ảnh bìa (để trống sẽ tự động sinh)',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            isExpanded: true,
+                            initialValue: _type,
+                            decoration: const InputDecoration(
+                              labelText: 'Loại hình',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: const [
+                              DropdownMenuItem(
+                                value: NovelType.novel,
+                                child: Text('Truyện chữ'),
+                              ),
+                              DropdownMenuItem(
+                                value: NovelType.lightNovel,
+                                child: Text('Light Novel'),
+                              ),
+                              DropdownMenuItem(
+                                value: NovelType.comic,
+                                child: Text('Truyện tranh / Manga'),
+                              ),
+                            ],
+                            onChanged: _saving
+                                ? null
+                                : (v) => setState(
+                                    () => _type = v ?? NovelType.novel,
+                                  ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            isExpanded: true,
+                            initialValue: _status,
+                            decoration: const InputDecoration(
+                              labelText: 'Trạng thái',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: const [
+                              DropdownMenuItem(
+                                value: NovelStatus.ongoing,
+                                child: Text('Đang ra'),
+                              ),
+                              DropdownMenuItem(
+                                value: NovelStatus.completed,
+                                child: Text('Hoàn thành'),
+                              ),
+                            ],
+                            onChanged: _saving
+                                ? null
+                                : (v) => setState(
+                                    () => _status = v ?? NovelStatus.ongoing,
+                                  ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    const Text('Thể loại (chọn ít nhất 1):'),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: Genres.all.map((g) {
+                        final sel = _selectedGenres.contains(g);
+                        return FilterChip(
+                          label: Text(g),
+                          selected: sel,
+                          onSelected: _saving
+                              ? null
+                              : (v) => setState(() {
+                                  if (v) {
+                                    _selectedGenres.add(g);
+                                  } else if (_selectedGenres.length > 1) {
+                                    _selectedGenres.remove(g);
+                                  }
+                                }),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      controller: _descCtrl,
+                      enabled: !_saving,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: 'Mô tả / Giới thiệu cốt truyện',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    if (widget.novel == null) ...[
+                      const SizedBox(height: 20),
+                      Text(
+                        'Nhập hàng loạt nhiều chương (tự động tách theo dòng "Chương 1: ...", "Chương 2: ..."):',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        key: const ValueKey('novel-editor-bulk'),
+                        controller: _bulkCtrl,
+                        enabled: !_saving,
+                        maxLines: 7,
+                        onChanged: _parseBulkPreview,
+                        decoration: const InputDecoration(
+                          hintText: 'Chương 1: Khởi đầu\nNội dung chương 1...\n\nChương 2: Biến cố\nNội dung chương 2...',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      if (_bulkErrors.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        for (final err in _bulkErrors)
+                          Text(
+                            '⚠️ $err',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                          ),
+                      ],
+                      if (_previewBulkChapters.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Xem trước: Đã nhận diện ${_previewBulkChapters.length} chương',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ],
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),

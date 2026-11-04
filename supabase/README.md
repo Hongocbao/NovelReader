@@ -14,6 +14,8 @@ Chạy file 13 cuối cùng nếu đang cài mới theo các bước bên dướ
 
 Kiểm thử cục bộ với PostgreSQL riêng, không dùng tài khoản hoặc dữ liệu Supabase thật: xem lệnh ở đầu `test/postgres/atomic_chapter_append.py`. Các ca thử gồm nhiều kết nối gửi đồng thời, thử lại cùng mã, rollback khi cập nhật tổng số chương bị lỗi, giữ dữ liệu cũ và chạy lại migration.
 
+Màn quản trị tạo truyện mới (kể cả truyện chưa có chương) và nhập nhiều chương đều dùng `create_novel_with_chapters` từ migration 10/13, không lưu tác phẩm cộng đồng vào SQLite. Khi sửa thông tin truyện, app chỉ gửi các trường trong form và nhận lại dữ liệu máy chủ; số chương, lượt xem, đánh giá và trạng thái kiểm duyệt không bị ghi đè bởi bản form cũ. Form giữ nội dung sau lỗi mạng và dùng lại mã gửi nếu người dùng thử lại cùng dữ liệu. Lỗi ghi nhật ký sau khi lưu thành công được báo riêng để tránh hiểu nhầm phải gửi lại tác phẩm.
+
 ---
 
 ## BƯỚC 1: TẠO DATABASE TRÊN SUPABASE (CHỈ MẤT 1 PHÚT)
