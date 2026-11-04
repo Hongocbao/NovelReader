@@ -8,6 +8,7 @@ import 'package:novel_reader/models/library_item.dart';
 import 'package:novel_reader/models/novel.dart';
 import 'package:novel_reader/models/reading_history.dart';
 import 'package:novel_reader/providers/reader_provider.dart';
+import 'package:novel_reader/utils/portable_backup_images.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
@@ -214,6 +215,93 @@ void main() {
     final sqlite = await target.database;
     expect((await sqlite.query('truyen', where: 'id < 0')).length, 1);
   });
+
+  test('Linked Manga pages and covers remain readable after deleting source images', () async {
+    final image = File('${folder.path}/trang ảnh 01.png');
+    final data = base64Decode(
+      manga.split('base64,').last.split('[/img]').first,
+    );
+    await image.writeAsBytes(data);
+    final novel = await add(
+      source,
+      'Manga thư mục',
+      '[img]${image.absolute.path}[/img]\n[img]${image.absolute.uri}[/img]',
+      type: 'comic',
+    );
+    await (await source.database).update(
+      'truyen',
+      {'cover_url': image.absolute.path},
+      where: 'id = ?',
+      whereArgs: [novel.id],
+    );
+    final backup = await source.exportUserBackupJson();
+    final chapters = await source.getChapters(novel.id);
+    expect(
+      (await source.getChapter(chapters.single.id, novelId: novel.id))!.content,
+      contains(image.absolute.path),
+    );
+    await source.importUserBackupJson(backup);
+    expect((await source.getLibrary()).length, 1);
+    await image.delete();
+    await target.importUserBackupJson(backup);
+    final restored = (await target.getLibrary()).single.novel!;
+    expect(restored.coverUrl, startsWith('data:image/png;base64,'));
+    final reader = ReaderProvider(
+      target,
+      connectivityStream: const Stream.empty(),
+      checkConnectivity: () async => false,
+    );
+    await reader.init();
+    try {
+      await reader.openNovel(restored);
+      expect(reader.contentError, isNull);
+      expect(reader.content, '$manga\n$manga');
+    } finally {
+      reader.dispose();
+    }
+  });
+
+  test(
+    'Missing linked image fails export without modifying the original novel',
+    () async {
+      final path = '${folder.path}/missing.png';
+      final novel = await add(
+        source,
+        'Ảnh bị thiếu',
+        '[img]$path[/img]',
+        type: 'comic',
+      );
+      await expectLater(
+        source.exportUserBackupJson(),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect((await source.getLibrary()).single.novelId, novel.id);
+      expect(
+        (await source.getChapter(
+          (await source.getChapters(novel.id)).single.id,
+          novelId: novel.id,
+        ))!.content,
+        '[img]$path[/img]',
+      );
+    },
+  );
+
+  test(
+    'Image embedding enforces limits and preserves data/network references',
+    () async {
+      final image = File('${folder.path}/limit.png');
+      await image.writeAsBytes([1, 2, 3, 4]);
+      await expectLater(
+        PortableBackupImages(maxImageBytes: 3).image(image.path),
+        throwsStateError,
+      );
+      final budget = PortableBackupImages(maxTotalBytes: 6);
+      await budget.image(image.path);
+      await expectLater(budget.image(image.path), throwsStateError);
+      final content = '$manga\n[img]https://example.invalid/a.png[/img]';
+      expect(await PortableBackupImages().content(content), content);
+    },
+  );
 
   test(
     'Version 2 backup remains readable without the new content fields',

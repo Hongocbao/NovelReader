@@ -14,6 +14,7 @@ import '../models/reading_history.dart';
 import '../repositories/reading_history_remote.dart';
 import '../utils/constants.dart';
 import '../utils/format.dart';
+import '../utils/portable_backup_images.dart';
 import 'supabase_database.dart';
 import 'reading_history_cache.dart';
 import 'v2_database_store.dart';
@@ -1565,7 +1566,7 @@ class AppDatabase {
   Future<String> exportUserBackupJson({String? userId}) async {
     final uid = _historyUserId(userId);
     final db = await database;
-    return db.transaction((db) async {
+    final snapshot = await db.transaction((db) async {
       final libraryRows = await db.query('tu_sach');
       final historyRows = await db.query('lich_su_doc');
       final bookmarkRows = await db.query('dau_trang');
@@ -1578,7 +1579,7 @@ class AppDatabase {
         whereArgs: [uid],
       );
 
-      return const JsonEncoder.withIndent('  ').convert({
+      return <String, Object?>{
         'backup_version': 4,
         'custom_novels': await db.query(
           'truyen',
@@ -1601,8 +1602,27 @@ class AppDatabase {
           for (final row in cachedHistoryRows)
             Map<String, Object?>.from(row)..remove('user_id'),
         ],
-      });
+      };
     });
+    // Đọc file sau khi đóng transaction để việc lưu tiến độ vẫn hoạt động
+    // trong lúc sao lưu một bộ Manga có nhiều trang.
+    final images = PortableBackupImages();
+    snapshot['custom_novels'] = [
+      for (final row in snapshot['custom_novels'] as List<Map<String, Object?>>)
+        {
+          ...row,
+          'cover_url': await images.image((row['cover_url'] as String?) ?? ''),
+        },
+    ];
+    snapshot['custom_chapters'] = [
+      for (final row
+          in snapshot['custom_chapters'] as List<Map<String, Object?>>)
+        {
+          ...row,
+          'content': await images.content((row['content'] as String?) ?? ''),
+        },
+    ];
+    return const JsonEncoder.withIndent('  ').convert(snapshot);
   }
 
   /// Khôi phục dữ liệu cá nhân từ chuỗi JSON đã sao lưu.

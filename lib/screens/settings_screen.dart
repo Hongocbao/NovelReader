@@ -1,3 +1,7 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
@@ -27,17 +31,14 @@ class SettingsScreen extends StatefulWidget {
   final VoidCallback? onOpenHistory;
   final VoidCallback? onOpenDownloads;
 
-  const SettingsScreen({
-    super.key,
-    this.onOpenHistory,
-    this.onOpenDownloads,
-  });
+  const SettingsScreen({super.key, this.onOpenHistory, this.onOpenDownloads});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  bool _backupBusy = false;
   @override
   void initState() {
     super.initState();
@@ -65,39 +66,104 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _showExportBackupDialog() async {
-    final jsonStr = await context.read<LibraryProvider>().exportBackupJson();
+    if (_backupBusy) return;
+    setState(() => _backupBusy = true);
+    late final String jsonStr;
+    try {
+      jsonStr = await context.read<LibraryProvider>().exportBackupJson();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Không thể sao lưu: $error')));
+      }
+      return;
+    } finally {
+      if (mounted) setState(() => _backupBusy = false);
+    }
     if (!mounted) return;
+    final bytes = Uint8List.fromList(utf8.encode(jsonStr));
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text(AppStrings.exportBackup),
-        content: SizedBox(
-          width: double.maxFinite,
-          height: 260,
-          child: SelectableText(
-            jsonStr,
-            style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-          ),
+        content: Text(
+          'Bản sao lưu gồm truyện tự nhập, ảnh Manga, tủ sách và tiến độ đọc.\n\nDung lượng: ${Format.bytes(bytes.length)}',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text(AppStrings.cancel),
           ),
+          if (bytes.length < 1024 * 1024)
+            TextButton.icon(
+              icon: const Icon(Icons.copy_rounded),
+              label: const Text('Sao chép JSON'),
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: jsonStr));
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text(AppStrings.backupCopied)),
+                );
+              },
+            ),
           FilledButton.icon(
-            icon: const Icon(Icons.copy_rounded),
-            label: const Text('Sao chép JSON'),
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: jsonStr));
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text(AppStrings.backupCopied)),
-              );
+            icon: const Icon(Icons.save_alt),
+            label: const Text('Lưu file JSON'),
+            onPressed: () async {
+              try {
+                final saved = await FilePicker.saveFile(
+                  fileName:
+                      'NovelReader_${DateTime.now().millisecondsSinceEpoch}.json',
+                  bytes: bytes,
+                  mimeType: 'application/json',
+                );
+                if (saved != null && ctx.mounted) Navigator.pop(ctx);
+              } catch (error) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Không lưu được file: $error')),
+                  );
+                }
+              }
             },
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _importBackupFile() async {
+    if (_backupBusy) return;
+    final library = context.read<LibraryProvider>();
+    setState(() => _backupBusy = true);
+    try {
+      final file = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+      );
+      if (file == null || !mounted) return;
+      final bytes = BytesBuilder(copy: false);
+      await for (final chunk in file.readAsByteStream()) {
+        if (bytes.length + chunk.length > 384 * 1024 * 1024) {
+          throw const FormatException('File sao lưu vượt 384 MB.');
+        }
+        bytes.add(chunk);
+      }
+      await library.importBackupJson(utf8.decode(bytes.takeBytes()));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(AppStrings.restoreSuccess)),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Không khôi phục được: $error')));
+      }
+    } finally {
+      if (mounted) setState(() => _backupBusy = false);
+    }
   }
 
   Future<void> _showImportBackupDialog() async {
@@ -129,9 +195,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (ok == true && ctrl.text.trim().isNotEmpty && mounted) {
       final messenger = ScaffoldMessenger.of(context);
       try {
-        await context
-            .read<LibraryProvider>()
-            .importBackupJson(ctrl.text.trim());
+        await context.read<LibraryProvider>().importBackupJson(
+          ctrl.text.trim(),
+        );
         messenger.showSnackBar(
           const SnackBar(content: Text(AppStrings.restoreSuccess)),
         );
@@ -149,7 +215,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final coverCtrl = TextEditingController();
     final descCtrl = TextEditingController();
     final rawCtrl = TextEditingController(
-      text: 'Chương 1: Khởi đầu hành trình\n'
+      text:
+          'Chương 1: Khởi đầu hành trình\n'
           'Viết hoặc dán nội dung chương 1 tại đây...\n\n'
           'Chương 2: Bước ngoặt\n'
           'Nội dung chương 2 (ứng dụng sẽ tự động tách thành các chương riêng)...',
@@ -164,8 +231,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       useSafeArea: true,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheetState) {
-          final detectedCount =
-              NovelProvider.parseChaptersFromText(rawCtrl.text).length;
+          final detectedCount = NovelProvider.parseChaptersFromText(
+            rawCtrl.text,
+          ).length;
           return Padding(
             padding: EdgeInsets.only(
               left: 20,
@@ -180,9 +248,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   Text(
                     AppStrings.createOrImportNovel,
-                    style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                    style: Theme.of(ctx).textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -367,9 +434,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   padding: const EdgeInsets.all(16),
                   child: Text(
                     '${AppStrings.quotesCollection} (${quotes.length})',
-                    style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                    style: Theme.of(ctx).textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.bold),
                   ),
                 ),
                 const Divider(height: 1),
@@ -438,8 +504,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   const SizedBox(height: 10),
                                   Text(
                                     '— ${q.novelTitle} (${q.author}) • ${q.chapterTitle}',
-                                    style:
-                                        Theme.of(ctx).textTheme.labelMedium,
+                                    style: Theme.of(ctx).textTheme.labelMedium,
                                   ),
                                 ],
                               ),
@@ -491,9 +556,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               children: [
                                 Text(
                                   AppStrings.guestName,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleMedium
+                                  style: Theme.of(context).textTheme.titleMedium
                                       ?.copyWith(fontWeight: FontWeight.bold),
                                 ),
                                 const SizedBox(width: 8),
@@ -520,9 +583,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             const SizedBox(height: 2),
                             Text(
                               AppStrings.guestDesc,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
+                              style: Theme.of(context).textTheme.bodySmall
                                   ?.copyWith(color: scheme.onSurfaceVariant),
                             ),
                           ],
@@ -562,12 +623,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   title: const Text(AppStrings.history),
                   subtitle: Text('${lp.history.length} truyện'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: widget.onOpenHistory ??
+                  onTap:
+                      widget.onOpenHistory ??
                       () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const HistoryScreen(),
-                            ),
-                          ),
+                        MaterialPageRoute(
+                          builder: (_) => const HistoryScreen(),
+                        ),
+                      ),
                 ),
                 const Divider(height: 1),
                 ListTile(
@@ -577,12 +639,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     '${rp.downloadedCount} chương • ${Format.bytes(rp.downloadedBytes)}',
                   ),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: widget.onOpenDownloads ??
+                  onTap:
+                      widget.onOpenDownloads ??
                       () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const DownloadsScreen(),
-                            ),
-                          ),
+                        MaterialPageRoute(
+                          builder: (_) => const DownloadsScreen(),
+                        ),
+                      ),
                 ),
                 const Divider(height: 1),
                 ListTile(
@@ -619,9 +682,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // Giao diện
           Text(
             AppStrings.appearance,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(context).textTheme.titleSmall
+                ?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           Card(
@@ -674,9 +736,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // Dữ liệu & bộ nhớ
           Text(
             AppStrings.dataAndStorage,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(context).textTheme.titleSmall
+                ?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           Card(
@@ -715,18 +776,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   leading: const Icon(Icons.upload_file_outlined),
                   title: const Text(AppStrings.exportBackup),
                   subtitle: const Text(
-                    'Sao lưu tủ sách, lịch sử đọc, bookmark & trích dẫn',
+                    'Lưu truyện tự nhập, ảnh và tiến độ vào file JSON',
                   ),
-                  onTap: _showExportBackupDialog,
+                  onTap: _backupBusy ? null : _showExportBackupDialog,
+                  trailing: _backupBusy
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : null,
                 ),
                 const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.file_open_outlined),
+                  title: const Text('Khôi phục từ file JSON'),
+                  subtitle: const Text('Chọn bản sao lưu trên thiết bị'),
+                  onTap: _backupBusy ? null : _importBackupFile,
+                ),
                 ListTile(
                   leading: const Icon(Icons.restore_page_outlined),
                   title: const Text(AppStrings.importBackup),
                   subtitle: const Text(
                     'Dán chuỗi JSON đã sao lưu để khôi phục dữ liệu',
                   ),
-                  onTap: _showImportBackupDialog,
+                  onTap: _backupBusy ? null : _showImportBackupDialog,
                 ),
               ],
             ),
@@ -765,7 +839,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       context: context,
                       builder: (ctx) => AlertDialog(
                         title: const Text('Xác nhận đăng xuất'),
-                        content: Text('Bạn có chắc chắn muốn đăng xuất khỏi ${user.email}?'),
+                        content: Text(
+                          'Bạn có chắc chắn muốn đăng xuất khỏi ${user.email}?',
+                        ),
                         actions: [
                           TextButton(
                             onPressed: () => Navigator.pop(ctx, false),
@@ -812,9 +888,8 @@ class _StatBox extends StatelessWidget {
       children: [
         Text(
           value,
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+          style: Theme.of(context).textTheme.titleLarge
+              ?.copyWith(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 2),
         Text(label, style: Theme.of(context).textTheme.bodySmall),

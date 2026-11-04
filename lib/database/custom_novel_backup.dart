@@ -3,6 +3,7 @@ import 'package:sqflite/sqflite.dart';
 import '../models/chapter.dart';
 import '../models/novel.dart';
 import '../utils/format.dart';
+import '../utils/portable_backup_images.dart';
 
 /// Khôi phục truyện cá nhân trong cùng transaction với tủ sách và lịch sử.
 /// ID âm của máy nguồn có thể trùng máy đích nên phải ánh xạ lại cả chương.
@@ -72,7 +73,31 @@ class CustomNovelBackup {
           whereArgs: [candidate['id']],
           orderBy: 'chapter_index',
         );
-        if (_matches(novel.toMap(), sourceRows, candidate, saved)) {
+        var identical = _matches(novel.toMap(), sourceRows, candidate, saved);
+        if (!identical) {
+          // Bản sao lưu nhúng ảnh, còn truyện gốc có thể vẫn liên kết file.
+          try {
+            final images = PortableBackupImages();
+            final portable = [
+              for (final row in saved)
+                {
+                  ...row,
+                  'content': await images.content(
+                    (row['content'] as String?) ?? '',
+                  ),
+                },
+            ];
+            identical = _matches(
+              novel.toMap(),
+              sourceRows,
+              candidate,
+              portable,
+            );
+          } catch (_) {
+            // Giữ truyện đang có nếu không xác minh được nội dung ảnh.
+          }
+        }
+        if (identical) {
           reused = candidate['id'] as int;
           for (var i = 0; i < parts.length; i++) {
             result.chapterIds[parts[i].id] = saved[i]['id'] as int;
