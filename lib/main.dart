@@ -123,7 +123,11 @@ class NovelReaderApp extends StatelessWidget {
             ..bindUser(auth.isGuest ? '' : auth.currentUser.id)
             ..updateConnectivity(reader.isOnline),
         ),
-        ChangeNotifierProvider(create: (_) => QuestProvider(database)),
+        ChangeNotifierProxyProvider<AuthProvider, QuestProvider>(
+          create: (_) => QuestProvider(database),
+          update: (_, auth, quests) =>
+              quests!..bindUser(auth.isGuest ? '' : auth.currentUser.id),
+        ),
         ChangeNotifierProvider(create: (_) => NotificationProvider(database)),
         ChangeNotifierProvider(create: (_) => AdminDashboardProvider(database)),
         ChangeNotifierProvider(

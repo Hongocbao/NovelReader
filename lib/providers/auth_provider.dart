@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -27,6 +29,43 @@ class AuthProvider extends ChangeNotifier {
   bool _profileNeedsRefresh = false;
   int _identityRevision = 0;
   int? _profileRefreshRevision;
+  bool _disposed = false;
+  int _profileMutationVersion = 0;
+  final _mutationTails = <int, Future<void>>{};
+
+  bool _sameIdentity(String userId, int revision) =>
+      !_disposed && revision == _identityRevision && _currentUser.id == userId;
+
+  /// Serialize profile/economy responses within one session. A pending request
+  /// from an old session neither blocks nor overwrites the next account.
+  Future<T> _mutateUser<T>(
+    T cancelled,
+    Future<T> Function(AppUser user, int revision) action,
+  ) async {
+    final revision = _identityRevision;
+    final userId = _currentUser.id;
+    _profileMutationVersion++;
+    final previous = _mutationTails[revision];
+    final done = Completer<void>();
+    _mutationTails[revision] = done.future;
+    try {
+      if (previous != null) await previous;
+      if (!_sameIdentity(userId, revision)) return cancelled;
+      return await action(_currentUser, revision);
+    } finally {
+      done.complete();
+      if (identical(_mutationTails[revision], done.future)) {
+        _mutationTails.remove(revision);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _identityRevision++;
+    super.dispose();
+  }
 
   AuthProvider(this._repo, this._prefs);
 
@@ -228,87 +267,110 @@ class AuthProvider extends ChangeNotifier {
     List<String>? pinnedAchievements,
   }) async {
     RoleGuard.requirePermission(_currentUser, AppPermission.interactAndGamify);
-    final nextPinned = pinnedAchievements != null
-        ? pinnedAchievements.take(3).toList()
-        : _currentUser.pinnedAchievements;
-
-    final updated = _currentUser.copyWith(
-      displayName: displayName?.trim().isNotEmpty == true
-          ? displayName!.trim()
-          : _currentUser.displayName,
-      avatar: avatar ?? _currentUser.avatar,
-      avatarFrame: avatarFrame ?? _currentUser.avatarFrame,
-      pinnedAchievements: nextPinned,
-    );
-    _currentUser = await _repo.updateUser(updated);
-    notifyListeners();
+    final pins = pinnedAchievements?.take(3).toList();
+    await _mutateUser<bool>(false, (user, revision) async {
+      final updated = await _repo.updateUser(
+        user.copyWith(
+          displayName: displayName?.trim().isNotEmpty == true
+              ? displayName!.trim()
+              : user.displayName,
+          avatar: avatar ?? user.avatar,
+          avatarFrame: avatarFrame ?? user.avatarFrame,
+          pinnedAchievements: pins ?? user.pinnedAchievements,
+        ),
+      );
+      if (!_sameIdentity(user.id, revision) || updated.id != user.id) {
+        return false;
+      }
+      _currentUser = updated;
+      notifyListeners();
+      return true;
+    });
   }
 
   /// Nhận thưởng bằng RPC để đánh dấu nhiệm vụ và cộng tiền nguyên tử.
   Future<int?> claimQuestReward(int questId, int reward) async {
     if (_currentUser.isGuest || reward < 0 || reward > 100000) return null;
-    final economyRepo = _repo is AtomicEconomyRepository
-        ? _repo as AtomicEconomyRepository
-        : null;
-    if (economyRepo == null) {
-      _currentUser = _currentUser.copyWith(
-        linhThach: (_currentUser.linhThach + reward).clamp(0, 9999999),
-      );
+    return _mutateUser<int?>(null, (user, revision) async {
+      final economyRepo = _repo is AtomicEconomyRepository
+          ? _repo as AtomicEconomyRepository
+          : null;
+      if (economyRepo == null) {
+        _currentUser = user.copyWith(
+          linhThach: (user.linhThach + reward).clamp(0, 9999999),
+        );
+        notifyListeners();
+        return reward;
+      }
+      final claim = await economyRepo.claimQuestReward(questId);
+      if (claim == null ||
+          !_sameIdentity(user.id, revision) ||
+          claim.user.id != user.id) {
+        return null;
+      }
+      _currentUser = claim.user;
       notifyListeners();
-      return reward;
-    }
-    final claim = await economyRepo.claimQuestReward(questId);
-    if (claim == null) return null;
-    _currentUser = claim.user;
-    notifyListeners();
-    return claim.reward;
+      return claim.reward;
+    });
   }
 
   /// Mua vật phẩm trong Cửa hàng Linh Thạch (khung avatar, nền đọc, hiệu ứng).
   Future<bool> purchaseShopItem(String itemKey, int cost) async {
     RoleGuard.requirePermission(_currentUser, AppPermission.interactAndGamify);
     if (itemKey.trim().isEmpty || cost <= 0) return false;
-    if (_currentUser.unlockedItems.contains(itemKey)) return true;
-    if (_currentUser.linhThach < cost) return false;
-    final economyRepo = _repo is AtomicEconomyRepository
-        ? _repo as AtomicEconomyRepository
-        : null;
-    if (economyRepo == null) {
-      _currentUser = _currentUser.copyWith(
-        linhThach: _currentUser.linhThach - cost,
-        unlockedItems: [..._currentUser.unlockedItems, itemKey],
-      );
+    return _mutateUser<bool>(false, (user, revision) async {
+      if (user.unlockedItems.contains(itemKey)) return true;
+      if (user.linhThach < cost) return false;
+      final economyRepo = _repo is AtomicEconomyRepository
+          ? _repo as AtomicEconomyRepository
+          : null;
+      if (economyRepo == null) {
+        _currentUser = user.copyWith(
+          linhThach: user.linhThach - cost,
+          unlockedItems: [...user.unlockedItems, itemKey],
+        );
+        notifyListeners();
+        return true;
+      }
+      final updated = await economyRepo.purchaseShopItem(itemKey, cost);
+      if (updated == null ||
+          !_sameIdentity(user.id, revision) ||
+          updated.id != user.id) {
+        return false;
+      }
+      _currentUser = updated;
       notifyListeners();
       return true;
-    }
-    final updated = await economyRepo.purchaseShopItem(itemKey, cost);
-    if (updated == null) return false;
-    _currentUser = updated;
-    notifyListeners();
-    return true;
+    });
   }
 
   /// Mua Khiên bảo vệ Streak (tiêu 20 Linh Thạch để giữ chuỗi 1 ngày bỏ lỡ).
   Future<bool> buyStreakShield() async {
     RoleGuard.requirePermission(_currentUser, AppPermission.interactAndGamify);
-    if (_currentUser.hasStreakShield) return true;
-    if (_currentUser.linhThach < 20) return false;
-    final economyRepo = _repo is AtomicEconomyRepository
-        ? _repo as AtomicEconomyRepository
-        : null;
-    if (economyRepo == null) {
-      _currentUser = _currentUser.copyWith(
-        linhThach: _currentUser.linhThach - 20,
-        hasStreakShield: true,
-      );
+    return _mutateUser<bool>(false, (user, revision) async {
+      if (user.hasStreakShield) return true;
+      if (user.linhThach < 20) return false;
+      final economyRepo = _repo is AtomicEconomyRepository
+          ? _repo as AtomicEconomyRepository
+          : null;
+      if (economyRepo == null) {
+        _currentUser = user.copyWith(
+          linhThach: user.linhThach - 20,
+          hasStreakShield: true,
+        );
+        notifyListeners();
+        return true;
+      }
+      final updated = await economyRepo.buyStreakShield();
+      if (updated == null ||
+          !_sameIdentity(user.id, revision) ||
+          updated.id != user.id) {
+        return false;
+      }
+      _currentUser = updated;
       notifyListeners();
       return true;
-    }
-    final updated = await economyRepo.buyStreakShield();
-    if (updated == null) return false;
-    _currentUser = updated;
-    notifyListeners();
-    return true;
+    });
   }
 
   /// Làm mới dữ liệu tài khoản hiện tại từ bảng ho_so.
@@ -318,10 +380,19 @@ class AuthProvider extends ChangeNotifier {
     final userId = _currentUser.id;
     _profileRefreshRevision = revision;
     try {
+      // A read started before a purchase must not restore its old balance.
+      final pendingMutation = _mutationTails[revision];
+      if (pendingMutation != null) await pendingMutation;
+      if (!_sameIdentity(userId, revision)) return;
+      final mutationVersion = _profileMutationVersion;
       final fresh = await _repo.getUserById(userId);
       // Hồ sơ cũ có thể trả về sau khi đăng xuất, đổi tài khoản hoặc đăng nhập
       // lại cùng tài khoản. Chỉ cập nhật phiên đã gửi yêu cầu này.
-      if (revision != _identityRevision || _currentUser.id != userId) return;
+      if (!_sameIdentity(userId, revision) ||
+          mutationVersion != _profileMutationVersion ||
+          _mutationTails.containsKey(revision)) {
+        return;
+      }
       if (fresh != null && fresh.id == userId) {
         _currentUser = fresh;
         _profileNeedsRefresh = false;

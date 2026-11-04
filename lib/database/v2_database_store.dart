@@ -528,12 +528,12 @@ class V2DatabaseStore {
     Database db, {
     required String userId,
     required int questId,
+    required int progress,
   }) async {
-    await db.update(
+    await db.insert(
       'nhiem_vu_nguoi_dung',
-      {'claimed': 1},
-      where: 'user_id = ? AND quest_id = ?',
-      whereArgs: [userId, questId],
+      {'user_id': userId, 'quest_id': questId, 'progress': progress, 'claimed': 1},
+      conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 

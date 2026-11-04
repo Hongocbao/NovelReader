@@ -19,12 +19,15 @@ class QuestsAndAchievementsScreen extends StatefulWidget {
 
 class _QuestsAndAchievementsScreenState
     extends State<QuestsAndAchievementsScreen> {
-  final Set<int> _claimingQuestIds = {};
+  final _claimingQuestIds = <({String userId, int questId})>{};
+  final _buyingShieldOwners = <String>{};
+  final _pinningOwners = <String>{};
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final uid = context.read<AuthProvider>().currentUser.id;
       context.read<QuestProvider>().loadForUser(uid);
     });
@@ -35,14 +38,16 @@ class _QuestsAndAchievementsScreenState
     AuthProvider authProvider,
     Quest quest,
   ) async {
-    if (!_claimingQuestIds.add(quest.id)) return;
+    final owner = authProvider.currentUser.id;
+    final key = (userId: owner, questId: quest.id);
+    if (!_claimingQuestIds.add(key)) return;
     setState(() {});
     try {
       final reward = await questProvider.claimQuestReward(
         auth: authProvider,
         quest: quest,
       );
-      if (!mounted) return;
+      if (!mounted || authProvider.currentUser.id != owner) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -53,12 +58,69 @@ class _QuestsAndAchievementsScreenState
         ),
       );
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || authProvider.currentUser.id != owner) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Không thể nhận thưởng: $error')));
     } finally {
-      _claimingQuestIds.remove(quest.id);
+      _claimingQuestIds.remove(key);
+      if (mounted) setState(() {});
+    }
+  }
+
+  Future<void> _buyShield(AuthProvider auth) async {
+    final owner = auth.currentUser.id;
+    if (!_buyingShieldOwners.add(owner)) return;
+    setState(() {});
+    try {
+      final ok = await auth.buyStreakShield();
+      if (!mounted || auth.currentUser.id != owner) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            ok
+                ? '🛡️ Đã trang bị Khiên bảo vệ Streak (-20 Linh Thạch)!'
+                : 'Không đủ Linh Thạch (cần 20 Linh Thạch).',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted || auth.currentUser.id != owner) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Không thể mua Khiên: $error')));
+    } finally {
+      _buyingShieldOwners.remove(owner);
+      if (mounted) setState(() {});
+    }
+  }
+
+  Future<void> _togglePinned(AuthProvider auth, String code) async {
+    final owner = auth.currentUser.id;
+    if (!_pinningOwners.add(owner)) return;
+    final current = List<String>.from(auth.currentUser.pinnedAchievements);
+    if (current.contains(code)) {
+      current.remove(code);
+    } else if (current.length < 3) {
+      current.add(code);
+    } else {
+      _pinningOwners.remove(owner);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Chỉ được ghim tối đa 3 huy hiệu nổi bật.'),
+        ),
+      );
+      return;
+    }
+    setState(() {});
+    try {
+      await auth.updateProfile(pinnedAchievements: current);
+    } catch (error) {
+      if (!mounted || auth.currentUser.id != owner) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Chưa lưu được huy hiệu ghim: $error')),
+      );
+    } finally {
+      _pinningOwners.remove(owner);
       if (mounted) setState(() {});
     }
   }
@@ -128,67 +190,56 @@ class _QuestsAndAchievementsScreenState
                               ),
                               child: Padding(
                                 padding: const EdgeInsets.all(16),
-                                child: Row(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
                                   children: [
-                                    const Text(
-                                      '🔥',
-                                      style: TextStyle(fontSize: 36),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            'Chuỗi đọc liên tiếp: ${user.streak} ngày',
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 16,
-                                            ),
-                                          ),
-                                          Text(
-                                            user.hasStreakShield
-                                                ? '🛡️ Đang có Khiên bảo vệ Streak (tự động giữ chuỗi 1 ngày bỏ lỡ)'
-                                                : 'Đọc ít nhất 5 phút mỗi ngày để tăng Streak.',
-                                            style: const TextStyle(
-                                              fontSize: 13,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    if (!user.hasStreakShield && !user.isGuest)
-                                      FilledButton.tonal(
-                                        onPressed: () async {
-                                          try {
-                                            final ok = await auth
-                                                .buyStreakShield();
-                                            if (!context.mounted) return;
-                                            ScaffoldMessenger.of(context)
-                                                .showSnackBar(
-                                                  SnackBar(
-                                                    content: Text(
-                                                      ok
-                                                          ? '🛡️ Đã trang bị Khiên bảo vệ Streak (-20 Linh Thạch)!'
-                                                          : 'Không đủ Linh Thạch (cần 20 Linh Thạch).',
-                                                    ),
-                                                  ),
-                                                );
-                                          } catch (error) {
-                                            if (!context.mounted) return;
-                                            ScaffoldMessenger.of(
-                                              context,
-                                            ).showSnackBar(
-                                              SnackBar(
-                                                content: Text(
-                                                  'Không thể mua Khiên: $error',
+                                    Row(
+                                      children: [
+                                        const Text(
+                                          '🔥',
+                                          style: TextStyle(fontSize: 36),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                'Chuỗi đọc liên tiếp: ${user.streak} ngày',
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 16,
                                                 ),
                                               ),
-                                            );
-                                          }
-                                        },
-                                        child: const Text('Mua Khiên (20 💎)'),
+                                              Text(
+                                                user.hasStreakShield
+                                                    ? '🛡️ Đang có Khiên bảo vệ Streak (tự động giữ chuỗi 1 ngày bỏ lỡ)'
+                                                    : 'Đọc ít nhất 5 phút mỗi ngày để tăng Streak.',
+                                                style: const TextStyle(
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    if (!user.hasStreakShield && !user.isGuest)
+                                      Align(
+                                        alignment: Alignment.centerRight,
+                                        child: FilledButton.tonal(
+                                          onPressed:
+                                              _buyingShieldOwners.contains(
+                                                user.id,
+                                              )
+                                              ? null
+                                              : () => _buyShield(auth),
+                                          child: const Text(
+                                            'Mua Khiên (20 💎)',
+                                          ),
+                                        ),
                                       ),
                                   ],
                                 ),
@@ -200,7 +251,8 @@ class _QuestsAndAchievementsScreenState
                                 builder: (context) {
                                   final prog = questProv.progressOf(q.id);
                                   final claimed = questProv.isClaimed(q.id);
-                                  final done = prog >= q.goalValue;
+                                  final done =
+                                      q.goalValue > 0 && prog >= q.goalValue;
                                   return Card(
                                     margin: const EdgeInsets.only(bottom: 10),
                                     child: Padding(
@@ -238,19 +290,25 @@ class _QuestsAndAchievementsScreenState
                                           ),
                                           const SizedBox(height: 8),
                                           LinearProgressIndicator(
-                                            value: (prog / q.goalValue).clamp(
-                                              0.0,
-                                              1.0,
-                                            ),
+                                            value: q.goalValue > 0
+                                                ? (prog / q.goalValue).clamp(
+                                                    0.0,
+                                                    1.0,
+                                                  )
+                                                : 0.0,
                                             minHeight: 8,
                                             borderRadius: BorderRadius.circular(
                                               4,
                                             ),
                                           ),
                                           const SizedBox(height: 8),
-                                          Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.spaceBetween,
+                                          Wrap(
+                                            spacing: 12,
+                                            runSpacing: 8,
+                                            alignment:
+                                                WrapAlignment.spaceBetween,
+                                            crossAxisAlignment:
+                                                WrapCrossAlignment.center,
                                             children: [
                                               Text(
                                                 'Tiến độ: $prog / ${q.goalValue}',
@@ -263,7 +321,10 @@ class _QuestsAndAchievementsScreenState
                                                 FilledButton(
                                                   onPressed:
                                                       _claimingQuestIds
-                                                          .contains(q.id)
+                                                          .contains((
+                                                            userId: user.id,
+                                                            questId: q.id,
+                                                          ))
                                                       ? null
                                                       : () => _claimQuest(
                                                           questProv,
@@ -272,7 +333,10 @@ class _QuestsAndAchievementsScreenState
                                                         ),
                                                   child:
                                                       _claimingQuestIds
-                                                          .contains(q.id)
+                                                          .contains((
+                                                            userId: user.id,
+                                                            questId: q.id,
+                                                          ))
                                                       ? const SizedBox(
                                                           width: 18,
                                                           height: 18,
@@ -339,29 +403,10 @@ class _QuestsAndAchievementsScreenState
                                               : Icons.push_pin_outlined,
                                           color: isPinned ? cs.primary : null,
                                         ),
-                                        onPressed: () {
-                                          final current = List<String>.from(
-                                            user.pinnedAchievements,
-                                          );
-                                          if (isPinned) {
-                                            current.remove(a.code);
-                                          } else if (current.length < 3) {
-                                            current.add(a.code);
-                                          } else {
-                                            ScaffoldMessenger.of(context)
-                                                .showSnackBar(
-                                                  const SnackBar(
-                                                    content: Text(
-                                                      'Chỉ được ghim tối đa 3 huy hiệu nổi bật.',
-                                                    ),
-                                                  ),
-                                                );
-                                            return;
-                                          }
-                                          auth.updateProfile(
-                                            pinnedAchievements: current,
-                                          );
-                                        },
+                                        onPressed:
+                                            _pinningOwners.contains(user.id)
+                                            ? null
+                                            : () => _togglePinned(auth, a.code),
                                       )
                                     : Chip(
                                         label: Text(
