@@ -163,7 +163,6 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
   Future<void> _showDownloadOptions(List<Chapter> chapters) async {
     final novel = _novel;
     if (novel == null || novel.id < 0 || chapters.isEmpty) return;
-    final rp = context.read<ReaderProvider>();
     final notDownloaded = chapters.where((c) => !c.isDownloaded).toList();
     final hasDownloaded = chapters.any((c) => c.isDownloaded);
 
@@ -206,7 +205,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
-                  rp.deleteDownloads(novelId: novel.id);
+                  _removeDownloads();
                 },
               ),
             const SizedBox(height: 8),
@@ -285,17 +284,37 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
     final messenger = ScaffoldMessenger.of(context);
     try {
       final count = await rp.downloadChapters(novel.id, list, novel: novel);
+      if (!mounted) return;
       if (count > 0) {
         messenger.showSnackBar(
           SnackBar(content: Text('${AppStrings.downloadDone}: $count chương')),
         );
       }
     } catch (e) {
+      if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(
           content: Text(e is OfflineException ? AppStrings.needOnline : '$e'),
         ),
       );
+    }
+  }
+
+  Future<void> _removeDownloads({Chapter? chapter}) async {
+    final novel = _novel;
+    if (novel == null) return;
+    final reader = context.read<ReaderProvider>();
+    try {
+      if (chapter == null) {
+        await reader.deleteDownloads(novelId: novel.id);
+      } else {
+        await reader.deleteDownload(chapter);
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Không xóa được bản tải: $error')));
     }
   }
 
@@ -563,10 +582,12 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                         ? history!.scrollOffset
                         : 0,
                   ),
-                  onDownload: novel.id < 0 ? null : () => _runDownload([ch]),
+                  onDownload: novel.id < 0 || (task?.running ?? false)
+                      ? null
+                      : () => _runDownload([ch]),
                   onDeleteDownload: novel.id < 0
                       ? null
-                      : () => rp.deleteDownload(ch),
+                      : () => _removeDownloads(chapter: ch),
                 ),
           ],
         ),

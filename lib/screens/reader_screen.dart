@@ -686,13 +686,21 @@ class _ReaderScreenState extends State<ReaderScreen>
     if (ch == null) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await _readerProvider.downloadChapters(widget.novel.id, [
+      final count = await _readerProvider.downloadChapters(widget.novel.id, [
         ch,
       ], novel: widget.novel);
+      if (!mounted) return;
       messenger.showSnackBar(
-        const SnackBar(content: Text(AppStrings.downloadDone)),
+        SnackBar(
+          content: Text(
+            count > 0
+                ? AppStrings.downloadDone
+                : 'Chương đã có bản lưu trên thiết bị.',
+          ),
+        ),
       );
     } catch (e) {
+      if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(
           content: Text(e is OfflineException ? AppStrings.needOnline : '$e'),
@@ -919,7 +927,9 @@ class _ReaderScreenState extends State<ReaderScreen>
                       onOpenXray: _showXraySheet,
                       onAddBookmark: _addBookmarkDialog,
                       onShowBookmarks: _showBookmarksSheet,
-                      onDownload: _downloadCurrent,
+                      onDownload: rp.taskOf(widget.novel.id)?.running == true
+                          ? null
+                          : _downloadCurrent,
                     ),
                   ),
                 if (_showToolbar)

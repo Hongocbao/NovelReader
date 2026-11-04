@@ -45,6 +45,13 @@ class OfflineException implements Exception {
   String toString() => AppStrings.chapterOfflineError;
 }
 
+class DownloadCancelledException implements Exception {
+  const DownloadCancelledException();
+  @override
+  String toString() =>
+      'Đã dừng lượt tải do bản tải đã bị xóa hoặc ứng dụng đã đóng.';
+}
+
 /// Quản lý việc đọc: danh sách chương, nội dung chương hiện tại,
 /// trạng thái mạng và tải chương để đọc offline.
 class ReaderProvider extends ChangeNotifier {
@@ -55,6 +62,12 @@ class ReaderProvider extends ChangeNotifier {
   final Stream<bool>? connectivityStream;
   final Future<bool> Function()? checkConnectivity;
   StreamSubscription<bool>? _connSub;
+  bool _disposed = false;
+  Future<void>? _initializing;
+
+  void _emit() {
+    if (!_disposed) notifyListeners();
+  }
 
   // ---------------------------------------------------------------------------
   // Trạng thái mạng
@@ -67,7 +80,10 @@ class ReaderProvider extends ChangeNotifier {
   bool get isOnline => _networkAvailable && !_forceOffline;
 
   /// Bắt đầu theo dõi kết nối mạng.
-  Future<void> init() async {
+  Future<void> init() => _initializing ??= _initConnectivity();
+
+  Future<void> _initConnectivity() async {
+    if (_disposed) return;
     final check = checkConnectivity ?? _defaultCheck;
     final stream =
         connectivityStream ??
@@ -77,12 +93,21 @@ class ReaderProvider extends ChangeNotifier {
     } catch (_) {
       _networkAvailable = true;
     }
-    _connSub = stream.listen((online) {
-      if (online == _networkAvailable) return;
-      _networkAvailable = online;
-      notifyListeners();
-    });
-    notifyListeners();
+    if (_disposed) return;
+    _connSub = stream.listen(
+      (online) {
+        if (_disposed) return;
+        if (online == _networkAvailable) return;
+        _networkAvailable = online;
+        _emit();
+      },
+      onError: (Object error) {
+        if (_disposed) return;
+        _networkAvailable = false;
+        _emit();
+      },
+    );
+    _emit();
   }
 
   static Future<bool> _defaultCheck() async =>
@@ -93,10 +118,10 @@ class ReaderProvider extends ChangeNotifier {
 
   /// Được SettingsProvider cập nhật (ChangeNotifierProxyProvider).
   set forceOffline(bool value) {
-    if (value == _forceOffline) return;
+    if (_disposed || value == _forceOffline) return;
     _forceOffline = value;
     // Trì hoãn notify vì setter được gọi trong lúc build của ProxyProvider.
-    scheduleMicrotask(notifyListeners);
+    scheduleMicrotask(_emit);
   }
 
   // ---------------------------------------------------------------------------
@@ -106,6 +131,9 @@ class ReaderProvider extends ChangeNotifier {
   final Map<int, List<Chapter>> _chapters = {};
   final Map<int, String> _chapterErrors = {};
   final Set<int> _chaptersLoading = {};
+  final _chapterLoads = <int, Future<List<Chapter>>>{};
+  final _chapterRequests = <int, int>{};
+  final _downloadStatus = <({int novelId, int chapterId}), bool>{};
 
   /// Danh sách chương đã tải của truyện (null nếu chưa tải).
   List<Chapter>? chaptersOf(int novelId) => _chapters[novelId];
@@ -117,11 +145,34 @@ class ReaderProvider extends ChangeNotifier {
     int novelId, {
     bool force = false,
     Novel? novel,
-  }) async {
-    if (!force && _chapters.containsKey(novelId)) return _chapters[novelId]!;
+  }) {
+    if (_disposed) return Future.value(const []);
+    if (!force && _chapterLoads.containsKey(novelId)) {
+      return _chapterLoads[novelId]!;
+    }
+    if (!force && _chapters.containsKey(novelId)) {
+      return Future.value(_chapters[novelId]!);
+    }
+    final request = (_chapterRequests[novelId] ?? 0) + 1;
+    _chapterRequests[novelId] = request;
+    late final Future<List<Chapter>> operation;
+    operation = _loadChapters(novelId, novel, request).whenComplete(() {
+      if (identical(_chapterLoads[novelId], operation)) {
+        _chapterLoads.remove(novelId);
+      }
+    });
+    _chapterLoads[novelId] = operation;
+    return operation;
+  }
+
+  Future<List<Chapter>> _loadChapters(
+    int novelId,
+    Novel? novel,
+    int request,
+  ) async {
     _chaptersLoading.add(novelId);
     _chapterErrors.remove(novelId);
-    notifyListeners();
+    _emit();
     try {
       final list = !isOnline && novelId >= 0
           ? await _db.getCachedChapters(novelId)
@@ -129,25 +180,45 @@ class ReaderProvider extends ChangeNotifier {
               novelId,
               novel: novel ?? (_novel?.id == novelId ? _novel : null),
             );
-      _chapters[novelId] = list;
-      return list;
+      if (_disposed) return const [];
+      if (_chapterRequests[novelId] != request) {
+        return await (_chapterLoads[novelId] ??
+            Future.value(_chapters[novelId] ?? const []));
+      }
+      final updated = [
+        for (final chapter in list)
+          chapter.copyWith(
+            isDownloaded:
+                _downloadStatus[(novelId: novelId, chapterId: chapter.id)] ??
+                chapter.isDownloaded,
+          ),
+      ];
+      _chapters[novelId] = updated;
+      return updated;
     } catch (e) {
-      _chapterErrors[novelId] = '${AppStrings.loadFailed}: $e';
+      if (!_disposed && _chapterRequests[novelId] == request) {
+        _chapterErrors[novelId] = '${AppStrings.loadFailed}: $e';
+      }
       return const [];
     } finally {
-      _chaptersLoading.remove(novelId);
-      notifyListeners();
+      if (!_disposed && _chapterRequests[novelId] == request) {
+        _chaptersLoading.remove(novelId);
+        _emit();
+      }
     }
   }
 
   void _updateCachedChapter(int novelId, int chapterId, bool downloaded) {
+    if (_disposed) return;
+    _downloadStatus[(novelId: novelId, chapterId: chapterId)] = downloaded;
     final list = _chapters[novelId];
-    if (list == null) return;
-    _chapters[novelId] = [
-      for (final c in list)
-        c.id == chapterId ? c.copyWith(isDownloaded: downloaded) : c,
-    ];
-    if (_current?.id == chapterId) {
+    if (list != null) {
+      _chapters[novelId] = [
+        for (final c in list)
+          c.id == chapterId ? c.copyWith(isDownloaded: downloaded) : c,
+      ];
+    }
+    if (_current?.novelId == novelId && _current?.id == chapterId) {
       _current = _current!.copyWith(isDownloaded: downloaded);
     }
   }
@@ -191,13 +262,14 @@ class ReaderProvider extends ChangeNotifier {
 
   /// Mở truyện tại chương [chapterId] (mặc định chương đầu).
   Future<void> openNovel(Novel novel, {int? chapterId}) async {
+    if (_disposed) return;
     final request = ++_contentRequest;
     _novel = novel;
     _current = null;
     _content = null;
     _contentError = null;
     _loadingContent = true;
-    notifyListeners();
+    _emit();
     final chapters = await loadChapters(novel.id, novel: novel);
     if (request != _contentRequest) return;
     if (chapters.isEmpty) {
@@ -205,7 +277,7 @@ class ReaderProvider extends ChangeNotifier {
       _contentError = !isOnline
           ? const OfflineException().toString()
           : _chapterErrors[novel.id] ?? AppStrings.noChapters;
-      notifyListeners();
+      _emit();
       return;
     }
     final target = chapters.firstWhere(
@@ -217,12 +289,14 @@ class ReaderProvider extends ChangeNotifier {
 
   /// Mở 1 chương: lấy nội dung từ DB nếu đã tải, nếu chưa thì "tải online".
   Future<void> openChapter(Chapter chapter) async {
+    if (_disposed) return;
+    if (_novel != null && chapter.novelId != _novel!.id) return;
     final request = ++_contentRequest;
     _current = chapter;
     _content = null;
     _contentError = null;
     _loadingContent = true;
-    notifyListeners();
+    _emit();
     try {
       final text = await _loadContent(chapter);
       if (request != _contentRequest) return;
@@ -235,7 +309,7 @@ class ReaderProvider extends ChangeNotifier {
     } finally {
       if (request == _contentRequest) {
         _loadingContent = false;
-        notifyListeners();
+        _emit();
       }
     }
   }
@@ -250,10 +324,20 @@ class ReaderProvider extends ChangeNotifier {
   }
 
   Future<String> _loadContent(Chapter chapter) async {
-    if (chapter.isDownloaded) {
-      final saved = await _db.getChapter(chapter.id, novelId: chapter.novelId);
-      if (saved?.content != null) return saved!.content!;
+    Chapter? saved;
+    try {
+      saved = await _db.getChapter(chapter.id, novelId: chapter.novelId);
+    } catch (error) {
+      if (!isOnline) rethrow;
+      debugPrint('Chưa đọc được bản lưu, thử tải nội dung online: $error');
     }
+    if (_disposed) throw const DownloadCancelledException();
+    if (saved?.novelId == chapter.novelId &&
+        saved?.content?.trim().isNotEmpty == true) {
+      _updateCachedChapter(chapter.novelId, chapter.id, true);
+      return saved!.content!;
+    }
+    _updateCachedChapter(chapter.novelId, chapter.id, false);
     if (!isOnline) throw const OfflineException();
     return _db.fetchChapterContent(chapter.novelId, chapter.chapterIndex);
   }
@@ -277,6 +361,38 @@ class ReaderProvider extends ChangeNotifier {
   bool _downloadsLoading = false;
   bool _downloadsLoaded = false;
   String? _downloadsError;
+  int _downloadsRequest = 0;
+  int _downloadsRevision = 0;
+  int _downloadEpoch = 0;
+  final _novelDownloadRevisions = <int, int>{};
+  final _downloadJobs = <int, Future<int>>{};
+  Future<void> _storageOperation = Future<void>.value();
+
+  Future<T> _mutateStorage<T>(Future<T> Function() action) {
+    final next = _storageOperation.then((_) => action());
+    _storageOperation = next.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return next;
+  }
+
+  bool _downloadCurrent(int novelId, int epoch, int revision) =>
+      !_disposed &&
+      epoch == _downloadEpoch &&
+      revision == (_novelDownloadRevisions[novelId] ?? 0);
+
+  void _cancelDownloads(int? novelId) {
+    _downloadsRevision++;
+    if (novelId == null) {
+      _downloadEpoch++;
+      _tasks.clear();
+    } else {
+      _novelDownloadRevisions[novelId] =
+          (_novelDownloadRevisions[novelId] ?? 0) + 1;
+      _tasks.remove(novelId);
+    }
+  }
 
   DownloadTask? taskOf(int novelId) => _tasks[novelId];
   List<DownloadedChapter> get downloaded => List.unmodifiable(_downloaded);
@@ -288,88 +404,166 @@ class ReaderProvider extends ChangeNotifier {
       _downloaded.fold(0, (sum, d) => sum + d.sizeInBytes);
 
   /// Tải danh sách chương đã tải (cho màn hình Tải xuống).
-  Future<void> loadDownloads() async {
+  Future<void> loadDownloads() => _readDownloads(reportError: true);
+
+  Future<void> _readDownloads({required bool reportError}) async {
+    if (_disposed) return;
+    final request = ++_downloadsRequest;
+    final revision = _downloadsRevision;
     _downloadsLoading = true;
-    _downloadsError = null;
-    notifyListeners();
+    if (reportError) _downloadsError = null;
+    _emit();
     try {
-      _downloaded = await _db.getDownloadedChapters();
+      final downloaded = await _db.getDownloadedChapters();
+      if (_disposed ||
+          request != _downloadsRequest ||
+          revision != _downloadsRevision) {
+        return;
+      }
+      _downloaded = downloaded;
       _downloadsLoaded = true;
+      _downloadsError = null;
     } catch (e) {
-      _downloadsError = '${AppStrings.loadFailed}: $e';
+      if (!_disposed && request == _downloadsRequest && reportError) {
+        _downloadsError = '${AppStrings.loadFailed}: $e';
+      }
     } finally {
-      _downloadsLoading = false;
-      notifyListeners();
+      if (!_disposed && request == _downloadsRequest) {
+        _downloadsLoading = false;
+        _emit();
+      }
     }
   }
 
   /// Tải nhiều chương (1 chương, nhiều chương hoặc cả truyện).
   /// Bỏ qua chương đã tải. Trả về số chương tải thành công.
-  /// Ném [OfflineException] nếu không có mạng.
+  /// Các yêu cầu cùng truyện chạy nối tiếp, kiểm tra bản lưu thật trước khi tải.
   Future<int> downloadChapters(
     int novelId,
     List<Chapter> chapters, {
     Novel? novel,
-  }) async {
-    if (_tasks[novelId]?.running ?? false) return 0;
-    if (!isOnline) throw const OfflineException();
-    final pending = chapters.where((c) => !c.isDownloaded).toList();
-    if (pending.isEmpty) return 0;
+  }) {
+    if (_disposed) return Future.error(const DownloadCancelledException());
+    if (chapters.any((c) => c.novelId != novelId) ||
+        (novel != null && novel.id != novelId)) {
+      return Future.error(
+        ArgumentError('Danh sách chương không thuộc truyện đang tải.'),
+      );
+    }
+    final unique = {for (final ch in chapters) ch.id: ch}.values.toList();
+    final epoch = _downloadEpoch;
+    final revision = _novelDownloadRevisions[novelId] ?? 0;
+    final metadata = novel ?? (_novel?.id == novelId ? _novel : null);
+    final previous = _downloadJobs[novelId] ?? Future<int>.value(0);
+    late final Future<int> operation;
+    operation = previous
+        .then<void>((_) {}, onError: (Object _, StackTrace _) {})
+        .then((_) => _downloadBatch(novelId, unique, metadata, epoch, revision))
+        .whenComplete(() {
+          if (identical(_downloadJobs[novelId], operation)) {
+            _downloadJobs.remove(novelId);
+          }
+        });
+    _downloadJobs[novelId] = operation;
+    return operation;
+  }
 
-    var task = DownloadTask(novelId: novelId, total: pending.length);
+  Future<int> _downloadBatch(
+    int novelId,
+    List<Chapter> chapters,
+    Novel? novel,
+    int epoch,
+    int revision,
+  ) async {
+    void checkCurrent() {
+      if (!_downloadCurrent(novelId, epoch, revision)) {
+        throw const DownloadCancelledException();
+      }
+    }
+
+    checkCurrent();
+    if (chapters.isEmpty || novelId < 0) return 0;
+    var task = DownloadTask(novelId: novelId, total: chapters.length);
     _tasks[novelId] = task;
-    notifyListeners();
+    _emit();
     var success = 0;
+    var completed = 0;
     try {
-      for (final ch in pending) {
-        if (!isOnline) throw const OfflineException();
-        final text = await _db.fetchChapterContent(novelId, ch.chapterIndex);
-        await _db.saveChapterContent(
-          ch,
-          text,
-          novel: novel ?? (_novel?.id == novelId ? _novel : null),
-        );
+      for (final ch in chapters) {
+        checkCurrent();
+        final saved = await _db.getChapter(ch.id, novelId: novelId);
+        checkCurrent();
+        if (saved?.novelId != novelId ||
+            saved?.content?.trim().isNotEmpty != true) {
+          if (!isOnline) throw const OfflineException();
+          final text = await _db.fetchChapterContent(novelId, ch.chapterIndex);
+          checkCurrent();
+          if (text.trim().isEmpty) {
+            throw StateError(
+              'Chương ${ch.chapterIndex} không có nội dung để lưu.',
+            );
+          }
+          await _mutateStorage(() async {
+            checkCurrent();
+            await _db.saveChapterContent(ch, text, novel: novel);
+            _downloadsRevision++;
+          });
+          checkCurrent();
+          success++;
+        }
         _updateCachedChapter(novelId, ch.id, true);
-        success++;
-        task = task.copyWith(done: success);
+        task = task.copyWith(done: ++completed);
         _tasks[novelId] = task;
-        notifyListeners();
+        _emit();
       }
       _tasks.remove(novelId);
     } catch (e) {
-      _tasks[novelId] = task.copyWith(running: false, error: e.toString());
+      if (_downloadCurrent(novelId, epoch, revision)) {
+        _tasks[novelId] = task.copyWith(running: false, error: e.toString());
+      }
       rethrow;
     } finally {
       await _refreshDownloadsSilently();
-      notifyListeners();
     }
     return success;
   }
 
   /// Xóa thông báo lỗi tải của truyện.
   void clearTask(int novelId) {
-    if (_tasks.remove(novelId) != null) notifyListeners();
+    if (_tasks[novelId]?.running ?? false) return;
+    if (_tasks.remove(novelId) != null) _emit();
   }
 
   /// Xóa 1 chương đã tải.
   Future<void> deleteDownload(Chapter chapter) async {
-    if (chapter.novelId < 0) return;
-    await _db.deleteChapterContent(chapter);
+    if (_disposed || chapter.novelId < 0) return;
+    _cancelDownloads(chapter.novelId);
+    await _mutateStorage(() => _db.deleteChapterContent(chapter));
+    _downloadsRevision++;
     _updateCachedChapter(chapter.novelId, chapter.id, false);
     await _refreshDownloadsSilently();
-    notifyListeners();
+    _emit();
   }
 
   /// Xóa các chương đã tải của 1 truyện, hoặc tất cả nếu [novelId] = null.
   Future<void> deleteDownloads({int? novelId}) async {
-    if (novelId != null && novelId < 0) return;
-    await _db.deleteDownloads(novelId: novelId);
+    if (_disposed || (novelId != null && novelId < 0)) return;
+    _cancelDownloads(novelId);
+    await _mutateStorage(() => _db.deleteDownloads(novelId: novelId));
+    _downloadsRevision++;
+    for (final key in _downloadStatus.keys.toList()) {
+      if (key.novelId >= 0 && (novelId == null || key.novelId == novelId)) {
+        _downloadStatus[key] = false;
+      }
+    }
     final ids = novelId == null ? _chapters.keys.toList() : [novelId];
     for (final id in ids) {
       if (id < 0) continue;
       final list = _chapters[id];
       if (list == null) continue;
-      _chapters[id] = [for (final c in list) c.copyWith(isDownloaded: false)];
+      for (final chapter in list) {
+        _updateCachedChapter(id, chapter.id, false);
+      }
     }
     if (_current != null &&
         _current!.novelId >= 0 &&
@@ -377,20 +571,18 @@ class ReaderProvider extends ChangeNotifier {
       _current = _current!.copyWith(isDownloaded: false);
     }
     await _refreshDownloadsSilently();
-    notifyListeners();
+    _emit();
   }
 
-  Future<void> _refreshDownloadsSilently() async {
-    try {
-      _downloaded = await _db.getDownloadedChapters();
-      _downloadsLoaded = true;
-    } catch (_) {
-      // Giữ danh sách cũ nếu lỗi; màn hình Tải xuống có nút thử lại.
-    }
-  }
+  Future<void> _refreshDownloadsSilently() =>
+      _readDownloads(reportError: false);
 
   @override
   void dispose() {
+    _disposed = true;
+    _contentRequest++;
+    _downloadEpoch++;
+    _downloadsRequest++;
     _connSub?.cancel();
     super.dispose();
   }

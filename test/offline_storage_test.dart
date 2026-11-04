@@ -121,6 +121,22 @@ void main() {
     },
   );
 
+  test('Offline reads check actual saved bytes even when the caller has an outdated download flag', () async {
+    final stale = remoteChapters.first;
+    expect(stale.isDownloaded, isFalse);
+    await reader.downloadChapters(remoteNovel.id, [stale], novel: remoteNovel);
+    reader.forceOffline = true;
+    await reader.openChapter(stale);
+    expect(reader.content, isNotEmpty);
+    expect(reader.currentChapter!.isDownloaded, isTrue);
+    expect(reader.contentError, isNull);
+    final staleDownloaded = reader.currentChapter!;
+    await reader.deleteDownload(staleDownloaded);
+    await reader.openChapter(staleDownloaded);
+    expect(reader.contentError, AppStrings.chapterOfflineError);
+    expect(reader.currentChapter!.isDownloaded, isFalse);
+  });
+
   test('Deleting one remote download leaves other downloaded chapters readable offline', () async {
     await reader.downloadChapters(
       remoteNovel.id,

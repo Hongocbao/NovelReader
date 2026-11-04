@@ -28,12 +28,12 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       context.read<ReaderProvider>().loadDownloads();
     });
   }
 
   Future<void> _confirmDeleteAll() async {
-    final rp = context.read<ReaderProvider>();
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -51,8 +51,24 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
         ],
       ),
     );
-    if (ok == true) {
-      await rp.deleteDownloads();
+    if (ok == true && mounted) {
+      await _deleteDownloads();
+    }
+  }
+
+  Future<void> _deleteDownloads({int? novelId, Chapter? chapter}) async {
+    final reader = context.read<ReaderProvider>();
+    try {
+      if (chapter == null) {
+        await reader.deleteDownloads(novelId: novelId);
+      } else {
+        await reader.deleteDownload(chapter);
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Không xóa được bản tải: $error')));
     }
   }
 
@@ -114,7 +130,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
           if (rp.downloadsLoading && !rp.downloadsLoaded) {
             return const LoadingView();
           }
-          if (rp.downloadsError != null && !rp.downloadsLoaded) {
+          if (rp.downloadsError != null && list.isEmpty) {
             return ErrorView(
               message: rp.downloadsError!,
               onRetry: rp.loadDownloads,
@@ -131,6 +147,13 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
             child: ListView(
               padding: const EdgeInsets.all(AppTheme.gap),
               children: [
+                if (rp.downloadsError != null)
+                  ListTile(
+                    leading: const Icon(Icons.error_outline),
+                    title: Text(rp.downloadsError!),
+                    subtitle: const Text('Nhấn để tải lại danh sách'),
+                    onTap: rp.loadDownloads,
+                  ),
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(14),
@@ -191,7 +214,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
               IconButton(
                 tooltip: AppStrings.deleteNovelDownloads,
                 icon: const Icon(Icons.delete_outline),
-                onPressed: () => rp.deleteDownloads(novelId: novelId),
+                onPressed: () => _deleteDownloads(novelId: novelId),
               ),
               IconButton(
                 icon: const Icon(Icons.open_in_new, size: 20),
@@ -216,7 +239,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                 subtitle: Text(Format.bytes(d.sizeInBytes)),
                 trailing: IconButton(
                   icon: const Icon(Icons.close, size: 18),
-                  onPressed: () => rp.deleteDownload(d.chapter),
+                  onPressed: () => _deleteDownloads(chapter: d.chapter),
                 ),
               ),
           ],

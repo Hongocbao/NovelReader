@@ -94,6 +94,8 @@ Cấu hình client dùng `SUPABASE_URL` và `SUPABASE_PUBLISHABLE_KEY` qua `--da
 
 Nhập truyện chữ bằng file TXT; nhập Manga trên web bằng ZIP/CBZ chứa ảnh hoặc các thư mục chương. Ảnh và chương được sắp theo số tự nhiên. Truyện tự nhập lưu trên thiết bị và được giữ lại khi xóa bộ nhớ tải xuống.
 
+Yêu cầu tải chương cùng truyện được xử lý nối tiếp, bỏ qua bản lưu đã có thực tế và giữ các chương hoàn tất nếu lượt tải bị lỗi giữa chừng. Xóa một bản tải/truyện/toàn bộ sẽ dừng các lượt tải cũ tương ứng để phản hồi mạng trả về trễ không tự tạo lại dữ liệu đã xóa. Khi đọc offline, ứng dụng kiểm tra nội dung trong bộ nhớ thiết bị thay vì chỉ dựa vào dấu “đã tải” trên màn hình. Chương rỗng hoặc lỗi ghi bộ nhớ không được báo tải thành công.
+
 Tiến độ đọc được ghi SQLite trước khi đồng bộ Supabase, có bộ nhớ đệm riêng theo tài khoản và chế độ Khách. Khi mạng trở lại hoặc tải lại lịch sử, ứng dụng thử gửi các mốc còn chờ và so sánh thời điểm đọc với máy chủ. Bản sao lưu JSON phiên bản 8 chứa nội dung TXT, ảnh Manga và lịch sử trên thiết bị. Khi xuất sao lưu trên Android/Windows, ảnh liên kết thư mục và ảnh bìa cục bộ được nhúng vào file JSON, nên sau khi khôi phục không cần đường dẫn ảnh cũ. Nếu ảnh nguồn bị thiếu hoặc không đọc được, thao tác xuất sẽ báo lỗi. Khi khôi phục trên máy đã có truyện, ứng dụng đổi mã bị trùng, giữ liên kết chương/tiến độ/bookmark và nhận diện truyện giống nhau để tránh nhập lặp. Các bản sao lưu cũ vẫn được hỗ trợ theo dữ liệu có trong file.
 
 Trong Cài đặt, chọn xuất bản sao lưu rồi **Lưu file JSON**; dùng **Khôi phục từ file JSON** trên máy đích. Vẫn có thể sao chép JSON với bản sao lưu nhỏ hoặc dán dữ liệu của bản cũ.
