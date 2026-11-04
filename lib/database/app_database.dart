@@ -14,6 +14,7 @@ import '../models/reading_history.dart';
 import '../repositories/reading_history_remote.dart';
 import '../repositories/library_remote.dart';
 import '../repositories/bookmark_remote.dart';
+import '../repositories/quote_remote.dart';
 import '../utils/constants.dart';
 import '../utils/format.dart';
 import '../utils/portable_backup_images.dart';
@@ -23,6 +24,7 @@ import 'v2_database_store.dart';
 import 'custom_novel_backup.dart';
 import 'library_cache.dart';
 import 'bookmark_cache.dart';
+import 'quote_store.dart';
 
 /// Lớp truy cập SQLite của ứng dụng: tạo bảng, CRUD và nạp dữ liệu mẫu.
 ///
@@ -43,10 +45,12 @@ class AppDatabase {
     ReadingHistoryRemote? historyRemote,
     LibraryRemote? libraryRemote,
     BookmarkRemote? bookmarkRemote,
+    QuoteRemote? quoteRemote,
     Future<String> Function()? sampleJsonLoader,
   }) : _historyRemoteOverride = historyRemote,
        _libraryRemoteOverride = libraryRemote,
        _bookmarkRemoteOverride = bookmarkRemote,
+       _quoteRemoteOverride = quoteRemote,
        _sampleJsonLoader =
            sampleJsonLoader ??
            (() => rootBundle.loadString(AppInfo.sampleDataAsset));
@@ -63,6 +67,16 @@ class AppDatabase {
   LibraryCache? _libraryCache;
   final BookmarkRemote? _bookmarkRemoteOverride;
   BookmarkCache? _bookmarkCache;
+  final QuoteRemote? _quoteRemoteOverride;
+  QuoteStore? _quotes;
+  QuoteRemote? get _quoteRemote =>
+      _quoteRemoteOverride ??
+      (isSupabaseReady ? SupabaseDatabase.instance : null);
+  Future<QuoteStore> _quoteStore() async {
+    final db = await database;
+    return _quotes ??= QuoteStore(db, _quoteRemote);
+  }
+
   BookmarkRemote? get _bookmarkRemote =>
       _bookmarkRemoteOverride ??
       (isSupabaseReady ? SupabaseDatabase.instance : null);
@@ -269,6 +283,7 @@ class AppDatabase {
         created_at INTEGER NOT NULL
       )
     ''');
+    await QuoteStore.ensureSchema(db);
     await db.execute('''
       CREATE TABLE IF NOT EXISTS binh_luan (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1234,52 +1249,20 @@ class AppDatabase {
 
   /// Danh sách trích dẫn đã lưu (mới nhất trước).
   Future<List<QuoteItem>> getQuotes({String? userId}) async {
-    if (isSupabaseReady && userId != '') {
-      try {
-        return await SupabaseDatabase.instance.getQuotes(userId: userId);
-      } catch (e) {
-        debugPrint('Supabase getQuotes error: $e');
-        final rows = await (await database).query(
-          'trich_dan',
-          orderBy: 'created_at DESC',
-        );
-        return rows.map(QuoteItem.fromMap).toList();
-      }
-    }
-    final db = await database;
-    final rows = await db.query('trich_dan', orderBy: 'created_at DESC');
-    return rows.map(QuoteItem.fromMap).toList();
+    final uid = _historyUserId(userId);
+    return (await _quoteStore()).load(uid);
   }
 
   /// Lưu trích dẫn mới.
-  Future<int> addQuote(QuoteItem quote) async {
-    if (isSupabaseReady) {
-      try {
-        return await SupabaseDatabase.instance.addQuote(quote);
-      } catch (e) {
-        debugPrint('Supabase addQuote error: $e');
-        if (kIsWeb) rethrow;
-      }
-    }
-    if (kIsWeb) throw StateError('Supabase is not configured.');
-    final db = await database;
-    return db.insert('trich_dan', quote.toMap());
+  Future<int> addQuote(QuoteItem quote, {String? userId}) async {
+    final uid = _historyUserId(userId);
+    return (await _quoteStore()).add(quote, uid);
   }
 
   /// Xóa một trích dẫn.
-  Future<void> deleteQuote(int id) async {
-    if (isSupabaseReady) {
-      try {
-        await SupabaseDatabase.instance.deleteQuote(id);
-        return;
-      } catch (e) {
-        debugPrint('Supabase deleteQuote error: $e');
-        if (kIsWeb) rethrow;
-      }
-    }
-    if (kIsWeb) throw StateError('Supabase is not configured.');
-    final db = await database;
-    await db.delete('trich_dan', where: 'id = ?', whereArgs: [id]);
+  Future<void> deleteQuote(int id, {String? userId}) async {
+    final uid = _historyUserId(userId);
+    await (await _quoteStore()).remove(id, uid);
   }
 
   /// Lấy danh sách bình luận của một chương.
@@ -1559,7 +1542,11 @@ class AppDatabase {
       final libraryRows = await db.query('tu_sach');
       final historyRows = await db.query('lich_su_doc');
       final bookmarkRows = await db.query('dau_trang');
-      final quoteRows = await db.query('trich_dan');
+      final quoteRows = await db.query(
+        'trich_dan',
+        where: 'user_id = ?',
+        whereArgs: [uid],
+      );
       final sessionRows = await db.query('phien_doc');
       final localSessionRows = await db.query('phien_doc_cuc_bo');
       final cachedHistoryRows = await db.query(
@@ -1569,7 +1556,7 @@ class AppDatabase {
       );
 
       return <String, Object?>{
-        'backup_version': 6,
+        'backup_version': 7,
         'cached_bookmarks': [
           for (final row in await db.query(
             BookmarkCache.table,
@@ -1604,7 +1591,10 @@ class AppDatabase {
         'library': libraryRows,
         'reading_history': historyRows,
         'bookmarks': bookmarkRows,
-        'quotes': quoteRows,
+        'quotes': [
+          for (final row in quoteRows)
+            QuoteItem.fromMap(row).toMap()..remove('id'),
+        ],
         'reading_sessions': sessionRows,
         'local_reading_sessions': localSessionRows,
         'cached_reading_history': [
@@ -1648,7 +1638,6 @@ class AppDatabase {
         'library': 'tu_sach',
         'reading_history': 'lich_su_doc',
         'bookmarks': 'dau_trang',
-        'quotes': 'trich_dan',
         'reading_sessions': 'phien_doc',
         'local_reading_sessions': 'phien_doc_cuc_bo',
       };
@@ -1658,9 +1647,9 @@ class AppDatabase {
         for (final item in list) {
           if (item is Map<String, dynamic>) {
             final row = imported.remap(item);
-            // ID bookmark/quote tự tăng thuộc máy nguồn, không thay thế mục
+            // ID bookmark tự tăng thuộc máy nguồn, không thay thế mục
             // không liên quan đang dùng cùng ID trên máy đích.
-            if (entry.key == 'bookmarks' || entry.key == 'quotes') {
+            if (entry.key == 'bookmarks') {
               row.remove('id');
               final keys = row.keys.toList();
               final existing = await txn.query(
@@ -1691,6 +1680,13 @@ class AppDatabase {
         }
       }
       final cachedHistory = decoded['cached_reading_history'];
+      final quoteRows = decoded['quotes'];
+      if (quoteRows is List) {
+        await QuoteStore.restore(txn, [
+          for (final row in quoteRows.whereType<Map<String, dynamic>>())
+            imported.remap(row),
+        ], uid);
+      }
       final cachedBookmarks = decoded['cached_bookmarks'];
       if (cachedBookmarks is List) {
         await BookmarkCache.restore(txn, cachedBookmarks, uid);
@@ -1726,5 +1722,6 @@ class AppDatabase {
     _historyCache = null;
     _libraryCache = null;
     _bookmarkCache = null;
+    _quotes = null;
   }
 }

@@ -421,6 +421,9 @@ class LibraryProvider extends ChangeNotifier {
     required String content,
   }) async {
     final revision = _identityRevision;
+    if (content.trim().isEmpty) {
+      throw ArgumentError('Trích dẫn không được để trống.');
+    }
     await _db.addQuote(
       QuoteItem(
         novelId: novel.id,
@@ -430,6 +433,7 @@ class LibraryProvider extends ChangeNotifier {
         content: content.trim(),
         createdAt: DateTime.now(),
       ),
+      userId: _userId,
     );
     if (revision != _identityRevision) return;
     final quotes = await _db.getQuotes(userId: _userId);
@@ -441,7 +445,7 @@ class LibraryProvider extends ChangeNotifier {
   /// Xóa một trích dẫn.
   Future<void> removeQuote(int id) async {
     final revision = _identityRevision;
-    await _db.deleteQuote(id);
+    await _db.deleteQuote(id, userId: _userId);
     if (revision != _identityRevision) return;
     _quotes = _quotes.where((q) => q.id != id).toList();
     notifyListeners();

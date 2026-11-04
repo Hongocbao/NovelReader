@@ -11,12 +11,17 @@ import '../models/reading_history.dart';
 import '../repositories/reading_history_remote.dart';
 import '../repositories/library_remote.dart';
 import '../repositories/bookmark_remote.dart';
+import '../repositories/quote_remote.dart';
 import '../utils/constants.dart';
 import '../utils/format.dart';
 
 /// Lớp truy cập Cloud Database Supabase thay thế hoàn toàn cho SQLite.
 class SupabaseDatabase
-    implements ReadingHistoryRemote, LibraryRemote, BookmarkRemote {
+    implements
+        ReadingHistoryRemote,
+        LibraryRemote,
+        BookmarkRemote,
+        QuoteRemote {
   SupabaseDatabase._();
   static final SupabaseDatabase instance = SupabaseDatabase._();
 
@@ -529,6 +534,7 @@ class SupabaseDatabase
   // TRÍCH DẪN (quotes)
   // ---------------------------------------------------------------------------
 
+  @override
   Future<List<QuoteItem>> getQuotes({String? userId}) async {
     final uid = userId ?? _client.auth.currentUser?.id ?? '';
     final res = await _client
@@ -550,6 +556,7 @@ class SupabaseDatabase
     }).toList();
   }
 
+  @override
   Future<int> addQuote(QuoteItem quote, {String? userId}) async {
     final uid = userId ?? _client.auth.currentUser?.id ?? '';
     final res = await _client
@@ -569,8 +576,10 @@ class SupabaseDatabase
     return res['id'] as int;
   }
 
-  Future<void> deleteQuote(int id) async {
-    await _client.from('trich_dan').delete().eq('id', id);
+  @override
+  Future<void> deleteQuote(int id, {String? userId}) async {
+    final uid = userId ?? _client.auth.currentUser?.id ?? '';
+    await _client.from('trich_dan').delete().eq('id', id).eq('user_id', uid);
   }
 
   // ---------------------------------------------------------------------------
