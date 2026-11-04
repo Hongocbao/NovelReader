@@ -549,8 +549,9 @@ class LibraryProvider extends ChangeNotifier {
         activeDuration <= Duration.zero ||
         novelId == 0 ||
         chapterId == 0 ||
-        (_userId != null && userId != _userId))
+        (_userId != null && userId != _userId)) {
       return;
+    }
     final identity = _identityRevision;
     final now = date ?? DateTime.now();
     final day = '${now.year}-${now.month}-${now.day}';
@@ -608,8 +609,9 @@ class LibraryProvider extends ChangeNotifier {
       final sessions = await _db.getReadingSessions(userId: _userId ?? userId);
       if (identity != _identityRevision ||
           request != _statsRevision ||
-          _disposed)
+          _disposed) {
         return;
+      }
       _sessions = sessions;
       notifyListeners();
     } catch (error) {
