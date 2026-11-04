@@ -6,6 +6,14 @@ Dự án Supabase của bạn:
 - **Region**: EU West 1 (Ireland)
 - **Direct Pooler**: `aws-0-eu-west-1.pooler.supabase.com:5432`
 
+## Cập nhật luồng thêm chương
+
+Với database đang sử dụng, chỉ cần chạy toàn bộ **`13_atomic_chapter_append.sql`** trong SQL Editor, sau migration 10. Không cần chạy lại các migration cũ hoặc nạp lại dữ liệu mẫu. File 13 giữ nguyên mã và nội dung chương hiện có; tạo chương và cập nhật tổng số chương trong cùng một giao dịch. Cùng mã lần gửi sẽ trả về chương đã lưu khi thử lại, kể cả nhiều yêu cầu đồng thời. Mã chương mới được cấp từ một sequence chung cho tạo truyện và thêm chương.
+
+Chạy file 13 cuối cùng nếu đang cài mới theo các bước bên dưới, vì migration 10 định nghĩa phiên bản cũ của hàm tạo truyện. Database chưa cập nhật sẽ được app thông báo cần cập nhật; app không quay lại cách lưu hai bước có thể tạo dữ liệu dở dang. Nếu nạp truyện mẫu bằng file 03 sau này, file seed sẽ đồng bộ lại sequence chương.
+
+Kiểm thử cục bộ với PostgreSQL riêng, không dùng tài khoản hoặc dữ liệu Supabase thật: xem lệnh ở đầu `test/postgres/atomic_chapter_append.py`. Các ca thử gồm nhiều kết nối gửi đồng thời, thử lại cùng mã, rollback khi cập nhật tổng số chương bị lỗi, giữ dữ liệu cũ và chạy lại migration.
+
 ---
 
 ## BƯỚC 1: TẠO DATABASE TRÊN SUPABASE (CHỈ MẤT 1 PHÚT)

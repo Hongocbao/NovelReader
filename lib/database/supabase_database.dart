@@ -24,13 +24,16 @@ class SupabaseDatabase
         BookmarkRemote,
         QuoteRemote,
         ReadingStatsRemote {
-  SupabaseDatabase._();
+  SupabaseDatabase._() : _clientOverride = null;
+  SupabaseDatabase.withClient(SupabaseClient client) : _clientOverride = client;
+
+  final SupabaseClient? _clientOverride;
   static final SupabaseDatabase instance = SupabaseDatabase._();
 
   static String newImportRequestId() =>
       '${DateTime.now().microsecondsSinceEpoch}-${Object().hashCode}';
 
-  SupabaseClient get _client => Supabase.instance.client;
+  SupabaseClient get _client => _clientOverride ?? Supabase.instance.client;
 
   // ---------------------------------------------------------------------------
   // TRUYỆN (novels)
@@ -238,48 +241,44 @@ class SupabaseDatabase
     required int novelId,
     required String title,
     required String content,
+    required String requestId,
   }) async {
-    final maxRes = await _client
-        .from('chuong')
-        .select('chapter_index')
-        .eq('novel_id', novelId)
-        .order('chapter_index', ascending: false)
-        .limit(1);
-
-    final nextIndex =
-        (maxRes.isNotEmpty ? (maxRes.first['chapter_index'] as int) : 0) + 1;
-    final chapterId = novelId * 10000 + nextIndex;
-    final normalizedTitle = title.trim();
-    final chapterTitle = normalizedTitle.isEmpty
-        ? 'Chương $nextIndex'
-        : normalizedTitle.startsWith('Chương')
-        ? normalizedTitle
-        : 'Chương $nextIndex: $normalizedTitle';
-
-    final chMap = {
-      'id': chapterId,
-      'novel_id': novelId,
-      'chapter_index': nextIndex,
-      'title': chapterTitle,
-      'content': content,
-      // This column is shared in the cloud schema; a newly published chapter
-      // must not appear downloaded for every reader. Offline content is cached
-      // per device in SQLite instead.
-      'is_downloaded': 0,
-    };
-
-    await _client.from('chuong').insert(chMap);
-
-    // Cập nhật số chương novel
-    await _client
-        .from('truyen')
-        .update({
-          'total_chapters': nextIndex,
-          'updated_at': DateTime.now().millisecondsSinceEpoch,
-        })
-        .eq('id', novelId);
-
-    return Chapter.fromMap(chMap);
+    if (novelId <= 0 || content.trim().isEmpty) {
+      throw ArgumentError('Truyện và nội dung chương không hợp lệ.');
+    }
+    if (requestId.trim().isEmpty || requestId.length > 128) {
+      throw ArgumentError('Khóa gửi không hợp lệ.');
+    }
+    if (utf8.encode(title).length + utf8.encode(content).length > 16777216) {
+      throw ArgumentError('Nội dung chương vượt giới hạn 16 MB.');
+    }
+    dynamic result;
+    try {
+      result = await _client.rpc(
+        'append_novel_chapter',
+        params: {
+          'p_novel_id': novelId,
+          'p_title': title.trim(),
+          'p_content': content.trim(),
+          'p_request_id': requestId,
+        },
+      );
+    } on PostgrestException catch (error) {
+      if (error.code == 'PGRST202') {
+        throw StateError(
+          'Máy chủ chưa hỗ trợ thêm chương. Vui lòng cập nhật cơ sở dữ liệu của ứng dụng.',
+        );
+      }
+      rethrow;
+    }
+    if (result is! Map) {
+      throw StateError('Supabase trả về dữ liệu chương không hợp lệ.');
+    }
+    final chapter = Chapter.fromMap(Map<String, dynamic>.from(result));
+    if (chapter.novelId != novelId || chapter.id <= 0) {
+      throw StateError('Supabase trả về chương không thuộc truyện đang sửa.');
+    }
+    return chapter;
   }
 
   // ---------------------------------------------------------------------------

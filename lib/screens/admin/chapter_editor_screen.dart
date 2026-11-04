@@ -8,6 +8,7 @@ import '../../models/glossary_term.dart';
 import '../../models/novel.dart';
 import '../../providers/admin_novel_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../widgets/add_chapter_dialog.dart';
 
 /// Màn hình Quản lý & Soạn thảo Chương, Tóm tắt chương (Recap) và Từ điển thuật ngữ (Mục 6.2).
 /// Hỗ trợ kéo thả đổi thứ tự chương (ReorderableListView) và kiểm tra lỗi chương.
@@ -33,147 +34,84 @@ class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
 
   Future<void> _loadData() async {
     setState(() => _loading = true);
-    final db = await AppDatabase.instance.database;
-    final chs = await AppDatabase.instance.getChapters(widget.novel.id);
-    final terms = await V2DatabaseStore.getGlossaryForNovel(
-      db,
-      widget.novel.id,
-    );
-    if (mounted) {
-      setState(() {
-        _chapters = chs;
-        _glossary = terms;
-        _loading = false;
-      });
+    try {
+      final db = await AppDatabase.instance.database;
+      final chs = await AppDatabase.instance.getChapters(widget.novel.id);
+      final terms = await V2DatabaseStore.getGlossaryForNovel(
+        db,
+        widget.novel.id,
+      );
+      if (mounted) {
+        setState(() {
+          _chapters = chs;
+          _glossary = terms;
+        });
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Không tải được danh sách chương: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> _openChapterDialog({Chapter? existing}) async {
+    final auth = context.read<AuthProvider>();
+    final actor = auth.currentUser;
+    final provider = context.read<AdminNovelProvider>();
     String initialContent = existing?.content ?? '';
     if (existing != null && initialContent.isEmpty) {
       try {
         final full = await AppDatabase.instance.getChapter(existing.id);
-        initialContent = full?.content ??
-            await AppDatabase.instance.fetchChapterContent(
-              widget.novel.id,
-              existing.chapterIndex,
-            );
-      } catch (_) {}
+        if (full?.content == null) {
+          throw StateError('Chưa tải được nội dung chương. Hãy thử lại.');
+        }
+        initialContent = full!.content!;
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Không mở được chương: $error')),
+          );
+        }
+        return;
+      }
     }
     if (!mounted) return;
-
-    final titleCtrl = TextEditingController(
-      text: existing?.title ?? 'Chương ${_chapters.length + 1}: ',
-    );
-    final contentCtrl = TextEditingController(text: initialContent);
-    final summaryCtrl = TextEditingController();
-
-    await showDialog<void>(
+    final saved = await showDialog<bool>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setModalState) {
-          final words = contentCtrl.text.trim().isEmpty
-              ? 0
-              : contentCtrl.text.trim().split(RegExp(r'\s+')).length;
-          final hasBrokenImg = RegExp(r'\[img\]\s*\[/img\]')
-              .hasMatch(contentCtrl.text);
-
-          return AlertDialog(
-            title: Text(
-              existing == null ? 'Soạn chương mới' : 'Biên tập chương',
-            ),
-            content: SizedBox(
-              width: 560,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    TextField(
-                      controller: titleCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Tiêu đề chương',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: contentCtrl,
-                      maxLines: 8,
-                      onChanged: (_) => setModalState(() {}),
-                      decoration: const InputDecoration(
-                        labelText:
-                            'Nội dung chương (hỗ trợ chèn ảnh [img]https://...[/img])',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Số từ: $words từ'),
-                        if (hasBrokenImg)
-                          const Text(
-                            '⚠️ Phát hiện thẻ [img] rỗng!',
-                            style: TextStyle(color: Colors.red),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: summaryCtrl,
-                      maxLines: 2,
-                      decoration: const InputDecoration(
-                        labelText:
-                            'Tóm tắt chương (Previously on... Recap cho độc giả)',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Hủy'),
-              ),
-              FilledButton(
-                onPressed: () async {
-                  if (titleCtrl.text.trim().isEmpty ||
-                      contentCtrl.text.trim().isEmpty) {
-                    return;
-                  }
-                  final actor = context.read<AuthProvider>().currentUser;
-                  final chapter = (existing ??
-                          Chapter(
-                            id: 0,
-                            novelId: widget.novel.id,
-                            chapterIndex: _chapters.length + 1,
-                            title: titleCtrl.text.trim(),
-                          ))
-                      .copyWith(
-                    title: titleCtrl.text.trim(),
-                    content: contentCtrl.text.trim(),
-                    isDownloaded: true,
-                  );
-                  await context
-                      .read<AdminNovelProvider>()
-                      .saveChapterWithSummary(
-                        actor: actor,
-                        chapter: chapter,
-                        summary: summaryCtrl.text,
-                      );
-                  if (ctx.mounted) Navigator.pop(ctx);
-                  await _loadData();
-                },
-                child: const Text('Lưu chương'),
-              ),
-            ],
+      barrierDismissible: false,
+      builder: (_) => AddChapterDialog(
+        initialTitle: existing?.title ?? '',
+        initialContent: initialContent,
+        editing: existing != null,
+        onSaveWithSummary: (title, content, summary, requestId) async {
+          if (auth.currentUser.id != actor.id) {
+            throw StateError(
+              'Tài khoản đã thay đổi. Hãy mở lại cửa sổ biên tập.',
+            );
+          }
+          final chapter =
+              (existing ??
+                      Chapter(
+                        id: 0,
+                        novelId: widget.novel.id,
+                        chapterIndex: 0,
+                        title: title,
+                      ))
+                  .copyWith(title: title, content: content);
+          await provider.saveChapterWithSummary(
+            actor: auth.currentUser,
+            chapter: chapter,
+            summary: summary,
+            requestId: requestId,
           );
         },
       ),
     );
+    if (saved == true && mounted) await _loadData();
   }
 
   Future<void> _openGlossaryDialog() async {

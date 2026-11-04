@@ -205,6 +205,7 @@ void main() {
       novelId: created.id,
       title: 'Chương 3: Cao trào',
       content: 'Nội dung 3',
+      requestId: 'local-widget-chapter-3',
     );
     final updated = await np.getNovel(created.id);
     expect(updated?.totalChapters, 3);

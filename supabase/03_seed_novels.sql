@@ -10379,6 +10379,20 @@ Trang 10/10 — Cuộc thương lượng căng thẳng bỗng chốc biến thà
 ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content;
 
 -- Manual seed IDs must advance the generated ID sequence for later inserts.
+DO $$
+BEGIN
+  IF to_regclass('public.ma_chuong_seq') IS NOT NULL THEN
+    PERFORM setval(
+      'public.ma_chuong_seq',
+      GREATEST(
+        COALESCE((SELECT MAX(id) FROM public.chuong), 0),
+        (SELECT last_value FROM public.ma_chuong_seq)
+      ) + 1,
+      false
+    );
+  END IF;
+END $$;
+
 SELECT setval(
   pg_get_serial_sequence('public.truyen', 'id'),
   GREATEST(COALESCE((SELECT MAX(id) FROM public.truyen), 0) + 1, 1),

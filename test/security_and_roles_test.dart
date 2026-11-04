@@ -85,7 +85,7 @@ class FakeNovelRepository implements NovelRepository {
   Future<void> saveChaptersOrder(int novelId, List<Chapter> orderedChapters) async {}
 
   @override
-  Future<Chapter> saveChapter(Chapter chapter) async => chapter;
+  Future<Chapter> saveChapter(Chapter chapter, {String? requestId}) async => chapter;
 
   @override
   Future<List<GlossaryTerm>> getGlossaryTerms(int novelId) async => [];

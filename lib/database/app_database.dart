@@ -733,6 +733,7 @@ class AppDatabase {
     required int novelId,
     required String title,
     required String content,
+    String? requestId,
   }) async {
     final normalizedTitle = title.trim();
     final normalizedContent = content.trim();
@@ -750,8 +751,9 @@ class AppDatabase {
     if (novelId > 0) {
       return SupabaseDatabase.instance.appendChapter(
         novelId: novelId,
-        title: normalizedTitle.isEmpty ? 'Chương mới' : normalizedTitle,
+        title: normalizedTitle,
         content: normalizedContent,
+        requestId: requestId ?? SupabaseDatabase.newImportRequestId(),
       );
     }
 

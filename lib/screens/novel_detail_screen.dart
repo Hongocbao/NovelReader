@@ -11,6 +11,7 @@ import '../providers/reader_provider.dart';
 import '../utils/constants.dart';
 import '../utils/format.dart';
 import '../utils/theme.dart';
+import '../widgets/add_chapter_dialog.dart';
 import '../widgets/chapter_tile.dart';
 import '../widgets/empty_view.dart';
 import '../widgets/error_view.dart';
@@ -332,83 +333,38 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
       );
       return;
     }
-    final titleCtrl = TextEditingController();
-    final contentCtrl = TextEditingController();
-
+    final np = context.read<NovelProvider>();
+    final auth = context.read<AuthProvider>();
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text(AppStrings.addChapter),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: titleCtrl,
-                  decoration: const InputDecoration(
-                    labelText: AppStrings.chapterTitleLabel,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: contentCtrl,
-                  maxLines: 6,
-                  decoration: const InputDecoration(
-                    labelText: AppStrings.chapterContentLabel,
-                    alignLabelWithHint: true,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text(AppStrings.cancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(AppStrings.save),
-          ),
-        ],
+      barrierDismissible: false,
+      builder: (ctx) => AddChapterDialog(
+        onSave: (title, content, requestId) async {
+          if (novel.id > 0 &&
+              (auth.currentUser.id != user.id ||
+                  !_canAddChapter(novel, auth.currentUser))) {
+            throw StateError(
+              'Tài khoản đã thay đổi. Hãy mở lại cửa sổ thêm chương.',
+            );
+          }
+          await np.addChapterToNovel(
+            novelId: novel.id,
+            title: title,
+            content: content,
+            requestId: requestId,
+          );
+        },
       ),
     );
     if (ok == true && mounted) {
-      final np = context.read<NovelProvider>();
       final messenger = ScaffoldMessenger.of(context);
-      if (contentCtrl.text.trim().isEmpty) {
+      await _load();
+      if (mounted) {
         messenger.showSnackBar(
-          const SnackBar(content: Text('Vui lòng nhập nội dung chương.')),
+          const SnackBar(content: Text(AppStrings.chapterAddedSuccess)),
         );
-      } else {
-        try {
-          await np.addChapterToNovel(
-            novelId: novel.id,
-            title: titleCtrl.text.trim().isEmpty
-                ? 'Chương mới'
-                : titleCtrl.text.trim(),
-            content: contentCtrl.text,
-          );
-          await _load();
-          if (mounted) {
-            messenger.showSnackBar(
-              const SnackBar(content: Text(AppStrings.chapterAddedSuccess)),
-            );
-          }
-        } catch (e) {
-          if (mounted) {
-            messenger.showSnackBar(
-              SnackBar(content: Text('Không lưu được chương: $e')),
-            );
-          }
-        }
       }
     }
-    titleCtrl.dispose();
-    contentCtrl.dispose();
   }
 
   bool _canAddChapter(Novel novel, AppUser user) {

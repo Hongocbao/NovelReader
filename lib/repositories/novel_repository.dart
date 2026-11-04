@@ -19,7 +19,7 @@ abstract class NovelRepository {
   Future<void> setFeaturedStatus({required List<int> novelIds, required bool featured, required AppUser admin});
   Future<List<Chapter>> getChapters(int novelId);
   Future<void> saveChaptersOrder(int novelId, List<Chapter> orderedChapters);
-  Future<Chapter> saveChapter(Chapter chapter);
+  Future<Chapter> saveChapter(Chapter chapter, {String? requestId});
   Future<List<GlossaryTerm>> getGlossaryTerms(int novelId);
   Future<void> addGlossaryTerm(GlossaryTerm term);
   Future<void> deleteGlossaryTerm(int termId);

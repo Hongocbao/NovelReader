@@ -388,8 +388,14 @@ class NovelProvider extends ChangeNotifier {
     required int novelId,
     required String title,
     required String content,
+    required String requestId,
   }) async {
-    await _db.appendChapter(novelId: novelId, title: title, content: content);
+    await _db.appendChapter(
+      novelId: novelId,
+      title: title,
+      content: content,
+      requestId: requestId,
+    );
     await Future.wait([loadHome(), searchPager.refresh()]);
   }
 

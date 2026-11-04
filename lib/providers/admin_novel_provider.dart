@@ -157,19 +157,10 @@ class AdminNovelProvider extends ChangeNotifier {
     required AppUser actor,
     required Chapter chapter,
     String? summary,
+    String? requestId,
   }) async {
     RoleGuard.requireAuthorOrAdmin(actor);
-    var toSave = chapter;
-    if (chapter.id <= 0) {
-      final chapters = await _novelRepo.getChapters(chapter.novelId);
-      final nextIdx = chapters.length + 1;
-      toSave = chapter.copyWith(
-        id: chapter.novelId * 10000 + nextIdx,
-        chapterIndex: nextIdx,
-        isDownloaded: true,
-      );
-    }
-    final saved = await _novelRepo.saveChapter(toSave);
+    final saved = await _novelRepo.saveChapter(chapter, requestId: requestId);
     if (summary != null && summary.trim().isNotEmpty) {
       await _novelRepo.saveChapterSummary(
         ChapterSummary(

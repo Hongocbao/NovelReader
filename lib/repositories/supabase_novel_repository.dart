@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../database/supabase_database.dart';
 import '../models/app_user.dart';
 import '../models/audit_log.dart';
 import '../models/chapter.dart';
@@ -12,7 +13,9 @@ import 'novel_repository.dart';
 
 /// Triển khai NovelRepository hoàn toàn trên Supabase (Cloud Database).
 class SupabaseNovelRepository implements NovelRepository {
-  SupabaseClient get _client => Supabase.instance.client;
+  SupabaseNovelRepository({SupabaseClient? client}) : _clientOverride = client;
+  final SupabaseClient? _clientOverride;
+  SupabaseClient get _client => _clientOverride ?? Supabase.instance.client;
 
   @override
   Future<List<Novel>> getAllNovels({bool includeDeleted = false}) async {
@@ -224,26 +227,32 @@ class SupabaseNovelRepository implements NovelRepository {
   }
 
   @override
-  Future<Chapter> saveChapter(Chapter chapter) async {
-    final map = chapter.toMap();
-    final existing = await _client.from('chuong').select('id').eq('id', chapter.id).maybeSingle();
-
-    if (existing == null) {
-      await _client.from('chuong').insert(map);
-    } else {
-      await _client.from('chuong').update(map).eq('id', chapter.id);
+  Future<Chapter> saveChapter(Chapter chapter, {String? requestId}) async {
+    if (chapter.id <= 0) {
+      if (requestId == null) {
+        throw ArgumentError('Cần mã lần gửi để tạo chương mới.');
+      }
+      return SupabaseDatabase.withClient(_client).appendChapter(
+        novelId: chapter.novelId,
+        title: chapter.title,
+        content: chapter.content ?? '',
+        requestId: requestId,
+      );
     }
-
-    // Cập nhật total_chapters
-    final countRes = await _client.from('chuong').select('id').eq('novel_id', chapter.novelId);
-    final total = (countRes as List).length;
-
-    await _client.from('truyen').update({
-      'total_chapters': total,
-      'updated_at': DateTime.now().millisecondsSinceEpoch,
-    }).eq('id', chapter.novelId);
-
-    return chapter;
+    // Editing an existing chapter must neither reassign its index nor recount
+    // the book: another client may append/reorder while this editor is open.
+    final saved = await _client
+        .from('chuong')
+        .update({
+          'title': chapter.title.trim(),
+          'content': chapter.content?.trim(),
+          'publish_at': chapter.publishAt?.millisecondsSinceEpoch,
+        })
+        .eq('id', chapter.id)
+        .eq('novel_id', chapter.novelId)
+        .select()
+        .single();
+    return Chapter.fromMap(saved);
   }
 
   @override
