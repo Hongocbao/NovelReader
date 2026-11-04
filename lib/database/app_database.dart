@@ -15,6 +15,7 @@ import '../repositories/reading_history_remote.dart';
 import '../repositories/library_remote.dart';
 import '../repositories/bookmark_remote.dart';
 import '../repositories/quote_remote.dart';
+import '../repositories/reading_stats_remote.dart';
 import '../utils/constants.dart';
 import '../utils/format.dart';
 import '../utils/portable_backup_images.dart';
@@ -25,6 +26,7 @@ import 'custom_novel_backup.dart';
 import 'library_cache.dart';
 import 'bookmark_cache.dart';
 import 'quote_store.dart';
+import 'reading_stats_cache.dart';
 
 /// Lớp truy cập SQLite của ứng dụng: tạo bảng, CRUD và nạp dữ liệu mẫu.
 ///
@@ -46,11 +48,13 @@ class AppDatabase {
     LibraryRemote? libraryRemote,
     BookmarkRemote? bookmarkRemote,
     QuoteRemote? quoteRemote,
+    ReadingStatsRemote? statsRemote,
     Future<String> Function()? sampleJsonLoader,
   }) : _historyRemoteOverride = historyRemote,
        _libraryRemoteOverride = libraryRemote,
        _bookmarkRemoteOverride = bookmarkRemote,
        _quoteRemoteOverride = quoteRemote,
+       _statsRemoteOverride = statsRemote,
        _sampleJsonLoader =
            sampleJsonLoader ??
            (() => rootBundle.loadString(AppInfo.sampleDataAsset));
@@ -69,6 +73,16 @@ class AppDatabase {
   BookmarkCache? _bookmarkCache;
   final QuoteRemote? _quoteRemoteOverride;
   QuoteStore? _quotes;
+  final ReadingStatsRemote? _statsRemoteOverride;
+  ReadingStatsCache? _statsCache;
+  ReadingStatsRemote? get _statsRemote =>
+      _statsRemoteOverride ??
+      (isSupabaseReady ? SupabaseDatabase.instance : null);
+  Future<ReadingStatsCache> _statsStore() async {
+    final db = await database;
+    return _statsCache ??= ReadingStatsCache(db, _statsRemote);
+  }
+
   QuoteRemote? get _quoteRemote =>
       _quoteRemoteOverride ??
       (isSupabaseReady ? SupabaseDatabase.instance : null);
@@ -146,7 +160,7 @@ class AppDatabase {
         onUpgrade: (db, oldVersion, newVersion) async {
           await _migrateLegacyTableNames(db);
           await V2DatabaseStore.migrateToV2(db);
-          await _ensureExtraTables(db);
+          await _ensureExtraTables(db, inMigration: true);
           // Bổ sung truyện mới từ sample_novels.json mà không làm mất lịch sử/tủ sách cũ.
           await _syncSampleNovels(db);
         },
@@ -264,11 +278,14 @@ class AppDatabase {
     );
     batch.execute('CREATE INDEX idx_bookmarks_novel ON dau_trang(novel_id)');
     await batch.commit(noResult: true);
-    await _ensureExtraTables(db);
+    await _ensureExtraTables(db, inMigration: true);
   }
 
   /// Tạo các bảng mở rộng (trích dẫn yêu thích & bình luận chương).
-  Future<void> _ensureExtraTables(Database db) async {
+  Future<void> _ensureExtraTables(
+    Database db, {
+    bool inMigration = false,
+  }) async {
     await ReadingHistoryCache.ensureSchema(db);
     await LibraryCache.ensureSchema(db);
     await BookmarkCache.ensureSchema(db);
@@ -295,20 +312,7 @@ class AppDatabase {
         created_at INTEGER NOT NULL
       )
     ''');
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS phien_doc (
-        date_key TEXT PRIMARY KEY,
-        words_read INTEGER NOT NULL DEFAULT 0,
-        minutes_read INTEGER NOT NULL DEFAULT 0
-      )
-    ''');
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS phien_doc_cuc_bo (
-        date_key TEXT PRIMARY KEY,
-        words_read INTEGER NOT NULL DEFAULT 0,
-        minutes_read INTEGER NOT NULL DEFAULT 0
-      )
-    ''');
+    await ReadingStatsCache.ensureSchema(db, inMigration: inMigration);
     await db.execute('''
       CREATE TABLE IF NOT EXISTS chuong_tai_xuong_cloud (
         novel_id INTEGER NOT NULL,
@@ -1379,13 +1383,16 @@ class AppDatabase {
     int chapterId = 0,
   }) async {
     if (words <= 0 && minutes <= 0) return;
+    final stats = await _statsStore();
+    final server = _statsRemote;
+    final now = date ?? DateTime.now();
     var recordedInCloud = false;
-    if (isSupabaseReady && novelId >= 0) {
+    if (userId.isNotEmpty && server != null && novelId >= 0) {
       try {
-        recordedInCloud = await SupabaseDatabase.instance.recordReadingSession(
+        recordedInCloud = await server.recordReadingSession(
           wordsRead: words,
           minutesRead: minutes,
-          userId: userId.isNotEmpty ? userId : null,
+          userId: userId,
           novelId: novelId,
           chapterId: chapterId,
         );
@@ -1394,7 +1401,6 @@ class AppDatabase {
       }
     }
     final db = await database;
-    final now = date ?? DateTime.now();
     final key = _dateKeyOf(now);
     final activeChapterQuests =
         userId.isNotEmpty && novelId > 0 && chapterId > 0
@@ -1406,52 +1412,27 @@ class AppDatabase {
     // Không giữ khóa SQLite khi đang gọi máy chủ. Các tổng ngày, log và
     // kiểm tra chương đã đọc được cập nhật cùng một giao dịch cục bộ.
     await db.transaction((txn) async {
-      final existing = await txn.query(
+      await ReadingStatsCache.increment(
+        txn,
         'phien_doc',
-        where: 'date_key = ?',
-        whereArgs: [key],
+        userId,
+        key,
+        words,
+        minutes,
       );
-      if (existing.isEmpty) {
-        await txn.insert('phien_doc', {
-          'date_key': key,
-          'words_read': words,
-          'minutes_read': minutes,
-        });
-      } else {
-        final prevWords = (existing.first['words_read'] as int?) ?? 0;
-        final prevMinutes = (existing.first['minutes_read'] as int?) ?? 0;
-        await txn.update(
-          'phien_doc',
-          {
-            'words_read': prevWords + words,
-            'minutes_read': prevMinutes + minutes,
-          },
-          where: 'date_key = ?',
-          whereArgs: [key],
-        );
-      }
 
       // Keep a separate, mergeable aggregate for device-only and offline
       // sessions. The main local aggregate also contains cloud-synced sessions
       // and must not be blindly added to cloud totals.
-      if (novelId < 0 ||
-          (isSupabaseReady && novelId >= 0 && !recordedInCloud) ||
-          !isSupabaseReady) {
-        final localSession = await txn.query(
+      if (!recordedInCloud) {
+        await ReadingStatsCache.increment(
+          txn,
           'phien_doc_cuc_bo',
-          where: 'date_key = ?',
-          whereArgs: [key],
-          limit: 1,
+          userId,
+          key,
+          words,
+          minutes,
         );
-        final localWords =
-            (localSession.firstOrNull?['words_read'] as int?) ?? 0;
-        final localMinutes =
-            (localSession.firstOrNull?['minutes_read'] as int?) ?? 0;
-        await txn.insert('phien_doc_cuc_bo', {
-          'date_key': key,
-          'words_read': localWords + words,
-          'minutes_read': localMinutes + minutes,
-        }, conflictAlgorithm: ConflictAlgorithm.replace);
       }
 
       if (activeChapterQuests != null) {
@@ -1484,6 +1465,7 @@ class AppDatabase {
         'words_read': words,
         'hour_of_day': now.hour,
       });
+      stats.changed(userId);
     });
 
     if (userId.isNotEmpty) {
@@ -1509,38 +1491,16 @@ class AppDatabase {
 
   /// Lấy toàn bộ lịch sử phiên đọc theo ngày (tăng dần theo ngày).
   Future<List<ReadingSessionStat>> getReadingSessions({String? userId}) async {
-    List<ReadingSessionStat> cloudSessions = [];
-    if (isSupabaseReady && userId != '') {
-      try {
-        cloudSessions = await SupabaseDatabase.instance.getReadingSessions(
-          userId: userId,
-        );
-      } catch (e) {
-        debugPrint('Supabase getReadingSessions error: $e');
-      }
-    }
-    final db = await database;
-    final localRows = await db.query('phien_doc_cuc_bo');
-    final byDate = {
-      for (final session in cloudSessions) session.dateKey: session,
-    };
-    for (final row in localRows) {
-      final dateKey = row['date_key'] as String;
-      final existing = byDate[dateKey];
-      byDate[dateKey] = ReadingSessionStat(
-        dateKey: dateKey,
-        wordsRead:
-            (existing?.wordsRead ?? 0) + ((row['words_read'] as int?) ?? 0),
-        minutesRead:
-            (existing?.minutesRead ?? 0) + ((row['minutes_read'] as int?) ?? 0),
-      );
-    }
-    if (cloudSessions.isEmpty) {
-      final localTotals = await db.query('phien_doc', orderBy: 'date_key ASC');
-      return localTotals.map(ReadingSessionStat.fromMap).toList();
-    }
-    return byDate.values.toList()
-      ..sort((a, b) => a.dateKey.compareTo(b.dateKey));
+    final uid = _historyUserId(userId);
+    return (await _statsStore()).load(uid);
+  }
+
+  /// Tổng trên thiết bị dành riêng cho Dashboard Admin khi không có RPC.
+  Future<List<ReadingSessionStat>> getDeviceReadingSessions() async {
+    final rows = await (await database).rawQuery(
+      'SELECT date_key, SUM(words_read) AS words_read, SUM(minutes_read) AS minutes_read FROM phien_doc GROUP BY date_key ORDER BY date_key',
+    );
+    return rows.map(ReadingSessionStat.fromMap).toList();
   }
 
   /// Xuất toàn bộ dữ liệu cá nhân (tủ sách, lịch sử, bookmark, quotes, reading_sessions) ra JSON.
@@ -1556,8 +1516,16 @@ class AppDatabase {
         where: 'user_id = ?',
         whereArgs: [uid],
       );
-      final sessionRows = await db.query('phien_doc');
-      final localSessionRows = await db.query('phien_doc_cuc_bo');
+      final sessionRows = await db.query(
+        'phien_doc',
+        where: 'user_id = ?',
+        whereArgs: [uid],
+      );
+      final localSessionRows = await db.query(
+        'phien_doc_cuc_bo',
+        where: 'user_id = ?',
+        whereArgs: [uid],
+      );
       final cachedHistoryRows = await db.query(
         ReadingHistoryCache.table,
         where: 'user_id = ?',
@@ -1565,7 +1533,7 @@ class AppDatabase {
       );
 
       return <String, Object?>{
-        'backup_version': 7,
+        'backup_version': 8,
         'cached_bookmarks': [
           for (final row in await db.query(
             BookmarkCache.table,
@@ -1604,8 +1572,14 @@ class AppDatabase {
           for (final row in quoteRows)
             QuoteItem.fromMap(row).toMap()..remove('id'),
         ],
-        'reading_sessions': sessionRows,
-        'local_reading_sessions': localSessionRows,
+        'reading_sessions': [
+          for (final row in sessionRows)
+            ReadingSessionStat.fromMap(row).toMap(),
+        ],
+        'local_reading_sessions': [
+          for (final row in localSessionRows)
+            ReadingSessionStat.fromMap(row).toMap(),
+        ],
         'cached_reading_history': [
           for (final row in cachedHistoryRows)
             Map<String, Object?>.from(row)..remove('user_id'),
@@ -1641,14 +1615,13 @@ class AppDatabase {
       throw const FormatException(AppStrings.restoreInvalid);
     }
     final db = await database;
+    final stats = await _statsStore();
     await db.transaction((txn) async {
       final imported = await CustomNovelBackup.restore(txn, decoded);
       const backupTables = <String, String>{
         'library': 'tu_sach',
         'reading_history': 'lich_su_doc',
         'bookmarks': 'dau_trang',
-        'reading_sessions': 'phien_doc',
-        'local_reading_sessions': 'phien_doc_cuc_bo',
       };
       for (final entry in backupTables.entries) {
         final list = decoded[entry.key];
@@ -1688,6 +1661,8 @@ class AppDatabase {
           }
         }
       }
+      await ReadingStatsCache.restore(txn, decoded, uid);
+      stats.changed(uid);
       final cachedHistory = decoded['cached_reading_history'];
       final quoteRows = decoded['quotes'];
       if (quoteRows is List) {
@@ -1732,5 +1707,6 @@ class AppDatabase {
     _libraryCache = null;
     _bookmarkCache = null;
     _quotes = null;
+    _statsCache = null;
   }
 }

@@ -84,7 +84,7 @@ class AdminDashboardProvider extends ChangeNotifier {
           .millisecondsSinceEpoch;
       final metrics = await V2DatabaseStore.getAdminDashboardMetrics(_rangeDays);
 
-      final sessions = await _appDb.getReadingSessions();
+      final sessions = await _appDb.getDeviceReadingSessions();
       if (metrics != null) {
         totalUsers = (metrics['total_users'] as num?)?.toInt() ?? 0;
         dau = (metrics['dau'] as num?)?.toInt() ?? 0;

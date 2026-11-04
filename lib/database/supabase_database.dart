@@ -12,6 +12,7 @@ import '../repositories/reading_history_remote.dart';
 import '../repositories/library_remote.dart';
 import '../repositories/bookmark_remote.dart';
 import '../repositories/quote_remote.dart';
+import '../repositories/reading_stats_remote.dart';
 import '../utils/constants.dart';
 import '../utils/format.dart';
 
@@ -21,7 +22,8 @@ class SupabaseDatabase
         ReadingHistoryRemote,
         LibraryRemote,
         BookmarkRemote,
-        QuoteRemote {
+        QuoteRemote,
+        ReadingStatsRemote {
   SupabaseDatabase._();
   static final SupabaseDatabase instance = SupabaseDatabase._();
 
@@ -665,6 +667,7 @@ class SupabaseDatabase
   // THỐNG KÊ PHIÊN ĐỌC (reading_sessions)
   // ---------------------------------------------------------------------------
 
+  @override
   Future<bool> recordReadingSession({
     required int wordsRead,
     required int minutesRead,
@@ -698,21 +701,27 @@ class SupabaseDatabase
     return true;
   }
 
+  @override
   Future<List<ReadingSessionStat>> getReadingSessions({String? userId}) async {
     final uid = userId ?? _client.auth.currentUser?.id ?? '';
-    final res = await _client
-        .from('phien_doc')
-        .select()
-        .eq('user_id', uid)
-        .order('date_key', ascending: false)
-        .limit(30);
-
-    return (res as List).map((r) {
-      return ReadingSessionStat(
-        dateKey: r['date_key'] as String,
-        wordsRead: r['words_read'] as int,
-        minutesRead: r['minutes_read'] as int,
-      );
-    }).toList();
+    if (uid.isEmpty) return [];
+    final sessions = <ReadingSessionStat>[];
+    const pageSize = 1000;
+    for (var offset = 0; ; offset += pageSize) {
+      if (_client.auth.currentUser?.id != uid) {
+        throw StateError('Tài khoản đã thay đổi.');
+      }
+      final rows = await _client
+          .from('phien_doc')
+          .select()
+          .eq('user_id', uid)
+          .order('date_key', ascending: true)
+          .range(offset, offset + pageSize - 1);
+      if (_client.auth.currentUser?.id != uid) {
+        throw StateError('Tài khoản đã thay đổi.');
+      }
+      sessions.addAll(rows.map((r) => ReadingSessionStat.fromMap(r)));
+      if (rows.length < pageSize) return sessions;
+    }
   }
 }
