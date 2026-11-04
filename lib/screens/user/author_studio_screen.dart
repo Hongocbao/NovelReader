@@ -11,6 +11,7 @@ import '../../providers/admin_novel_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/quest_provider.dart';
 import '../../services/ai_moderation_service.dart';
+import '../../services/author_draft_store.dart';
 import '../../utils/constants.dart';
 import '../../utils/role_guard.dart';
 import '../../widgets/smart_novel_importer_sheet.dart';
@@ -26,7 +27,8 @@ class AuthorStudioScreen extends StatefulWidget {
   State<AuthorStudioScreen> createState() => _AuthorStudioScreenState();
 }
 
-class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
+class _AuthorStudioScreenState extends State<AuthorStudioScreen>
+    with WidgetsBindingObserver {
   final _titleCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   final _draftChapterTitleCtrl = TextEditingController(
@@ -36,33 +38,98 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
 
   List<Novel> _myNovels = [];
   Timer? _autoSaveTimer;
-  String _lastSavedLabel = 'Chưa lưu nháp';
+  Timer? _draftDebounce;
+  String _lastSavedLabel = 'Đang tải bản nháp';
   bool _previewMode = false;
   String? _submissionRequestId;
+  String _draftOwner = '';
+  int _ownerGeneration = 0;
+  int _editRevision = 0;
+  int _booksRequest = 0;
+  bool _draftReady = false;
+  bool _draftDirty = false;
+  bool _changingDraft = false;
+  bool _submitting = false;
+  bool _booksLoading = false;
+  String? _booksError;
+  AuthProvider? _auth;
+  late final Future<AuthorDraftStore> _store = SharedPreferences.getInstance()
+      .then(AuthorDraftStore.new);
+  ({String title, String description, String chapterTitle, String content})?
+  _lastFields;
 
-  String _draftKey(String userId, String field) =>
-      'author_draft_${field}_$userId';
+  bool get _editorBusy => !_draftReady || _submitting;
+  ({String title, String description, String chapterTitle, String content})
+  get _fields => (
+    title: _titleCtrl.text,
+    description: _descCtrl.text,
+    chapterTitle: _draftChapterTitleCtrl.text,
+    content: _draftContentCtrl.text,
+  );
+  bool _stillOwner(String owner, int generation) =>
+      mounted &&
+      _draftOwner == owner &&
+      _ownerGeneration == generation &&
+      _auth?.currentUser.id == owner &&
+      _auth?.isGuest == false;
 
-  void _invalidateSubmissionRequest() {
-    final requestId = _submissionRequestId;
-    if (requestId == null) return;
-    _submissionRequestId = null;
-    final userId = context.read<AuthProvider>().currentUser.id;
-    unawaited(() async {
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.remove(_draftKey(userId, 'request_id'));
-      } catch (error) {
-        debugPrint('Could not invalidate saved author submission key: $error');
-      }
-    }());
+  AuthorDraft _snapshot() {
+    _submissionRequestId ??= SupabaseDatabase.newImportRequestId();
+    return AuthorDraft(
+      title: _titleCtrl.text,
+      description: _descCtrl.text,
+      chapterTitle: _draftChapterTitleCtrl.text,
+      content: _draftContentCtrl.text,
+      requestId: _submissionRequestId!,
+    );
   }
+
+  void _applyDraft(AuthorDraft draft) {
+    _changingDraft = true;
+    _titleCtrl.text = draft.title;
+    _descCtrl.text = draft.description;
+    _draftChapterTitleCtrl.text = draft.chapterTitle.isEmpty
+        ? AuthorDraft.defaultChapterTitle
+        : draft.chapterTitle;
+    _draftContentCtrl.text = draft.content;
+    _submissionRequestId = draft.requestId.isEmpty ? null : draft.requestId;
+    _lastFields = _fields;
+    _changingDraft = false;
+  }
+
+  void _onDraftChanged() {
+    if (_changingDraft ||
+        !_draftReady ||
+        _draftOwner.isEmpty ||
+        _lastFields == _fields) {
+      return;
+    }
+    _lastFields = _fields;
+    _editRevision++;
+    _draftDirty = true;
+    _submissionRequestId = SupabaseDatabase.newImportRequestId();
+    _draftDebounce?.cancel();
+    if (mounted) setState(() => _lastSavedLabel = 'Chưa lưu thay đổi');
+    _draftDebounce = Timer(
+      const Duration(milliseconds: 400),
+      _saveDraftSilently,
+    );
+  }
+
+  void _invalidateSubmissionRequest() => _onDraftChanged();
 
   @override
   void initState() {
     super.initState();
-    _loadMyNovelsAndDraft();
-    // Tự động lưu bản nháp mỗi 5 giây theo đặc tả Mục 5.7
+    WidgetsBinding.instance.addObserver(this);
+    for (final controller in [
+      _titleCtrl,
+      _descCtrl,
+      _draftChapterTitleCtrl,
+      _draftContentCtrl,
+    ]) {
+      controller.addListener(_onDraftChanged);
+    }
     _autoSaveTimer = Timer.periodic(
       const Duration(seconds: 5),
       (_) => _saveDraftSilently(),
@@ -70,8 +137,117 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final auth = context.watch<AuthProvider>();
+    _auth = auth;
+    final owner = auth.isGuest ? '' : auth.currentUser.id;
+    if (_draftOwner == owner && _ownerGeneration != 0) return;
+    unawaited(_saveDraftSilently());
+    _draftDebounce?.cancel();
+    _draftOwner = owner;
+    final generation = ++_ownerGeneration;
+    _editRevision = 0;
+    _draftReady = false;
+    _draftDirty = false;
+    _submitting = false;
+    _previewMode = false;
+    _myNovels = [];
+    _booksError = null;
+    _lastSavedLabel = 'Đang tải bản nháp';
+    _applyDraft(const AuthorDraft());
+    if (owner.isEmpty) return;
+    unawaited(_restoreDraft(owner, generation));
+    unawaited(_refreshMyNovels());
+  }
+
+  Future<void> _restoreDraft(String owner, int generation) async {
+    try {
+      final store = await _store;
+      final draft = store.load(owner);
+      if (!_stillOwner(owner, generation)) return;
+      setState(() {
+        _applyDraft(draft);
+        _lastSavedLabel = draft.isEmpty
+            ? 'Chưa có bản nháp'
+            : 'Đã khôi phục bản nháp';
+      });
+    } catch (_) {
+      if (_stillOwner(owner, generation)) {
+        setState(() => _lastSavedLabel = 'Chưa đọc được bản nháp cũ');
+      }
+    } finally {
+      if (_stillOwner(owner, generation)) setState(() => _draftReady = true);
+    }
+  }
+
+  Future<void> _refreshMyNovels() async {
+    final owner = _draftOwner;
+    final generation = _ownerGeneration;
+    if (owner.isEmpty || !mounted) return;
+    final provider = context.read<AdminNovelProvider>();
+    final request = ++_booksRequest;
+    setState(() {
+      _booksLoading = true;
+      _booksError = null;
+    });
+    try {
+      final list = await provider.getAuthorNovels(owner);
+      if (_stillOwner(owner, generation) && request == _booksRequest) {
+        setState(() => _myNovels = list);
+      }
+    } catch (_) {
+      if (_stillOwner(owner, generation) && request == _booksRequest) {
+        setState(
+          () => _booksError = 'Chưa tải được tác phẩm. Bản nháp trên thiết bị vẫn sử dụng được.',
+        );
+      }
+    } finally {
+      if (_stillOwner(owner, generation) && request == _booksRequest) {
+        setState(() => _booksLoading = false);
+      }
+    }
+  }
+
+  Future<void> _saveDraftSilently() async {
+    if (!_draftReady || !_draftDirty || _draftOwner.isEmpty || _submitting) {
+      return;
+    }
+    final owner = _draftOwner;
+    final generation = _ownerGeneration;
+    final revision = _editRevision;
+    final snapshot = _snapshot();
+    try {
+      await (await _store).save(owner, snapshot);
+      if (_stillOwner(owner, generation) && _editRevision == revision) {
+        final now = TimeOfDay.now();
+        setState(() {
+          _draftDirty = false;
+          _lastSavedLabel =
+              'Đã lưu nháp lúc ${now.hour}:${now.minute.toString().padLeft(2, "0")}';
+        });
+      }
+    } catch (_) {
+      if (_stillOwner(owner, generation)) {
+        setState(() => _lastSavedLabel = 'Chưa lưu được bản nháp');
+      }
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused) {
+      unawaited(_saveDraftSilently());
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _autoSaveTimer?.cancel();
+    _draftDebounce?.cancel();
+    unawaited(_saveDraftSilently());
     _titleCtrl.dispose();
     _descCtrl.dispose();
     _draftChapterTitleCtrl.dispose();
@@ -79,170 +255,122 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
     super.dispose();
   }
 
-  Future<void> _loadMyNovelsAndDraft() async {
-    final user = context.read<AuthProvider>().currentUser;
-    final list = await context.read<AdminNovelProvider>().getAuthorNovels(
-      user.id,
-    );
-    final prefs = await SharedPreferences.getInstance();
-    final savedDraft = prefs.getString(_draftKey(user.id, 'content')) ?? '';
-    if (savedDraft.isNotEmpty && _draftContentCtrl.text.isEmpty) {
-      _draftContentCtrl.text = savedDraft;
-    }
-    if (_titleCtrl.text.isEmpty) {
-      _titleCtrl.text = prefs.getString(_draftKey(user.id, 'title')) ?? '';
-    }
-    if (_descCtrl.text.isEmpty) {
-      _descCtrl.text = prefs.getString(_draftKey(user.id, 'description')) ?? '';
-    }
-    final savedChapterTitle = prefs.getString(
-      _draftKey(user.id, 'chapter_title'),
-    );
-    if (savedChapterTitle != null && savedChapterTitle.isNotEmpty) {
-      _draftChapterTitleCtrl.text = savedChapterTitle;
-    }
-    _submissionRequestId ??= prefs.getString(_draftKey(user.id, 'request_id'));
-    if (mounted) {
-      setState(() => _myNovels = list);
-    }
-  }
-
-  Future<void> _saveDraftSilently() async {
-    if (_draftContentCtrl.text.trim().isEmpty) return;
-    final user = context.read<AuthProvider>().currentUser;
-    final prefs = await SharedPreferences.getInstance();
-    _submissionRequestId ??= SupabaseDatabase.newImportRequestId();
-    await Future.wait([
-      prefs.setString(_draftKey(user.id, 'content'), _draftContentCtrl.text),
-      prefs.setString(_draftKey(user.id, 'title'), _titleCtrl.text),
-      prefs.setString(_draftKey(user.id, 'description'), _descCtrl.text),
-      prefs.setString(
-        _draftKey(user.id, 'chapter_title'),
-        _draftChapterTitleCtrl.text,
-      ),
-      prefs.setString(_draftKey(user.id, 'request_id'), _submissionRequestId!),
-    ]);
-    if (mounted) {
-      final now = TimeOfDay.now();
-      setState(() {
-        _lastSavedLabel =
-            'Đã tự lưu nháp lúc ${now.hour}:${now.minute.toString().padLeft(2, "0")}';
-      });
-    }
-  }
-
   Future<void> _submitForModeration() async {
+    if (_editorBusy) return;
     final auth = context.read<AuthProvider>();
-    final questProvider = context.read<QuestProvider>();
     final user = auth.currentUser;
-    final requestId = _submissionRequestId ??=
-        SupabaseDatabase.newImportRequestId();
-    RoleGuard.requireAuthorOrAdmin(user);
-
-    if (_titleCtrl.text.trim().isEmpty ||
-        _draftContentCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
+    final owner = _draftOwner;
+    final generation = _ownerGeneration;
+    final revision = _editRevision;
+    final submitted = _snapshot();
+    final provider = context.read<AdminNovelProvider>();
+    final quests = context.read<QuestProvider?>();
+    final messenger = ScaffoldMessenger.of(context);
+    if (submitted.title.trim().isEmpty || submitted.content.trim().isEmpty) {
+      messenger.showSnackBar(
         const SnackBar(
           content: Text('Vui lòng nhập Tên truyện và Nội dung chương đầu!'),
         ),
       );
       return;
     }
-
+    setState(() => _submitting = true);
+    _draftDebounce?.cancel();
     try {
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        await Future.wait([
-          prefs.setString(
-            _draftKey(user.id, 'content'),
-            _draftContentCtrl.text,
+      RoleGuard.requireAuthorOrAdmin(user);
+      final store = await _store;
+      await store.save(owner, submitted);
+      if (!_stillOwner(owner, generation)) return;
+      await provider.saveNovel(
+        actor: user,
+        novel: Novel(
+          id: 0,
+          title: submitted.title.trim(),
+          author: user.displayName,
+          coverUrl: '',
+          description: submitted.description.trim(),
+          status: NovelStatus.ongoing,
+          type: NovelType.novel,
+          genres: const ['Tiên hiệp', 'Fantasy'],
+          totalChapters: 1,
+          rating: 0,
+          views: 0,
+          updatedAt: DateTime.now(),
+        ),
+        chapters: [
+          (
+            title: submitted.chapterTitle.trim().isEmpty
+                ? AuthorDraft.defaultChapterTitle
+                : submitted.chapterTitle.trim(),
+            content: submitted.content.trim(),
           ),
-          prefs.setString(_draftKey(user.id, 'title'), _titleCtrl.text),
-          prefs.setString(_draftKey(user.id, 'description'), _descCtrl.text),
-          prefs.setString(
-            _draftKey(user.id, 'chapter_title'),
-            _draftChapterTitleCtrl.text,
-          ),
-          prefs.setString(_draftKey(user.id, 'request_id'), requestId),
-        ]);
-      } catch (error) {
-        debugPrint('Could not persist the pending author submission: $error');
-      }
-      await SupabaseDatabase.instance.insertCustomNovel(
-        title: _titleCtrl.text.trim(),
-        author: user.displayName,
-        description: _descCtrl.text.trim(),
-        status: NovelStatus.ongoing,
-        type: NovelType.novel,
-        genres: const ['Tiên hiệp', 'Fantasy'],
-        chapterTitles: [_draftChapterTitleCtrl.text.trim()],
-        chapterContents: [_draftContentCtrl.text.trim()],
-        requestId: requestId,
-        moderationStatus: user.isAdmin
-            ? ModerationStatus.approved
-            : ModerationStatus.pending,
-        ownerId: user.id,
+        ],
+        requestId: submitted.requestId,
       );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      var nextDraft = const AuthorDraft();
+      var cleanupFailed = false;
+      try {
+        if (!await store.clearIfMatches(owner, submitted)) {
+          nextDraft = store.load(owner);
+        }
+      } catch (_) {
+        cleanupFailed = true;
+      }
+      if (!_stillOwner(owner, generation)) return;
+      if (_editRevision == revision) {
+        setState(() {
+          _applyDraft(nextDraft);
+          _draftDirty = false;
+          _lastSavedLabel = nextDraft.isEmpty
+              ? 'Đã gửi tác phẩm'
+              : 'Đã giữ bản nháp mới';
+        });
+      }
+      if (quests != null) {
+        unawaited(
+          quests
+              .unlockBadge(owner, 'cay_but_tre')
+              .then<void>((_) {})
+              .catchError((Object error) {
+                debugPrint('Chưa ghi được huy hiệu tác giả: $error');
+              }),
+        );
+      }
+      unawaited(_refreshMyNovels());
+      messenger.showSnackBar(
         SnackBar(
           content: Text(
-            'Chưa gửi được lên Supabase: $error. Nội dung vẫn còn trong biểu mẫu, hãy thử lại khi kết nối ổn định.',
+            cleanupFailed
+                ? 'Tác phẩm đã gửi thành công, nhưng chưa dọn được bản nháp đã lưu.'
+                : user.isAdmin
+                ? 'Đã xuất bản lên trang chủ!'
+                : 'Đã gửi tác phẩm vào hàng chờ duyệt.',
           ),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 6),
         ),
       );
-      return;
-    }
-
-    try {
-      await questProvider.unlockBadge(user.id, 'cay_but_tre');
     } catch (error) {
-      debugPrint(
-        'Could not award author badge after successful submission: $error',
-      );
+      if (_stillOwner(owner, generation)) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              'Chưa gửi được tác phẩm: $error. Bản nháp vẫn được giữ để thử lại.',
+            ),
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      }
+    } finally {
+      if (_stillOwner(owner, generation)) {
+        setState(() => _submitting = false);
+        if (_draftDirty) unawaited(_saveDraftSilently());
+      }
     }
-    if (!mounted) return;
-    _titleCtrl.clear();
-    _descCtrl.clear();
-    _draftChapterTitleCtrl.clear();
-    _draftContentCtrl.clear();
-    _submissionRequestId = null;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await Future.wait([
-        for (final field in [
-          'content',
-          'title',
-          'description',
-          'chapter_title',
-          'request_id',
-        ])
-          prefs.remove(_draftKey(user.id, field)),
-      ]);
-    } catch (error) {
-      debugPrint('Could not clear submitted author draft: $error');
-    }
-    try {
-      await _loadMyNovelsAndDraft();
-    } catch (error) {
-      debugPrint('Could not refresh author novels after submission: $error');
-    }
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          user.isAdmin
-              ? '✅ Đã xuất bản thẳng lên trang chủ!'
-              : '📨 Đã gửi tác phẩm vào Hàng chờ duyệt của Admin!',
-        ),
-      ),
-    );
   }
 
   Future<void> _checkWithAi() async {
+    if (_editorBusy) return;
+    final owner = _draftOwner;
+    final generation = _ownerGeneration;
     if (_titleCtrl.text.trim().isEmpty ||
         _draftContentCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -285,7 +413,7 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
       chapters: [dummyChapter],
     );
 
-    if (!mounted) return;
+    if (!mounted || !_stillOwner(owner, generation)) return;
 
     await showModalBottomSheet<void>(
       context: context,
@@ -456,13 +584,15 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
             IconButton(
               tooltip: 'Nạp truyện từ File TXT / Thư mục Manga',
               icon: const Icon(Icons.file_upload_outlined),
-              onPressed: () => showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                builder: (_) => SmartNovelImporterSheet(
-                  onImportDone: _loadMyNovelsAndDraft,
-                ),
-              ),
+              onPressed: _submitting
+                  ? null
+                  : () => showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      builder: (_) => SmartNovelImporterSheet(
+                        onImportDone: _refreshMyNovels,
+                      ),
+                    ),
             ),
           ],
           bottom: const TabBar(
@@ -534,13 +664,15 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
                         ),
                         const SizedBox(width: 8),
                         FilledButton.tonalIcon(
-                          onPressed: () => showModalBottomSheet(
-                            context: context,
-                            isScrollControlled: true,
-                            builder: (_) => SmartNovelImporterSheet(
-                              onImportDone: _loadMyNovelsAndDraft,
-                            ),
-                          ),
+                          onPressed: _submitting
+                              ? null
+                              : () => showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  builder: (_) => SmartNovelImporterSheet(
+                                    onImportDone: _refreshMyNovels,
+                                  ),
+                                ),
                           icon: const Icon(Icons.drive_folder_upload, size: 18),
                           label: const Text('Nạp file'),
                         ),
@@ -549,8 +681,10 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Chip(
                       avatar: const Icon(Icons.save_outlined, size: 16),
@@ -564,7 +698,9 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
                 ),
                 const SizedBox(height: 12),
                 TextField(
+                  key: const ValueKey('author-draft-title'),
                   controller: _titleCtrl,
+                  enabled: !_editorBusy,
                   onChanged: (_) => _invalidateSubmissionRequest(),
                   decoration: const InputDecoration(
                     labelText: 'Tên tác phẩm mới',
@@ -573,7 +709,9 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
                 ),
                 const SizedBox(height: 12),
                 TextField(
+                  key: const ValueKey('author-draft-description'),
                   controller: _descCtrl,
+                  enabled: !_editorBusy,
                   maxLines: 2,
                   onChanged: (_) => _invalidateSubmissionRequest(),
                   decoration: const InputDecoration(
@@ -583,7 +721,9 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
                 ),
                 const SizedBox(height: 12),
                 TextField(
+                  key: const ValueKey('author-draft-chapter-title'),
                   controller: _draftChapterTitleCtrl,
+                  enabled: !_editorBusy,
                   onChanged: (_) => _invalidateSubmissionRequest(),
                   decoration: const InputDecoration(
                     labelText: 'Tiêu đề chương đầu',
@@ -591,15 +731,20 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Row(
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     OutlinedButton.icon(
-                      onPressed: () {
-                        _invalidateSubmissionRequest();
-                        _draftContentCtrl.text =
-                            '${_draftContentCtrl.text}\n[img]https://picsum.photos/seed/ln/600/400[/img]\n';
-                        setState(() {});
-                      },
+                      onPressed: _editorBusy
+                          ? null
+                          : () {
+                              _invalidateSubmissionRequest();
+                              _draftContentCtrl.text =
+                                  '${_draftContentCtrl.text}\n[img]https://picsum.photos/seed/ln/600/400[/img]\n';
+                              setState(() {});
+                            },
                       icon: const Icon(Icons.image_outlined, size: 18),
                       label: const Text('Chèn thẻ [img]'),
                     ),
@@ -607,7 +752,9 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
                     FilterChip(
                       label: const Text('Xem trước giao diện đọc'),
                       selected: _previewMode,
-                      onSelected: (v) => setState(() => _previewMode = v),
+                      onSelected: _editorBusy
+                          ? null
+                          : (v) => setState(() => _previewMode = v),
                     ),
                   ],
                 ),
@@ -632,7 +779,9 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
                   )
                 else
                   TextField(
+                    key: const ValueKey('author-draft-content'),
                     controller: _draftContentCtrl,
+                    enabled: !_editorBusy,
                     maxLines: 9,
                     onChanged: (_) {
                       _invalidateSubmissionRequest();
@@ -652,7 +801,7 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           foregroundColor: Colors.blue.shade700,
                         ),
-                        onPressed: _checkWithAi,
+                        onPressed: _editorBusy ? null : _checkWithAi,
                         icon: const Icon(Icons.psychology),
                         label: const Text('AI Tiền Kiểm'),
                       ),
@@ -661,11 +810,13 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
                     Expanded(
                       flex: 2,
                       child: FilledButton.icon(
-                        onPressed: _submitForModeration,
+                        onPressed: _editorBusy ? null : _submitForModeration,
                         icon: const Icon(Icons.send),
-                        label: const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 12),
-                          child: Text('Gửi duyệt xuất bản'),
+                        label: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Text(
+                            _submitting ? 'Đang gửi…' : 'Gửi duyệt xuất bản',
+                          ),
                         ),
                       ),
                     ),
@@ -676,6 +827,16 @@ class _AuthorStudioScreenState extends State<AuthorStudioScreen> {
             ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                if (_booksLoading) const LinearProgressIndicator(),
+                if (_booksError != null) Text(_booksError!),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: _submitting ? null : _refreshMyNovels,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Tải lại tác phẩm'),
+                  ),
+                ),
                 Text(
                   'Tác phẩm của ${user.displayName} (${_myNovels.length} bộ):',
                   style: const TextStyle(fontWeight: FontWeight.bold),
