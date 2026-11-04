@@ -101,3 +101,5 @@ Trong Cài đặt, chọn xuất bản sao lưu rồi **Lưu file JSON**; dùng 
 Tủ sách Khách lưu ngay trên thiết bị. Tủ sách thành viên có bản đệm riêng theo tài khoản để xem khi mất mạng; thay đổi danh mục hoặc xóa ở chế độ thành viên cần máy chủ xác nhận. Bản sao lưu mới chứa cả tủ sách đang lưu trên thiết bị.
 
 Dấu trang Khách lưu vị trí và tên chương trên thiết bị; dấu trang thành viên có bộ đệm riêng theo tài khoản. Bản sao lưu phiên bản 6 bổ sung các dấu trang này; khi khôi phục vào tài khoản thành viên, ứng dụng đối chiếu dữ liệu máy chủ trước khi đồng bộ để tránh tạo trùng.
+
+Khi bắt đầu đọc truyện trong mục Muốn đọc, ứng dụng lưu vị trí trước rồi chuyển danh mục sang Đang đọc ở nền. Mạng chậm/lỗi ở bước đổi danh mục không chặn các lần lưu vị trí tiếp theo; yêu cầu lỗi được thử lại sau khi tải lại dữ liệu hoặc kết nối lại.

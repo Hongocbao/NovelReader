@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -96,7 +97,16 @@ void main() {
     await lp.setCategory(novel.id, LibraryCategory.want);
     expect(lp.categoryOf(novel.id), LibraryCategory.want);
 
+    final movedToReading = Completer<void>();
+    void observeCategory() {
+      if (lp.categoryOf(novel.id) == LibraryCategory.reading && !movedToReading.isCompleted) {
+        movedToReading.complete();
+      }
+    }
+    lp.addListener(observeCategory);
+    addTearDown(() => lp.removeListener(observeCategory));
     await lp.saveProgress(novel, chapters[1], 0.42);
+    await movedToReading.future.timeout(const Duration(seconds: 5));
     expect(lp.categoryOf(novel.id), LibraryCategory.reading);
 
     final history = lp.historyFor(novel.id);

@@ -123,6 +123,13 @@ void main() {
       await library.load();
       await library.setCategory(7001, 'want', novel: novel(7001));
       expect(library.items.single.novel!.title, 'Truyện 7001');
+      final movedToReading = Completer<void>();
+      void observeCategory() {
+        if (library.categoryOf(7001) == 'reading' && !movedToReading.isCompleted) {
+          movedToReading.complete();
+        }
+      }
+      library.addListener(observeCategory);
       await library.saveProgress(
         novel(7001),
         const Chapter(
@@ -133,6 +140,8 @@ void main() {
         ),
         .5,
       );
+      await movedToReading.future.timeout(const Duration(seconds: 5));
+      library.removeListener(observeCategory);
       expect(library.categoryOf(7001), 'reading');
       await library.load();
       expect(library.items.single.progress, .25);

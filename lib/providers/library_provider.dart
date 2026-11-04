@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../database/app_database.dart';
@@ -21,6 +23,9 @@ class LibraryProvider extends ChangeNotifier {
   int _historyRevision = 0;
   bool _disposed = false;
   bool? _wasOnline;
+  final _autoStartAttempts = <({int identity, int novelId})>{};
+  final _autoStartsInFlight = <({int identity, int novelId})>{};
+  final _shelfRemovalsInFlight = <({int identity, int novelId})>{};
 
   /// Thử đồng bộ lịch sử đang chờ khi mạng trở lại, kể cả lúc đang đọc.
   void updateConnectivity(bool online) {
@@ -46,6 +51,7 @@ class LibraryProvider extends ChangeNotifier {
     _bookmarks.clear();
     _comments.clear();
     _recordedChapterSessions.clear();
+    _autoStartAttempts.clear();
     _loaded = false;
     _loading = false;
     _error = null;
@@ -129,6 +135,8 @@ class LibraryProvider extends ChangeNotifier {
 
   /// Tải tủ sách + lịch sử + trích dẫn từ DB.
   Future<void> load({String? userId}) async {
+    // Một lần tải lại hoặc kết nối lại cho phép thử chuyển danh mục lần nữa.
+    _autoStartAttempts.clear();
     final uid = userId ?? _userId;
     final requestId = ++_loadRequestId;
     final historyRevision = _historyRevision;
@@ -199,6 +207,15 @@ class LibraryProvider extends ChangeNotifier {
 
   /// Thêm truyện vào tủ sách hoặc chuyển danh mục.
   Future<void> setCategory(int novelId, String category, {Novel? novel}) async {
+    _autoStartAttempts.remove((identity: _identityRevision, novelId: novelId));
+    await _setCategory(novelId, category, novel: novel);
+  }
+
+  Future<void> _setCategory(
+    int novelId,
+    String category, {
+    Novel? novel,
+  }) async {
     final uid = _userId;
     final revision = _identityRevision;
     final existing = _items.where((e) => e.novelId == novelId).firstOrNull;
@@ -218,9 +235,16 @@ class LibraryProvider extends ChangeNotifier {
   /// Xóa truyện khỏi tủ sách.
   Future<void> remove(int novelId) async {
     final revision = _identityRevision;
-    await _db.removeFromLibrary(novelId, userId: _userId);
-    if (revision != _identityRevision) return;
-    await _reloadLibrary();
+    final key = (identity: revision, novelId: novelId);
+    _autoStartAttempts.add(key);
+    _shelfRemovalsInFlight.add(key);
+    try {
+      await _db.removeFromLibrary(novelId, userId: _userId);
+      if (revision != _identityRevision) return;
+      await _reloadLibrary();
+    } finally {
+      _shelfRemovalsInFlight.remove(key);
+    }
   }
 
   Future<void> _reloadLibrary() async {
@@ -275,10 +299,6 @@ class LibraryProvider extends ChangeNotifier {
     if (revision != _identityRevision) return;
     _history = [updated, ..._history.where((h) => h.novelId != novel.id)];
 
-    if (categoryOf(novel.id) == LibraryCategory.want) {
-      await setCategory(novel.id, LibraryCategory.reading, novel: novel);
-      return; // setCategory đã notify
-    }
     // Cập nhật tiến độ trong tủ sách mà không cần đọc lại DB.
     _items = [
       for (final item in _items)
@@ -289,7 +309,31 @@ class LibraryProvider extends ChangeNotifier {
               )
             : item,
     ];
+    if (categoryOf(novel.id) == LibraryCategory.want) {
+      _startReadingInBackground(novel, revision);
+    }
     notifyListeners();
+  }
+
+  void _startReadingInBackground(Novel novel, int identity) {
+    final key = (identity: identity, novelId: novel.id);
+    if (_shelfRemovalsInFlight.contains(key) ||
+        _autoStartsInFlight.contains(key) ||
+        !_autoStartAttempts.add(key)) {
+      return;
+    }
+    _autoStartsInFlight.add(key);
+    unawaited(() async {
+      try {
+        await _setCategory(novel.id, LibraryCategory.reading, novel: novel);
+      } catch (error) {
+        // Tiến độ đã lưu thành công. Lỗi đổi danh mục không được làm hỏng
+        // hàng đợi lưu vị trí, cũng không gửi lại yêu cầu ở mỗi lần cuộn.
+        debugPrint('Chưa chuyển được truyện sang Đang đọc: $error');
+      } finally {
+        _autoStartsInFlight.remove(key);
+      }
+    }());
   }
 
   /// Xóa 1 mục lịch sử.
