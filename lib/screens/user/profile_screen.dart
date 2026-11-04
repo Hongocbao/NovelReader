@@ -29,6 +29,48 @@ class UserProfileScreen extends StatefulWidget {
 
 class _UserProfileScreenState extends State<UserProfileScreen> {
   bool _showOnLeaderboard = true;
+  final _buyingItems = <({String owner, String item})>{};
+
+  Future<void> _buyItem(
+    AuthProvider auth,
+    String itemKey,
+    int cost,
+    String title,
+  ) async {
+    final owner = auth.currentUser.id;
+    final key = (owner: owner, item: itemKey);
+    if (!_buyingItems.add(key)) return;
+    setState(() {});
+    try {
+      final ok = await auth.purchaseShopItem(itemKey, cost);
+      if (!mounted || auth.currentUser.id != owner) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(
+          ok ? '🎉 Đã mở khóa $title!' : 'Chưa đủ Linh Thạch.',
+        )),
+      );
+    } catch (error) {
+      if (!mounted || auth.currentUser.id != owner) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Chưa mua được vật phẩm: $error')),
+      );
+    } finally {
+      _buyingItems.remove(key);
+      if (mounted) setState(() {});
+    }
+  }
+
+  Future<void> _equipItem(AuthProvider auth, String itemKey) async {
+    final owner = auth.currentUser.id;
+    try {
+      await auth.updateProfile(avatarFrame: itemKey);
+    } catch (error) {
+      if (!mounted || auth.currentUser.id != owner) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Chưa trang bị được vật phẩm: $error')),
+      );
+    }
+  }
 
   static const _shopItems = [
     (
@@ -311,7 +353,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                     children: [
                                       Chip(
                                         visualDensity: VisualDensity.compact,
-                                        label: Text('💎 ${user.linhThach} Linh Thạch'),
+                                        label: Text(auth.balanceNeedsRefresh
+                                            ? '💎 Đang đồng bộ số dư'
+                                            : '💎 ${user.linhThach} Linh Thạch'),
                                       ),
                                       Chip(
                                         visualDensity: VisualDensity.compact,
@@ -539,8 +583,17 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 Card(
                   child: ListTile(
                     leading: const Text('💎', style: TextStyle(fontSize: 28)),
+                    trailing: auth.balanceNeedsRefresh
+                        ? IconButton(
+                            tooltip: 'Tải lại số dư',
+                            onPressed: auth.refreshCurrentUser,
+                            icon: const Icon(Icons.sync),
+                          )
+                        : null,
                     title: Text(
-                      'Số dư hiện tại: ${user.linhThach} Linh Thạch',
+                      auth.balanceNeedsRefresh
+                          ? 'Đang đồng bộ số dư'
+                          : 'Số dư hiện tại: ${user.linhThach} Linh Thạch',
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     subtitle: const Text(
@@ -567,9 +620,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           subtitle: Text(item.desc),
                           trailing: owned
                               ? OutlinedButton(
-                                  onPressed: () => auth.updateProfile(
-                                    avatarFrame: item.key,
-                                  ),
+                                  onPressed: () => _equipItem(auth, item.key),
                                   child: Text(
                                     user.avatarFrame == item.key
                                         ? 'Đang dùng'
@@ -577,27 +628,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                   ),
                                 )
                               : FilledButton.tonal(
-                                  onPressed: user.isGuest
+                                  onPressed: user.isGuest || _buyingItems.contains(
+                                      (owner: user.id, item: item.key))
                                       ? null
-                                      : () async {
-                                          final ok = await auth
-                                              .purchaseShopItem(
-                                                item.key,
-                                                item.cost,
-                                              );
-                                          if (!context.mounted) return;
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
-                                            SnackBar(
-                                              content: Text(
-                                                ok
-                                                    ? '🎉 Đã mở khóa ${item.title}!'
-                                                    : 'Chưa đủ Linh Thạch.',
-                                              ),
-                                            ),
-                                          );
-                                        },
+                                      : () => _buyItem(auth, item.key, item.cost, item.title),
                                   child: Text('${item.cost} 💎'),
                                 ),
                         ),
@@ -638,7 +672,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       rank: 3,
                       name: user.displayName,
                       avatar: user.avatar,
-                      score: '${user.linhThach} 💎 • 18.450 từ',
+                      score: auth.balanceNeedsRefresh ? 'Đang đồng bộ số dư'
+                          : '${user.linhThach} 💎 • 18.450 từ',
                     ),
                   (
                     rank: 4,

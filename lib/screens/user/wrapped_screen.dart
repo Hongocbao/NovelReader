@@ -81,7 +81,8 @@ class _ReadingWrappedScreenState extends State<ReadingWrappedScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = context.watch<AuthProvider>().currentUser;
+    final auth = context.watch<AuthProvider>();
+    final user = auth.currentUser;
     final lib = context.watch<LibraryProvider>();
     final year = DateTime.now().year;
     final sessions = lib.sessions.where(
@@ -126,7 +127,7 @@ class _ReadingWrappedScreenState extends State<ReadingWrappedScreen> {
         title: 'Danh hiệu hiện tại',
         highlight: lib.readerRankTitle,
         subtitle:
-            'Chuỗi Streak: ${lib.currentStreak} ngày liên tiếp • Tích lũy ${user.linhThach} Linh Thạch.',
+            'Chuỗi Streak: ${lib.currentStreak} ngày liên tiếp • ${auth.balanceNeedsRefresh ? 'Đang đồng bộ số dư' : 'Tích lũy ${user.linhThach} Linh Thạch'}.',
         colors: [const Color(0xFFE65100), const Color(0xFFF57C00)],
       ),
     ];

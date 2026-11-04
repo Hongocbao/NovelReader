@@ -5,8 +5,13 @@ import 'auth_repository.dart';
 
 /// Triển khai AuthRepository bằng Supabase Auth (auth.users) và bảng `ho_so`.
 class SupabaseAuthRepository
-    implements AuthRepository, AtomicEconomyRepository {
-  SupabaseClient get _client => Supabase.instance.client;
+    implements
+        AuthRepository,
+        AtomicEconomyRepository,
+        ProfileFieldsRepository {
+  SupabaseAuthRepository({SupabaseClient? client}) : _clientOverride = client;
+  final SupabaseClient? _clientOverride;
+  SupabaseClient get _client => _clientOverride ?? Supabase.instance.client;
 
   @override
   Future<AppUser> login(String email, String password) async {
@@ -174,36 +179,75 @@ class SupabaseAuthRepository
   }
 
   @override
-  Future<AppUser?> purchaseShopItem(String itemKey, int cost) async {
+  Future<AppUser> updateProfileFields(AppUser user) async {
+    final row = await _client
+        .from('ho_so')
+        .update({
+          'display_name': user.displayName,
+          'avatar': user.avatar,
+          'avatar_frame': user.avatarFrame,
+          'pinned_achievements': user.pinnedAchievements.join(','),
+        })
+        .eq('id', user.id)
+        .select()
+        .single();
+    return AppUser.fromMap(row);
+  }
+
+  @override
+  Future<EconomyReceipt?> purchaseShopItem(String itemKey, int cost) async {
+    final owner = _economyOwner();
     final result = await _client.rpc(
       'purchase_shop_item',
       params: {'p_item_key': itemKey, 'p_cost': cost},
     );
     if (result is! Map || result['success'] != true) return null;
-    return getCurrentUser();
+    return _confirmedReceipt(owner, result, unlockedItem: itemKey);
   }
 
   @override
-  Future<AppUser?> buyStreakShield() async {
+  Future<EconomyReceipt?> buyStreakShield() async {
+    final owner = _economyOwner();
     final result = await _client.rpc('buy_streak_shield');
     if (result is! Map || result['success'] != true) return null;
-    return getCurrentUser();
+    return _confirmedReceipt(owner, result, hasStreakShield: true);
   }
 
   @override
-  Future<QuestRewardClaim?> claimQuestReward(int questId) async {
+  Future<EconomyReceipt?> claimQuestReward(int questId) async {
+    final owner = _economyOwner();
     final result = await _client.rpc(
       'claim_quest_reward',
       params: {'p_quest_id': questId},
     );
     if (result is! Map || result['claimed'] != true) return null;
-    final user = await getCurrentUser();
-    if (user == null) {
-      throw StateError('Không tải được hồ sơ sau khi nhận thưởng.');
+    return _confirmedReceipt(owner, result);
+  }
+
+  String _economyOwner() {
+    final owner = _client.auth.currentUser?.id;
+    if (owner == null) {
+      throw StateError('Vui lòng đăng nhập trước khi giao dịch.');
     }
-    return QuestRewardClaim(
-      user: user,
-      reward: (result['reward'] as num?)?.toInt() ?? 0,
+    return owner;
+  }
+
+  EconomyReceipt _confirmedReceipt(
+    String owner,
+    Map result, {
+    String? unlockedItem,
+    bool hasStreakShield = false,
+  }) {
+    // The RPC already committed. Profile synchronization is a separate read;
+    // it must not block this receipt or change a successful buy into an error.
+    return EconomyReceipt(
+      userId: owner,
+      balance: result['balance'] is num
+          ? (result['balance'] as num).toInt()
+          : null,
+      reward: result['reward'] is num ? (result['reward'] as num).toInt() : 0,
+      unlockedItem: unlockedItem,
+      hasStreakShield: hasStreakShield,
     );
   }
 

@@ -31,17 +31,36 @@ class DelayedEconomyRepository extends FakeAuthRepository
   }
 
   @override
-  Future<QuestRewardClaim?> claimQuestReward(int questId) async {
+  Future<EconomyReceipt?> claimQuestReward(int questId) async {
     final updated = await _request('claim');
-    return updated == null ? null : QuestRewardClaim(user: updated, reward: 50);
+    return updated == null
+        ? null
+        : EconomyReceipt(userId: updated.id, profile: updated, reward: 50);
   }
 
   @override
-  Future<AppUser?> purchaseShopItem(String itemKey, int cost) =>
-      _request('shop');
+  Future<EconomyReceipt?> purchaseShopItem(String itemKey, int cost) async {
+    final updated = await _request('shop');
+    return updated == null
+        ? null
+        : EconomyReceipt(
+            userId: updated.id,
+            profile: updated,
+            unlockedItem: itemKey,
+          );
+  }
 
   @override
-  Future<AppUser?> buyStreakShield() => _request('shield');
+  Future<EconomyReceipt?> buyStreakShield() async {
+    final updated = await _request('shield');
+    return updated == null
+        ? null
+        : EconomyReceipt(
+            userId: updated.id,
+            profile: updated,
+            hasStreakShield: true,
+          );
+  }
 
   @override
   Future<AppUser> updateUser(AppUser user) async =>

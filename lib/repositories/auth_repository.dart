@@ -1,10 +1,24 @@
 import '../models/app_user.dart';
 
-class QuestRewardClaim {
-  final AppUser user;
+/// Confirmed server transaction, independent of the following profile read.
+/// [balance] is null when an older server function omits it; callers must not
+/// present an estimated balance as the server's current value.
+class EconomyReceipt {
+  final String userId;
+  final AppUser? profile;
+  final int? balance;
   final int reward;
+  final String? unlockedItem;
+  final bool hasStreakShield;
 
-  const QuestRewardClaim({required this.user, required this.reward});
+  const EconomyReceipt({
+    required this.userId,
+    this.profile,
+    this.balance,
+    this.reward = 0,
+    this.unlockedItem,
+    this.hasStreakShield = false,
+  });
 }
 
 /// Auth đã xác thực thành công nhưng chưa đọc/ghi được hồ sơ ứng dụng.
@@ -52,7 +66,12 @@ abstract class AuthRepository {
 /// transactionally on the server. Keeping it separate preserves compatibility
 /// with local and test AuthRepository implementations.
 abstract interface class AtomicEconomyRepository {
-  Future<AppUser?> purchaseShopItem(String itemKey, int cost);
-  Future<AppUser?> buyStreakShield();
-  Future<QuestRewardClaim?> claimQuestReward(int questId);
+  Future<EconomyReceipt?> purchaseShopItem(String itemKey, int cost);
+  Future<EconomyReceipt?> buyStreakShield();
+  Future<EconomyReceipt?> claimQuestReward(int questId);
+}
+
+/// Self-service profile fields can be saved without resending a stale balance.
+abstract interface class ProfileFieldsRepository {
+  Future<AppUser> updateProfileFields(AppUser user);
 }

@@ -79,7 +79,7 @@ class _QuestsAndAchievementsScreenState
         SnackBar(
           content: Text(
             ok
-                ? '🛡️ Đã trang bị Khiên bảo vệ Streak (-20 Linh Thạch)!'
+                ? '🛡️ Đã trang bị Khiên bảo vệ Streak!'
                 : 'Không đủ Linh Thạch (cần 20 Linh Thạch).',
           ),
         ),
@@ -139,11 +139,21 @@ class _QuestsAndAchievementsScreenState
         appBar: AppBar(
           title: const Text('Nhiệm vụ & Huy hiệu'),
           actions: [
+            if (auth.balanceNeedsRefresh)
+              IconButton(
+                tooltip: 'Tải lại số dư',
+                onPressed: auth.refreshCurrentUser,
+                icon: const Icon(Icons.sync),
+              ),
             Padding(
               padding: const EdgeInsets.only(right: 16),
               child: Chip(
                 avatar: const Text('💎'),
-                label: Text('${user.linhThach} Linh Thạch'),
+                label: Text(
+                  auth.balanceNeedsRefresh
+                      ? 'Đang đồng bộ số dư'
+                      : '${user.linhThach} Linh Thạch',
+                ),
               ),
             ),
           ],

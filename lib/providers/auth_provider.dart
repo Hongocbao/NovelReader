@@ -24,9 +24,10 @@ class AuthProvider extends ChangeNotifier {
   /// Đánh dấu người dùng đã qua màn hình SplashGate trong phiên hiện tại.
   bool _hasEnteredApp = false;
 
-  /// True khi Auth còn session nhưng hồ sơ `ho_so` chưa tải được do lỗi mạng.
-  /// Trong trạng thái này chỉ mở quyền Độc giả cho đến khi làm mới hồ sơ.
+  /// Hồ sơ chưa tải đủ hoặc cần đồng bộ sau một giao dịch đã xác nhận.
+  /// Khi chỉ có session cơ bản, tài khoản tạm dùng quyền Độc giả.
   bool _profileNeedsRefresh = false;
+  bool _balanceNeedsRefresh = false;
   int _identityRevision = 0;
   int? _profileRefreshRevision;
   bool _disposed = false;
@@ -79,6 +80,33 @@ class AuthProvider extends ChangeNotifier {
   bool get adminPreviewAsReader => _adminPreviewAsReader;
   bool get hasEnteredApp => _hasEnteredApp;
   bool get profileNeedsRefresh => _profileNeedsRefresh;
+  bool get balanceNeedsRefresh => _balanceNeedsRefresh;
+
+  bool _applyEconomyReceipt(
+    AppUser user,
+    int revision,
+    EconomyReceipt receipt,
+  ) {
+    if (!_sameIdentity(user.id, revision) ||
+        receipt.userId != user.id ||
+        (receipt.profile != null && receipt.profile!.id != user.id)) {
+      return false;
+    }
+    final profile = receipt.profile;
+    final base = profile ?? user;
+    final item = receipt.unlockedItem;
+    _currentUser = base.copyWith(
+      linhThach: profile?.linhThach ?? receipt.balance ?? base.linhThach,
+      unlockedItems: item == null || base.unlockedItems.contains(item)
+          ? base.unlockedItems
+          : [...base.unlockedItems, item],
+      hasStreakShield: receipt.hasStreakShield || base.hasStreakShield,
+    );
+    _profileNeedsRefresh = profile == null;
+    _balanceNeedsRefresh = profile == null && receipt.balance == null;
+    notifyListeners();
+    return true;
+  }
 
   /// Có hiển thị giao diện AdminShell hay không.
   bool get shouldShowAdminShell => isAdmin && !_adminPreviewAsReader;
@@ -97,6 +125,7 @@ class AuthProvider extends ChangeNotifier {
         // rồi tải hồ sơ; lỗi mạng không được biến phiên hợp lệ thành Khách.
         _currentUser = _userFromSession(session.user);
         _profileNeedsRefresh = true;
+        _balanceNeedsRefresh = true;
         _hasEnteredApp = true;
         try {
           final user = await _repo.getUserById(session.user.id);
@@ -104,12 +133,14 @@ class AuthProvider extends ChangeNotifier {
             await _repo.logout();
             _currentUser = AppUser.guest();
             _profileNeedsRefresh = false;
+            _balanceNeedsRefresh = false;
             _hasEnteredApp = false;
             await _prefs.remove(PrefKeys.currentUserId);
             await _prefs.setBool(PrefKeys.hasSeenSplashGate, false);
           } else if (user != null) {
             _currentUser = user;
             _profileNeedsRefresh = false;
+            _balanceNeedsRefresh = false;
           }
         } catch (_) {
           // Giữ session và danh tính cơ bản; lần mở app sau sẽ thử tải lại.
@@ -129,6 +160,7 @@ class AuthProvider extends ChangeNotifier {
     _currentUser = AppUser.guest();
     _adminPreviewAsReader = false;
     _profileNeedsRefresh = false;
+    _balanceNeedsRefresh = false;
     _hasEnteredApp = true;
     _error = null;
     await _prefs.remove(PrefKeys.currentUserId);
@@ -147,6 +179,7 @@ class AuthProvider extends ChangeNotifier {
       _currentUser = user;
       _adminPreviewAsReader = false;
       _profileNeedsRefresh = false;
+      _balanceNeedsRefresh = false;
       _hasEnteredApp = true;
       await _prefs.setString(PrefKeys.currentUserId, user.id);
       await _prefs.setBool(PrefKeys.hasSeenSplashGate, true);
@@ -162,6 +195,7 @@ class AuthProvider extends ChangeNotifier {
         _currentUser = _userFromSession(session.user);
         _adminPreviewAsReader = false;
         _profileNeedsRefresh = true;
+        _balanceNeedsRefresh = true;
         _hasEnteredApp = true;
         await _prefs.setString(PrefKeys.currentUserId, _currentUser.id);
         await _prefs.setBool(PrefKeys.hasSeenSplashGate, true);
@@ -195,6 +229,7 @@ class AuthProvider extends ChangeNotifier {
       _currentUser = user;
       _adminPreviewAsReader = false;
       _profileNeedsRefresh = false;
+      _balanceNeedsRefresh = false;
       _hasEnteredApp = true;
       await _prefs.setString(PrefKeys.currentUserId, user.id);
       await _prefs.setBool(PrefKeys.hasSeenSplashGate, true);
@@ -210,6 +245,7 @@ class AuthProvider extends ChangeNotifier {
         _currentUser = _userFromSession(session.user);
         _adminPreviewAsReader = false;
         _profileNeedsRefresh = true;
+        _balanceNeedsRefresh = true;
         _hasEnteredApp = true;
         await _prefs.setString(PrefKeys.currentUserId, _currentUser.id);
         await _prefs.setBool(PrefKeys.hasSeenSplashGate, true);
@@ -233,6 +269,7 @@ class AuthProvider extends ChangeNotifier {
     _currentUser = AppUser.guest();
     _adminPreviewAsReader = false;
     _profileNeedsRefresh = false;
+    _balanceNeedsRefresh = false;
     _hasEnteredApp = false;
     _error = null;
     await _prefs.remove(PrefKeys.currentUserId);
@@ -269,20 +306,28 @@ class AuthProvider extends ChangeNotifier {
     RoleGuard.requirePermission(_currentUser, AppPermission.interactAndGamify);
     final pins = pinnedAchievements?.take(3).toList();
     await _mutateUser<bool>(false, (user, revision) async {
-      final updated = await _repo.updateUser(
-        user.copyWith(
-          displayName: displayName?.trim().isNotEmpty == true
-              ? displayName!.trim()
-              : user.displayName,
-          avatar: avatar ?? user.avatar,
-          avatarFrame: avatarFrame ?? user.avatarFrame,
-          pinnedAchievements: pins ?? user.pinnedAchievements,
-        ),
+      final proposal = user.copyWith(
+        displayName: displayName?.trim().isNotEmpty == true
+            ? displayName!.trim()
+            : user.displayName,
+        avatar: avatar ?? user.avatar,
+        avatarFrame: avatarFrame ?? user.avatarFrame,
+        pinnedAchievements: pins ?? user.pinnedAchievements,
       );
+      final profileRepo = _repo is ProfileFieldsRepository
+          ? _repo as ProfileFieldsRepository
+          : null;
+      final updated = profileRepo == null
+          ? await _repo.updateUser(proposal)
+          : await profileRepo.updateProfileFields(proposal);
       if (!_sameIdentity(user.id, revision) || updated.id != user.id) {
         return false;
       }
       _currentUser = updated;
+      if (profileRepo != null) {
+        _profileNeedsRefresh = false;
+        _balanceNeedsRefresh = false;
+      }
       notifyListeners();
       return true;
     });
@@ -303,13 +348,9 @@ class AuthProvider extends ChangeNotifier {
         return reward;
       }
       final claim = await economyRepo.claimQuestReward(questId);
-      if (claim == null ||
-          !_sameIdentity(user.id, revision) ||
-          claim.user.id != user.id) {
+      if (claim == null || !_applyEconomyReceipt(user, revision, claim)) {
         return null;
       }
-      _currentUser = claim.user;
-      notifyListeners();
       return claim.reward;
     });
   }
@@ -320,7 +361,7 @@ class AuthProvider extends ChangeNotifier {
     if (itemKey.trim().isEmpty || cost <= 0) return false;
     return _mutateUser<bool>(false, (user, revision) async {
       if (user.unlockedItems.contains(itemKey)) return true;
-      if (user.linhThach < cost) return false;
+      if (!_balanceNeedsRefresh && user.linhThach < cost) return false;
       final economyRepo = _repo is AtomicEconomyRepository
           ? _repo as AtomicEconomyRepository
           : null;
@@ -333,14 +374,7 @@ class AuthProvider extends ChangeNotifier {
         return true;
       }
       final updated = await economyRepo.purchaseShopItem(itemKey, cost);
-      if (updated == null ||
-          !_sameIdentity(user.id, revision) ||
-          updated.id != user.id) {
-        return false;
-      }
-      _currentUser = updated;
-      notifyListeners();
-      return true;
+      return updated != null && _applyEconomyReceipt(user, revision, updated);
     });
   }
 
@@ -349,7 +383,7 @@ class AuthProvider extends ChangeNotifier {
     RoleGuard.requirePermission(_currentUser, AppPermission.interactAndGamify);
     return _mutateUser<bool>(false, (user, revision) async {
       if (user.hasStreakShield) return true;
-      if (user.linhThach < 20) return false;
+      if (!_balanceNeedsRefresh && user.linhThach < 20) return false;
       final economyRepo = _repo is AtomicEconomyRepository
           ? _repo as AtomicEconomyRepository
           : null;
@@ -362,14 +396,7 @@ class AuthProvider extends ChangeNotifier {
         return true;
       }
       final updated = await economyRepo.buyStreakShield();
-      if (updated == null ||
-          !_sameIdentity(user.id, revision) ||
-          updated.id != user.id) {
-        return false;
-      }
-      _currentUser = updated;
-      notifyListeners();
-      return true;
+      return updated != null && _applyEconomyReceipt(user, revision, updated);
     });
   }
 
@@ -396,6 +423,7 @@ class AuthProvider extends ChangeNotifier {
       if (fresh != null && fresh.id == userId) {
         _currentUser = fresh;
         _profileNeedsRefresh = false;
+        _balanceNeedsRefresh = false;
         notifyListeners();
       }
     } catch (_) {
