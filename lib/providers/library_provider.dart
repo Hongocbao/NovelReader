@@ -328,7 +328,7 @@ class LibraryProvider extends ChangeNotifier {
   /// Tải bookmark của 1 truyện.
   Future<void> loadBookmarks(int novelId) async {
     final revision = _identityRevision;
-    final bookmarks = await _db.getBookmarks(novelId);
+    final bookmarks = await _db.getBookmarks(novelId, userId: _userId);
     if (revision != _identityRevision) return;
     _bookmarks[novelId] = bookmarks;
     notifyListeners();
@@ -340,6 +340,7 @@ class LibraryProvider extends ChangeNotifier {
     double offset, {
     String note = '',
   }) async {
+    final revision = _identityRevision;
     await _db.addBookmark(
       Bookmark(
         novelId: chapter.novelId,
@@ -347,15 +348,21 @@ class LibraryProvider extends ChangeNotifier {
         scrollOffset: offset.clamp(0, 1).toDouble(),
         note: note.trim(),
         createdAt: DateTime.now(),
+        chapterIndex: chapter.chapterIndex,
+        chapterTitle: chapter.title,
       ),
+      userId: _userId,
     );
+    if (revision != _identityRevision) return;
     await loadBookmarks(chapter.novelId);
   }
 
   /// Xóa bookmark.
   Future<void> deleteBookmark(Bookmark bookmark) async {
     if (bookmark.id == null) return;
-    await _db.deleteBookmark(bookmark.id!);
+    final revision = _identityRevision;
+    await _db.deleteBookmark(bookmark.id!, userId: _userId);
+    if (revision != _identityRevision) return;
     await loadBookmarks(bookmark.novelId);
   }
 

@@ -13,6 +13,7 @@ import '../models/novel.dart';
 import '../models/reading_history.dart';
 import '../repositories/reading_history_remote.dart';
 import '../repositories/library_remote.dart';
+import '../repositories/bookmark_remote.dart';
 import '../utils/constants.dart';
 import '../utils/format.dart';
 import '../utils/portable_backup_images.dart';
@@ -21,6 +22,7 @@ import 'reading_history_cache.dart';
 import 'v2_database_store.dart';
 import 'custom_novel_backup.dart';
 import 'library_cache.dart';
+import 'bookmark_cache.dart';
 
 /// Lớp truy cập SQLite của ứng dụng: tạo bảng, CRUD và nạp dữ liệu mẫu.
 ///
@@ -40,9 +42,11 @@ class AppDatabase {
     this.path,
     ReadingHistoryRemote? historyRemote,
     LibraryRemote? libraryRemote,
+    BookmarkRemote? bookmarkRemote,
     Future<String> Function()? sampleJsonLoader,
   }) : _historyRemoteOverride = historyRemote,
        _libraryRemoteOverride = libraryRemote,
+       _bookmarkRemoteOverride = bookmarkRemote,
        _sampleJsonLoader =
            sampleJsonLoader ??
            (() => rootBundle.loadString(AppInfo.sampleDataAsset));
@@ -57,6 +61,17 @@ class AppDatabase {
   ReadingHistoryCache? _historyCache;
   final LibraryRemote? _libraryRemoteOverride;
   LibraryCache? _libraryCache;
+  final BookmarkRemote? _bookmarkRemoteOverride;
+  BookmarkCache? _bookmarkCache;
+  BookmarkRemote? get _bookmarkRemote =>
+      _bookmarkRemoteOverride ??
+      (isSupabaseReady ? SupabaseDatabase.instance : null);
+
+  Future<BookmarkCache> _bookmarkStore(BookmarkRemote remote) async {
+    final db = await database;
+    return _bookmarkCache ??= BookmarkCache(db, remote);
+  }
+
   LibraryRemote? get _libraryRemote =>
       _libraryRemoteOverride ??
       (isSupabaseReady ? SupabaseDatabase.instance : null);
@@ -242,6 +257,7 @@ class AppDatabase {
   Future<void> _ensureExtraTables(Database db) async {
     await ReadingHistoryCache.ensureSchema(db);
     await LibraryCache.ensureSchema(db);
+    await BookmarkCache.ensureSchema(db);
     await db.execute('''
       CREATE TABLE IF NOT EXISTS trich_dan (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1157,42 +1173,12 @@ class AppDatabase {
   // ---------------------------------------------------------------------------
 
   /// Danh sách bookmark của truyện (kèm số/tên chương).
-  Future<List<Bookmark>> getBookmarks(int novelId) async {
-    if (novelId < 0) {
-      final db = await database;
-      final rows = await db.rawQuery(
-        '''
-        SELECT b.*, c.chapter_index, c.title AS chapter_title
-        FROM dau_trang b JOIN chuong c ON c.id = b.chapter_id
-        WHERE b.novel_id = ?
-        ORDER BY c.chapter_index, b.scroll_offset
-      ''',
-        [novelId],
-      );
-      return rows.map(Bookmark.fromMap).toList();
+  Future<List<Bookmark>> getBookmarks(int novelId, {String? userId}) async {
+    final uid = _historyUserId(userId);
+    final remote = _bookmarkRemote;
+    if (novelId >= 0 && remote != null) {
+      return (await _bookmarkStore(remote)).load(novelId, uid);
     }
-    if (isSupabaseReady) {
-      try {
-        return await SupabaseDatabase.instance.getBookmarks(novelId);
-      } catch (e) {
-        debugPrint('Supabase getBookmarks error: $e');
-        if (!kIsWeb) {
-          final db = await database;
-          final rows = await db.rawQuery(
-            '''
-            SELECT b.*, c.chapter_index, c.title AS chapter_title
-            FROM dau_trang b JOIN chuong c ON c.id = b.chapter_id
-            WHERE b.novel_id = ?
-            ORDER BY c.chapter_index, b.scroll_offset
-            ''',
-            [novelId],
-          );
-          if (rows.isNotEmpty) return rows.map(Bookmark.fromMap).toList();
-        }
-        rethrow;
-      }
-    }
-    if (kIsWeb) return [];
     final db = await database;
     final rows = await db.rawQuery(
       '''
@@ -1207,7 +1193,9 @@ class AppDatabase {
   }
 
   /// Thêm bookmark, trả về id mới.
-  Future<int> addBookmark(Bookmark bookmark) async {
+  Future<int> addBookmark(Bookmark bookmark, {String? userId}) async {
+    final uid = _historyUserId(userId);
+    final remote = _bookmarkRemote;
     if (bookmark.novelId < 0) {
       final db = await database;
       final minId = Sqflite.firstIntValue(
@@ -1216,36 +1204,26 @@ class AppDatabase {
       final localId = (minId ?? 0) - 1;
       return db.insert('dau_trang', {...bookmark.toMap(), 'id': localId});
     }
-    if (isSupabaseReady) {
-      try {
-        return await SupabaseDatabase.instance.addBookmark(bookmark);
-      } catch (e) {
-        debugPrint('Supabase addBookmark error: $e');
-        if (kIsWeb) rethrow;
-      }
+    if (remote != null) {
+      return (await _bookmarkStore(remote)).add(bookmark, uid);
     }
-    if (kIsWeb) throw StateError('Supabase is not configured.');
     final db = await database;
     return db.insert('dau_trang', bookmark.toMap());
   }
 
   /// Xóa bookmark.
-  Future<void> deleteBookmark(int id) async {
+  Future<void> deleteBookmark(int id, {String? userId}) async {
+    final uid = _historyUserId(userId);
+    final remote = _bookmarkRemote;
     if (id < 0) {
       final db = await database;
       await db.delete('dau_trang', where: 'id = ?', whereArgs: [id]);
       return;
     }
-    if (isSupabaseReady) {
-      try {
-        await SupabaseDatabase.instance.deleteBookmark(id);
-        return;
-      } catch (e) {
-        debugPrint('Supabase deleteBookmark error: $e');
-        if (kIsWeb) rethrow;
-      }
+    if (remote != null) {
+      await (await _bookmarkStore(remote)).remove(id, uid);
+      return;
     }
-    if (kIsWeb) throw StateError('Supabase is not configured.');
     final db = await database;
     await db.delete('dau_trang', where: 'id = ?', whereArgs: [id]);
   }
@@ -1591,7 +1569,19 @@ class AppDatabase {
       );
 
       return <String, Object?>{
-        'backup_version': 5,
+        'backup_version': 6,
+        'cached_bookmarks': [
+          for (final row in await db.query(
+            BookmarkCache.table,
+            where: 'user_id = ?',
+            whereArgs: [uid],
+          ))
+            Map<String, Object?>.from(row)
+              ..remove('local_id')
+              ..remove('remote_id')
+              ..remove('user_id')
+              ..remove('pending'),
+        ],
         'cached_library': [
           for (final row in await db.query(
             LibraryCache.table,
@@ -1701,6 +1691,10 @@ class AppDatabase {
         }
       }
       final cachedHistory = decoded['cached_reading_history'];
+      final cachedBookmarks = decoded['cached_bookmarks'];
+      if (cachedBookmarks is List) {
+        await BookmarkCache.restore(txn, cachedBookmarks, uid);
+      }
       final cachedLibrary = decoded['cached_library'];
       if (cachedLibrary is List) {
         for (final item in cachedLibrary.whereType<Map<String, dynamic>>()) {
@@ -1731,5 +1725,6 @@ class AppDatabase {
     _opening = null;
     _historyCache = null;
     _libraryCache = null;
+    _bookmarkCache = null;
   }
 }

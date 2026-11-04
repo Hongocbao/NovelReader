@@ -10,11 +10,13 @@ import '../models/novel.dart';
 import '../models/reading_history.dart';
 import '../repositories/reading_history_remote.dart';
 import '../repositories/library_remote.dart';
+import '../repositories/bookmark_remote.dart';
 import '../utils/constants.dart';
 import '../utils/format.dart';
 
 /// Lớp truy cập Cloud Database Supabase thay thế hoàn toàn cho SQLite.
-class SupabaseDatabase implements ReadingHistoryRemote, LibraryRemote {
+class SupabaseDatabase
+    implements ReadingHistoryRemote, LibraryRemote, BookmarkRemote {
   SupabaseDatabase._();
   static final SupabaseDatabase instance = SupabaseDatabase._();
 
@@ -471,6 +473,7 @@ class SupabaseDatabase implements ReadingHistoryRemote, LibraryRemote {
   // Step 5: Truyền auth.uid(), bỏ giá trị mặc định userId = 1
   // ---------------------------------------------------------------------------
 
+  @override
   Future<List<Bookmark>> getBookmarks(int novelId, {String? userId}) async {
     final uid = userId ?? _client.auth.currentUser?.id ?? '';
     final res = await _client
@@ -497,6 +500,7 @@ class SupabaseDatabase implements ReadingHistoryRemote, LibraryRemote {
     }).toList();
   }
 
+  @override
   Future<int> addBookmark(Bookmark bookmark, {String? userId}) async {
     final uid = userId ?? _client.auth.currentUser?.id ?? '';
     final res = await _client
@@ -515,8 +519,10 @@ class SupabaseDatabase implements ReadingHistoryRemote, LibraryRemote {
     return res['id'] as int;
   }
 
-  Future<void> deleteBookmark(int id) async {
-    await _client.from('dau_trang').delete().eq('id', id);
+  @override
+  Future<void> deleteBookmark(int id, {String? userId}) async {
+    final uid = userId ?? _client.auth.currentUser?.id ?? '';
+    await _client.from('dau_trang').delete().eq('id', id).eq('user_id', uid);
   }
 
   // ---------------------------------------------------------------------------
